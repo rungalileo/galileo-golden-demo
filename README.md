@@ -59,6 +59,8 @@ Not a production reference architecture or replacement for customer-specific POC
 The app will be available at `http://localhost:8501`
 
 ## How to Add a New Domain
+This demo code is designed to easily be extended to different domains, that way, SE's can spend less time
+writing code and more time focusing on how to display Galileo in the best light. 
 
 Adding a new domain is straightforward - simply copy the existing finance domain structure and customize the components:
 
