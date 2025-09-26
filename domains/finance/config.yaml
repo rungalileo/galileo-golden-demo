@@ -1,0 +1,32 @@
+domain:
+  name: "finance"
+  description: "Stock market analyst and trading assistant"
+
+# UI configuration
+ui:
+  app_title: "🤖 Finance Assistant"
+  example_queries:
+    - "What's the current price of AAPL?"
+    - "Buy 10 shares of TSLA at 180 dollars per share"
+  
+# Model configuration
+model:
+  model_name: "gpt-4.1"
+  temperature: 0.1
+
+# RAG configuration
+rag:
+  enabled: true
+  chunk_size: 1000
+  chunk_overlap: 200
+  top_k: 5
+
+# Available tools for this domain
+tools:
+  - "get_stock_price"
+  - "purchase_stocks"
+  - "sell_stocks"
+
+# Vector store configuration
+vectorstore:
+  embedding_model: "text-embedding-3-large"
