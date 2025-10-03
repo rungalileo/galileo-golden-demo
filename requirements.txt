@@ -16,3 +16,7 @@ toml
 unstructured
 unstructured[pdf]
 langchain_chroma
+arize-phoenix-otel
+arize-phoenix
+openinference-instrumentation-openai
+openinference-instrumentation-langchain
