@@ -1,3 +1,23 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Chroma vector DB files (should not be committed)
+/domains/**/chroma_db/
+*.sqlite3
+data_level*.bin
+
 # Python
 __pycache__/
 *.py[cod]
