@@ -114,3 +114,13 @@ celerybeat.pid
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# chroma_db
+chroma_db/
+chroma_db/*
+*.chroma
+
+# SQLite database files
+*.sqlite
+*.sqlite3
+*.db
