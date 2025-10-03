@@ -3,13 +3,11 @@ Galileo Demo App
 """
 import uuid
 import streamlit as st
-# import phoenix as px
 from dotenv import load_dotenv
 from galileo import galileo_context
 from agent_factory import AgentFactory
 from setup_env import setup_environment
 from langchain_core.messages import AIMessage, HumanMessage
-# from phoenix.otel import register
 import os
 
 # TODO: Add sidebar with link to traces
@@ -17,11 +15,6 @@ import os
 # Load environment variables
 load_dotenv()
 
-# tracer_provider = register(
-#   project_name="galileo-demo",
-#   endpoint="https://app.phoenix.arize.com/s/paul/v1/traces",
-#   auto_instrument=True
-# )
 
 # Configuration - easily changeable for different domains
 DOMAIN = "finance"  # Could be "healthcare", "legal", etc.
