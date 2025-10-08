@@ -227,12 +227,57 @@ As an SE, you primarily need to focus on the `domains/` directory:
 
 The system is designed so that domain customization requires just configuration updates and document additions.
 
+## Running Experiments
+
+The demo includes scripts to create Galileo datasets and run experiments to evaluate your agents:
+
+### Creating Datasets
+
+Create a Galileo dataset from a domain's CSV file:
+
+```bash
+# Preview the dataset before creating
+python experiments/create_galileo_dataset.py finance --preview
+
+# Create the dataset in Galileo
+python experiments/create_galileo_dataset.py finance
+```
+
+This script:
+- Reads the `domains/{domain}/dataset.csv` file
+- Uses the domain configuration from `domains/{domain}/config.yaml`
+- Creates a Galileo dataset with the naming convention: `"{Domain} Domain Dataset"`
+- Returns the dataset ID for use in experiments
+
+### Running Experiments
+
+Run experiments to evaluate your agents using the created dataset:
+
+```bash
+# Run experiment with default name
+python experiments/run_experiment.py finance
+
+# Run experiment with custom name
+python experiments/run_experiment.py finance --experiment-name "finance-evaluation-v1"
+```
+
+The experiment script:
+- Loads the dataset created by `create_galileo_dataset.py`
+- Runs each input through the LangGraph agent
+- Evaluates responses metrics defined in code
+- Logs all traces to Galileo as an experiment
+
+### Experiment Workflow
+
+1. **Create Dataset**: Use `create_galileo_dataset.py` to convert your domain's CSV into a Galileo dataset, if it doesn't exist already
+2. **Run Experiment**: Use `run_experiment.py` to evaluate your agent against the dataset
+3. **Analyze Results**: View experiment results and traces in the Galileo Console
+
 ## What's Coming Next
 
 - **Live deployment URL** for easy demo access without local setup
 - **Direct links to Galileo sessions/spans** from the UI
 - **Hallucination logging buttons** for interactive evaluation
-- **Experiment integration** for A/B testing different prompts/models
 - **Galileo Protect integration** for safety and compliance monitoring
 
 ## Updates and Issues
