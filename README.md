@@ -227,12 +227,32 @@ As an SE, you primarily need to focus on the `domains/` directory:
 
 The system is designed so that domain customization requires just configuration updates and document additions.
 
+## Running Experiments
+
+This repo now supports running Galileo experiments programmatically! You can:
+- 📊 Create synthetic datasets via Galileo API
+- 🧪 Run experiments with your agent
+- 📈 Evaluate with built-in metrics
+- 🔍 Track everything in Galileo Console
+
+### Quick Start
+
+```bash
+# Run experiment with inline test data
+python experiment_cli.py --inline --experiment quick-test
+
+# Or with a Galileo dataset
+python experiment_cli.py --dataset-name my-dataset --experiment baseline-v1
+```
+
+See **[EXPERIMENTS_README.md](EXPERIMENTS_README.md)** for detailed instructions.
+
 ## What's Coming Next
 
 - **Live deployment URL** for easy demo access without local setup
 - **Direct links to Galileo sessions/spans** from the UI
 - **Hallucination logging buttons** for interactive evaluation
-- **Experiment integration** for A/B testing different prompts/models
+- ✅ **Experiment integration** for A/B testing different prompts/models *(now available!)*
 - **Galileo Protect integration** for safety and compliance monitoring
 
 ## Updates and Issues
