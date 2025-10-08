@@ -7,7 +7,7 @@ ui:
   app_title: "🤖 Finance Assistant"
   example_queries:
     - "What's the current price of AAPL?"
-    - "Buy 10 shares of TSLA at 180 dollars per share"
+    - "Buy 10 shares of NVDA"
   
 # Model configuration
 model:
@@ -24,6 +24,7 @@ rag:
 # Available tools for this domain
 tools:
   - "get_stock_price"
+  - "get_market_news"
   - "purchase_stocks"
   - "sell_stocks"
 

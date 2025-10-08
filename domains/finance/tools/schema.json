@@ -14,6 +14,24 @@
     }
   },
   {
+    "name": "get_market_news",
+    "description": "Get the latest market news and sentiment analysis. Can get news for a specific stock ticker or general market news. Returns articles with titles, summaries, sources, and sentiment scores.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "ticker": {
+          "type": "string",
+          "description": "Optional: Stock ticker to get news for (e.g., AAPL, TSLA). Leave empty for general market news."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of news articles to return (default: 5, max: 10)"
+        }
+      },
+      "required": []
+    }
+  },
+  {
     "name": "purchase_stocks",
     "description": "Execute a stock purchase order",
     "parameters": {

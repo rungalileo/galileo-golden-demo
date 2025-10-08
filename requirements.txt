@@ -20,3 +20,6 @@ arize-phoenix-otel
 arize-phoenix
 openinference-instrumentation-openai
 openinference-instrumentation-langchain
+yfinance
+requests
+alpha-vantage

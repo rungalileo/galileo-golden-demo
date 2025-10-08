@@ -1,6 +1,10 @@
 # note from yash that it wouldn't be bad to hook up to alphavantage like we do in other demo
 """
 Finance domain tools implementation
+
+Supports both mock data (for demos) and live data (via APIs):
+- Set USE_LIVE_DATA=true to enable live stock prices
+- Set USE_LIVE_DATA=false or leave unset for mock data
 """
 import json
 import time
@@ -11,6 +15,35 @@ import random
 from typing import Optional
 from galileo import GalileoLogger
 import streamlit as st
+
+# Check if live data should be used
+USE_LIVE_DATA = os.getenv("USE_LIVE_DATA", "false").lower() == "true"
+
+# Try to import live data module
+if USE_LIVE_DATA:
+    try:
+        # Try relative import first (when loaded as module)
+        try:
+            from .live_data import get_live_stock_price, get_live_market_news
+        except ImportError:
+            # Fall back to absolute import (when run directly)
+            import sys
+            from pathlib import Path
+            # Add domains/finance/tools to path
+            tools_dir = Path(__file__).parent
+            if str(tools_dir) not in sys.path:
+                sys.path.insert(0, str(tools_dir))
+            from live_data import get_live_stock_price, get_live_market_news
+        
+        LIVE_DATA_AVAILABLE = True
+        logging.info("✓ Live data mode enabled")
+    except ImportError as e:
+        LIVE_DATA_AVAILABLE = False
+        logging.warning(f"Live data requested but not available: {e}")
+        logging.warning("Falling back to mock data. Install: pip install yfinance alpha-vantage")
+else:
+    LIVE_DATA_AVAILABLE = False
+    logging.info("Using mock data mode")
 
 # Mock database for testing
 MOCK_PRICE_DB = {
@@ -123,7 +156,7 @@ def _log_to_galileo(galileo_logger: GalileoLogger, ticker: str, result: dict, st
 def get_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
     """
     Get the current stock price and other market data for a given ticker symbol.
-    Falls back to mock database if API call fails.
+    Uses live data if USE_LIVE_DATA=true, otherwise uses mock database.
     
     Args:
         ticker: The ticker symbol to look up
@@ -133,8 +166,18 @@ def get_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None)
         JSON string containing the stock price and market data
     """
     start_time = time.time()
+    
+    # Try live data first if enabled
+    if USE_LIVE_DATA and LIVE_DATA_AVAILABLE:
+        try:
+            logging.info(f"Fetching live data for {ticker}")
+            return get_live_stock_price(ticker, galileo_logger)
+        except Exception as e:
+            logging.warning(f"Live data failed, falling back to mock: {e}")
+            # Fall through to mock data
+    
+    # Use mock database
     try:
-        # Use mock database for demo purposes
         if ticker in MOCK_PRICE_DB:
             logging.info(f"Found {ticker} in mock database")
             result = MOCK_PRICE_DB[ticker]
@@ -344,9 +387,67 @@ def sell_stocks(ticker: str, quantity: int, price: float, galileo_logger: Option
         raise
 
 
+def get_market_news(ticker: Optional[str] = None, limit: int = 5, galileo_logger: Optional[GalileoLogger] = None) -> str:
+    """
+    Get the latest market news for a specific stock or general market news.
+    Uses live news APIs if enabled, otherwise returns a message.
+    
+    Args:
+        ticker: Optional stock ticker to get news for (e.g., 'AAPL', 'TSLA')
+        limit: Number of news articles to return (default: 5)
+        galileo_logger: Galileo logger for observability (optional)
+        
+    Returns:
+        JSON string containing news articles with titles, summaries, and sentiment
+    """
+    start_time = time.time()
+    
+    # Try live news if enabled
+    if USE_LIVE_DATA and LIVE_DATA_AVAILABLE:
+        try:
+            logging.info(f"Fetching live news for {ticker or 'market'}")
+            return get_live_market_news(ticker, limit, galileo_logger)
+        except Exception as e:
+            logging.warning(f"Live news failed: {e}")
+            # Fall through to mock response
+    
+    # Mock news response
+    result = {
+        "articles": [
+            {
+                "title": "Market Update: Tech Stocks Rally",
+                "summary": "Technology stocks showed strong gains today with major tech companies leading the market higher.",
+                "source": "Mock News",
+                "published": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "sentiment": "positive"
+            }
+        ],
+        "count": 1,
+        "source": "Mock News (Enable live data for real news)",
+        "note": "This is mock data. Enable USE_LIVE_DATA=true and configure ALPHA_VANTAGE_API_KEY or NEWSAPI_KEY for real news."
+    }
+    
+    if galileo_logger:
+        galileo_logger.add_tool_span(
+            input=json.dumps({"ticker": ticker, "limit": limit}),
+            output=json.dumps(result),
+            name="Get Market News",
+            duration_ns=int((time.time() - start_time) * 1000000),
+            metadata={
+                "ticker": ticker or "general",
+                "count": str(limit),
+                "source": "mock"
+            },
+            tags=["news", "market", "mock"]
+        )
+    
+    return json.dumps(result)
+
+
 # Export tools for easy loading by frameworks
 TOOLS = [
     get_stock_price,
+    get_market_news,
     purchase_stocks,
     sell_stocks
 ]

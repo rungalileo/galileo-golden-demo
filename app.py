@@ -587,7 +587,7 @@ def multi_domain_agent_app():
         except Exception as e:
             st.error(f"Failed to start Galileo session: {str(e)}")
     
-    # Sidebar with navigation
+    # Sidebar with navigation and settings
     with st.sidebar:
         st.title("Navigation")
         st.markdown("---")
@@ -597,6 +597,149 @@ def multi_domain_agent_app():
         st.caption(f"Session ID: `{st.session_state.session_id}`")
         st.caption(f"Domain: `{DOMAIN}`")
         st.caption(f"Framework: `{FRAMEWORK}`")
+        
+        st.markdown("---")
+        
+        # Live Data Settings
+        st.markdown("### ⚙️ Live Data Settings")
+        
+        # Initialize settings if not exists
+        if "use_live_data" not in st.session_state:
+            # Check st.secrets first (Streamlit config), then environment variables
+            use_live = False
+            config_source = "default"
+            
+            # Try Streamlit secrets first
+            try:
+                if hasattr(st, 'secrets') and "USE_LIVE_DATA" in st.secrets:
+                    use_live = str(st.secrets["USE_LIVE_DATA"]).lower() == "true"
+                    config_source = "secrets.toml"
+                else:
+                    # Fall back to environment variable
+                    env_value = os.getenv("USE_LIVE_DATA", "false")
+                    use_live = env_value.lower() == "true"
+                    if env_value != "false":
+                        config_source = ".env"
+            except Exception as e:
+                # If secrets fails, try environment
+                env_value = os.getenv("USE_LIVE_DATA", "false")
+                use_live = env_value.lower() == "true"
+                if env_value != "false":
+                    config_source = ".env"
+            
+            st.session_state.use_live_data = use_live
+            st.session_state.config_source = config_source
+            # Sync to environment
+            os.environ["USE_LIVE_DATA"] = "true" if use_live else "false"
+            
+        if "data_source" not in st.session_state:
+            # Check st.secrets first, then environment
+            try:
+                if hasattr(st, 'secrets') and "STOCK_DATA_SOURCE" in st.secrets:
+                    source = str(st.secrets["STOCK_DATA_SOURCE"])
+                else:
+                    source = os.getenv("STOCK_DATA_SOURCE", "auto")
+            except:
+                source = os.getenv("STOCK_DATA_SOURCE", "auto")
+            st.session_state.data_source = source
+            # Sync to environment
+            os.environ["STOCK_DATA_SOURCE"] = source
+        
+        # Show where config came from and reload button
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            if hasattr(st.session_state, 'config_source'):
+                st.caption(f"💡 From: {st.session_state.config_source}")
+        with col2:
+            if st.button("🔄", help="Reload from config", key="reload_settings", use_container_width=True):
+                # Clear session state to force reload
+                for key in ["use_live_data", "data_source", "config_source"]:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.rerun()
+        
+        # Toggle for live data
+        use_live_data = st.toggle(
+            "Use Live Stock Data",
+            value=st.session_state.use_live_data,
+            help="Enable real-time stock prices from APIs. Disable to use mock data.",
+            key="live_data_toggle"
+        )
+        
+        # Update session state
+        if use_live_data != st.session_state.use_live_data:
+            st.session_state.use_live_data = use_live_data
+            # Update environment variable so tools see it
+            os.environ["USE_LIVE_DATA"] = "true" if use_live_data else "false"
+            # Clear agent to force reload with new settings
+            if "agent" in st.session_state:
+                del st.session_state.agent
+            st.info("Settings updated! Agent will reinitialize with new configuration on next query.")
+        
+        # Source selection (only show if live data is enabled)
+        if use_live_data:
+            data_source = st.selectbox(
+                "Data Source",
+                options=["auto", "yfinance", "alpha_vantage", "finnhub"],
+                format_func=lambda x: {
+                    "auto": "Auto (Try All)",
+                    "yfinance": "Yahoo Finance",
+                    "alpha_vantage": "Alpha Vantage",
+                    "finnhub": "Finnhub"
+                }[x],
+                index=["auto", "yfinance", "alpha_vantage", "finnhub"].index(st.session_state.data_source),
+                help="Choose which API to use for stock data",
+                key="data_source_select"
+            )
+            
+            # Update session state and environment
+            if data_source != st.session_state.data_source:
+                st.session_state.data_source = data_source
+                os.environ["STOCK_DATA_SOURCE"] = data_source
+                # Clear agent to force reload with new settings
+                if "agent" in st.session_state:
+                    del st.session_state.agent
+                st.info(f"Data source changed to {data_source}. Agent will reinitialize.")
+            
+            # Show status indicator
+            if data_source == "auto":
+                st.caption("🔄 Will try: Yahoo → Alpha Vantage → Mock")
+            elif data_source == "yfinance":
+                st.caption("✓ Using Yahoo Finance (no API key needed)")
+            elif data_source == "alpha_vantage":
+                api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
+                if api_key:
+                    st.caption("✓ Alpha Vantage key configured")
+                else:
+                    st.caption("⚠️ Alpha Vantage key not set")
+            elif data_source == "finnhub":
+                api_key = os.getenv("FINNHUB_API_KEY")
+                if api_key:
+                    st.caption("✓ Finnhub key configured")
+                else:
+                    st.caption("⚠️ Finnhub key not set")
+        else:
+            st.caption("📊 Using mock data")
+        
+        # Quick test button
+        with st.expander("🧪 Test Live Data"):
+            st.markdown("""
+            **Quick Test:**
+            1. Toggle live data ON above
+            2. Go to Chat tab
+            3. Ask: "What's the current price of AAPL?"
+            4. Agent should call get_stock_price tool
+            5. Check response for real-time data
+            
+            **Note:** Agent prefers RAG for historical data.
+            Use phrases like "current price" or "price right now" 
+            to trigger the live API tool.
+            """)
+            
+            if st.button("Run Quick Test", key="test_live_data_btn"):
+                # Run test
+                st.code("python test_live_data_quick.py")
+                st.info("Run this command in terminal to test APIs directly")
         
         st.markdown("---")
         

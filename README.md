@@ -247,6 +247,47 @@ python experiment_cli.py --dataset-name my-dataset --experiment baseline-v1
 
 See **[EXPERIMENTS_README.md](EXPERIMENTS_README.md)** for detailed instructions.
 
+## Live Stock Data & News (Optional)
+
+The finance agent can use **real-time stock prices** instead of mock data!
+
+### 🎛️ Easiest: Use UI Controls
+
+**No configuration files needed!**
+
+1. Run: `streamlit run app.py`
+2. **Sidebar** → "⚙️ Live Data Settings"
+3. **Toggle ON** "Use Live Stock Data"
+4. Ask: "What's the price of AAPL?" → Real-time data!
+
+See **[UI_CONTROLS_GUIDE.md](UI_CONTROLS_GUIDE.md)** for details.
+
+### Alternative: Command Line Setup
+
+```bash
+# 1. Install yfinance
+pip install yfinance
+
+# 2. Enable live data
+echo 'USE_LIVE_DATA = "true"' >> .streamlit/secrets.toml
+
+# 3. Run app
+streamlit run app.py
+```
+
+### Or Use Setup Script
+
+```bash
+./setup_live_data.sh
+```
+
+**Supports:**
+- ✅ Yahoo Finance (yfinance) - Free, no API key needed
+- ✅ Alpha Vantage - Free tier with API key, includes news
+- ✅ Automatic fallback to mock data if APIs fail
+
+See **[LIVE_DATA_SETUP.md](LIVE_DATA_SETUP.md)** for full documentation.
+
 ## What's Coming Next
 
 - **Live deployment URL** for easy demo access without local setup
