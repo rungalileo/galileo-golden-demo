@@ -7,7 +7,7 @@ to run experiments without creating synthetic data.
 """
 import os
 import pandas as pd
-from dotenv import load_dotenv, find_dotenv()
+from dotenv import load_dotenv, find_dotenv
 from run_experiment import run_with_custom_dataset
 
 # Load environment variables

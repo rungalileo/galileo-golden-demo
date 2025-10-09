@@ -17,6 +17,14 @@ from base_agent import BaseAgent
 from domain_manager import DomainConfig
 from galileo.handlers.langchain import GalileoCallback
 
+# Import chaos engine
+try:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    from chaos_engine import get_chaos_engine
+    CHAOS_AVAILABLE = True
+except ImportError:
+    CHAOS_AVAILABLE = False
+
 # Import RAG retrieval function
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from tools.rag_retrieval import create_domain_retrieval_function
@@ -83,6 +91,17 @@ class LangGraphAgent(BaseAgent):
         # Add RAG retrieval tool if enabled in domain config
         rag_config = self.domain_config.config.get("rag", {})
         if rag_config.get("enabled", False):
+            # Chaos: Check if RAG should be disconnected
+            if CHAOS_AVAILABLE:
+                chaos = get_chaos_engine()
+                should_fail, error_msg = chaos.should_disconnect_rag()
+                if should_fail:
+                    print(f"🔥 CHAOS: RAG disconnected - {error_msg}")
+                    print(f"⚠️  Skipping RAG tool addition due to chaos injection")
+                    # Don't add RAG tool - simulate disconnection
+                    print(f"RAG disabled for domain '{self.domain_config.name}' (chaos mode)")
+                    return  # Skip RAG initialization
+            
             print(f"✓ RAG enabled for domain '{self.domain_config.name}' - adding LangChain retrieval chain")
             try:
                 # Get top_k from domain config
@@ -166,7 +185,14 @@ class LangGraphAgent(BaseAgent):
 
             # Return the last message content
             if result["messages"]:
-                return result["messages"][-1].content
+                response = result["messages"][-1].content
+                
+                # Chaos: Maybe transpose numbers in response (simulate hallucination)
+                if CHAOS_AVAILABLE:
+                    chaos = get_chaos_engine()
+                    response = chaos.maybe_transpose_numbers(response)
+                
+                return response
             return "No response generated"
             
         except Exception as e:

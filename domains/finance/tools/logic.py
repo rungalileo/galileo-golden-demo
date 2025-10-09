@@ -5,6 +5,9 @@ Finance domain tools implementation
 Supports both mock data (for demos) and live data (via APIs):
 - Set USE_LIVE_DATA=true to enable live stock prices
 - Set USE_LIVE_DATA=false or leave unset for mock data
+
+Also supports chaos engineering for testing:
+- Simulates API failures, data corruption, hallucinations
 """
 import json
 import time
@@ -15,6 +18,19 @@ import random
 from typing import Optional
 from galileo import GalileoLogger
 import streamlit as st
+
+# Import chaos engine
+try:
+    import sys
+    from pathlib import Path
+    project_root = Path(__file__).parent.parent.parent
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+    from chaos_engine import get_chaos_engine
+    CHAOS_AVAILABLE = True
+except ImportError as e:
+    CHAOS_AVAILABLE = False
+    logging.warning(f"Chaos engine not available: {e}")
 
 # Check if live data should be used
 USE_LIVE_DATA = os.getenv("USE_LIVE_DATA", "false").lower() == "true"
@@ -167,11 +183,37 @@ def get_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None)
     """
     start_time = time.time()
     
+    # Chaos: Check for API failure injection
+    if CHAOS_AVAILABLE:
+        chaos = get_chaos_engine()
+        should_fail, error_msg = chaos.should_fail_api_call("Stock Price API")
+        if should_fail:
+            raise Exception(error_msg)
+        
+        # Chaos: Check for rate limit
+        should_rate_limit, error_msg = chaos.should_fail_rate_limit("Stock Price API")
+        if should_rate_limit:
+            raise Exception(error_msg)
+        
+        # Chaos: Inject latency
+        delay = chaos.inject_latency()
+        if delay > 0:
+            time.sleep(delay)
+    
     # Try live data first if enabled
     if USE_LIVE_DATA and LIVE_DATA_AVAILABLE:
         try:
             logging.info(f"Fetching live data for {ticker}")
-            return get_live_stock_price(ticker, galileo_logger)
+            result_json = get_live_stock_price(ticker, galileo_logger)
+            
+            # Chaos: Maybe corrupt the data
+            if CHAOS_AVAILABLE:
+                chaos = get_chaos_engine()
+                result_dict = json.loads(result_json)
+                result_dict = chaos.corrupt_data(result_dict)
+                result_json = json.dumps(result_dict)
+            
+            return result_json
         except Exception as e:
             logging.warning(f"Live data failed, falling back to mock: {e}")
             # Fall through to mock data

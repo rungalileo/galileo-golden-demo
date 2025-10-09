@@ -743,6 +743,137 @@ def multi_domain_agent_app():
         
         st.markdown("---")
         
+        # Chaos Engineering Settings
+        st.markdown("### 🔥 Chaos Engineering")
+        st.caption("Simulate real-world failures and anomalies")
+        
+        # Import chaos engine
+        try:
+            from chaos_engine import get_chaos_engine
+            chaos = get_chaos_engine()
+            CHAOS_ENABLED = True
+        except ImportError:
+            CHAOS_ENABLED = False
+            st.warning("Chaos engine not available")
+        
+        if CHAOS_ENABLED:
+            # Initialize chaos settings
+            if "chaos_tool_instability" not in st.session_state:
+                st.session_state.chaos_tool_instability = False
+            if "chaos_sloppiness" not in st.session_state:
+                st.session_state.chaos_sloppiness = False
+            if "chaos_rag" not in st.session_state:
+                st.session_state.chaos_rag = False
+            if "chaos_rate_limit" not in st.session_state:
+                st.session_state.chaos_rate_limit = False
+            if "chaos_data_corruption" not in st.session_state:
+                st.session_state.chaos_data_corruption = False
+            
+            with st.expander("⚙️ Chaos Controls", expanded=False):
+                # Tool Instability
+                tool_instability = st.checkbox(
+                    "🔌 Tool Instability",
+                    value=st.session_state.chaos_tool_instability,
+                    help="Randomly fail API calls (25% chance) - simulates network issues, timeouts, service outages",
+                    key="chaos_tool_instability_checkbox"
+                )
+                if tool_instability != st.session_state.chaos_tool_instability:
+                    st.session_state.chaos_tool_instability = tool_instability
+                    chaos.enable_tool_instability(tool_instability)
+                    if "agent" in st.session_state:
+                        del st.session_state.agent
+                
+                # Sloppiness (Number Transpositions)
+                sloppiness = st.checkbox(
+                    "🔢 Sloppiness",
+                    value=st.session_state.chaos_sloppiness,
+                    help="Randomly transpose numbers in responses (30% chance) - simulates hallucinations and data errors",
+                    key="chaos_sloppiness_checkbox"
+                )
+                if sloppiness != st.session_state.chaos_sloppiness:
+                    st.session_state.chaos_sloppiness = sloppiness
+                    chaos.enable_sloppiness(sloppiness)
+                    if "agent" in st.session_state:
+                        del st.session_state.agent
+                
+                # RAG Chaos
+                rag_chaos = st.checkbox(
+                    "📚 RAG Disconnects",
+                    value=st.session_state.chaos_rag,
+                    help="Randomly disconnect RAG database (20% chance) - simulates vector DB failures",
+                    key="chaos_rag_checkbox"
+                )
+                if rag_chaos != st.session_state.chaos_rag:
+                    st.session_state.chaos_rag = rag_chaos
+                    chaos.enable_rag_chaos(rag_chaos)
+                    if "agent" in st.session_state:
+                        del st.session_state.agent
+                
+                # Rate Limit Chaos
+                rate_limit = st.checkbox(
+                    "⏱️ Rate Limits",
+                    value=st.session_state.chaos_rate_limit,
+                    help="Randomly trigger rate limit errors (15% chance) - simulates API quota exhaustion",
+                    key="chaos_rate_limit_checkbox"
+                )
+                if rate_limit != st.session_state.chaos_rate_limit:
+                    st.session_state.chaos_rate_limit = rate_limit
+                    chaos.enable_rate_limit_chaos(rate_limit)
+                
+                # Data Corruption
+                data_corruption = st.checkbox(
+                    "💥 Data Corruption",
+                    value=st.session_state.chaos_data_corruption,
+                    help="Randomly corrupt API responses (20% chance) - wrong prices, missing fields, invalid data",
+                    key="chaos_data_corruption_checkbox"
+                )
+                if data_corruption != st.session_state.chaos_data_corruption:
+                    st.session_state.chaos_data_corruption = data_corruption
+                    chaos.enable_data_corruption(data_corruption)
+                
+                st.divider()
+                
+                # Show chaos stats
+                stats = chaos.get_stats()
+                if any([stats['tool_instability'], stats['sloppiness'], stats['rag_chaos'], 
+                       stats['rate_limit_chaos'], stats['data_corruption']]):
+                    st.markdown("**Active Chaos:**")
+                    active_chaos = []
+                    if stats['tool_instability']:
+                        active_chaos.append("🔌 Tool Instability")
+                    if stats['sloppiness']:
+                        active_chaos.append(f"🔢 Sloppiness ({stats['sloppy_outputs']} so far)")
+                    if stats['rag_chaos']:
+                        active_chaos.append(f"📚 RAG Chaos ({stats['rag_failures']} so far)")
+                    if stats['rate_limit_chaos']:
+                        active_chaos.append("⏱️ Rate Limits")
+                    if stats['data_corruption']:
+                        active_chaos.append("💥 Data Corruption")
+                    
+                    for item in active_chaos:
+                        st.caption(item)
+                    
+                    if st.button("Reset Stats", key="reset_chaos_stats"):
+                        chaos.reset_stats()
+                        st.rerun()
+                else:
+                    st.caption("No chaos active")
+            
+            # Quick chaos info
+            active_count = sum([
+                st.session_state.chaos_tool_instability,
+                st.session_state.chaos_sloppiness,
+                st.session_state.chaos_rag,
+                st.session_state.chaos_rate_limit,
+                st.session_state.chaos_data_corruption
+            ])
+            if active_count > 0:
+                st.caption(f"🔥 {active_count} chaos mode(s) active")
+            else:
+                st.caption("😌 All systems normal")
+        
+        st.markdown("---")
+        
         # Links
         st.markdown("### 🔗 Links")
         st.markdown("[Galileo Console](https://console.galileo.ai)")

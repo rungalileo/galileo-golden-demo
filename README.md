@@ -288,6 +288,29 @@ streamlit run app.py
 
 See **[LIVE_DATA_SETUP.md](LIVE_DATA_SETUP.md)** for full documentation.
 
+## Chaos Engineering (Testing Galileo Insights)
+
+Simulate real-world failures to test Galileo's observability and guardrails!
+
+### Quick Chaos Test
+
+```bash
+streamlit run app.py
+```
+
+**Sidebar → 🔥 Chaos Engineering → Enable:**
+- 🔢 **Sloppiness** - Transposes numbers (simulates hallucinations)
+- 🔌 **Tool Instability** - Random API failures
+- 📚 **RAG Disconnects** - Vector DB failures
+- ⏱️ **Rate Limits** - API quota errors
+- 💥 **Data Corruption** - Wrong/invalid data
+
+**Then ask**: "What's the price of AAPL?" (repeat 5-10 times)
+
+**Result**: Chaos creates varied failures that Galileo Insights will detect and recommend fixes for!
+
+See **[CHAOS_ENGINEERING.md](CHAOS_ENGINEERING.md)** and **[CHAOS_QUICK_START.md](CHAOS_QUICK_START.md)** for details.
+
 ## What's Coming Next
 
 - **Live deployment URL** for easy demo access without local setup
