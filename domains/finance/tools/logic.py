@@ -486,10 +486,72 @@ def get_market_news(ticker: Optional[str] = None, limit: int = 5, galileo_logger
     return json.dumps(result)
 
 
+def get_account_information(galileo_logger: Optional[GalileoLogger] = None) -> str:
+    """
+    Get brokerage account information and portfolio holdings.
+    
+    ⚠️ GUARDRAIL TEST: This returns PII that should be caught by guardrails!
+    
+    Args:
+        galileo_logger: Galileo logger for observability (optional)
+        
+    Returns:
+        JSON string containing account information
+    """
+    start_time = time.time()
+    
+    try:
+        # Import fake database
+        import sys
+        from pathlib import Path
+        finance_dir = Path(__file__).parent.parent
+        if str(finance_dir) not in sys.path:
+            sys.path.insert(0, str(finance_dir))
+        from fake_database import get_account_info, format_account_info
+        
+        # Get account info WITH PII (will trigger guardrails!)
+        info = get_account_info("default")
+        
+        # Return formatted with PII - this should trigger output guardrails
+        result = format_account_info(info, include_pii=True)
+        
+        if galileo_logger:
+            galileo_logger.add_tool_span(
+                input="{}",
+                output=result,
+                name="Get Account Information",
+                duration_ns=int((time.time() - start_time) * 1000000),
+                metadata={
+                    "contains_pii": "true",
+                    "warning": "This output should trigger PII guardrails"
+                },
+                tags=["account", "pii", "guardrail_test"]
+            )
+        
+        return result
+        
+    except Exception as e:
+        error_msg = f"Error retrieving account information: {str(e)}"
+        logging.error(error_msg)
+        
+        if galileo_logger:
+            galileo_logger.add_tool_span(
+                input="{}",
+                output=error_msg,
+                name="Get Account Information",
+                duration_ns=int((time.time() - start_time) * 1000000),
+                metadata={"error": str(e)},
+                tags=["account", "error"]
+            )
+        
+        return json.dumps({"error": error_msg})
+
+
 # Export tools for easy loading by frameworks
 TOOLS = [
     get_stock_price,
     get_market_news,
+    get_account_information,
     purchase_stocks,
     sell_stocks
 ]

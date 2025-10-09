@@ -743,6 +743,111 @@ def multi_domain_agent_app():
         
         st.markdown("---")
         
+        # Galileo Guardrails Settings
+        st.markdown("### 🛡️ Galileo Guardrails")
+        st.caption("Real-time content filtering and safety")
+        
+        # Import guardrails
+        try:
+            from guardrails_config import get_guardrails_manager
+            guardrails = get_guardrails_manager()
+            GUARDRAILS_AVAILABLE = True
+        except ImportError:
+            GUARDRAILS_AVAILABLE = False
+            st.warning("Guardrails not available - install galileo-protect")
+        
+        if GUARDRAILS_AVAILABLE:
+            # Initialize guardrails settings
+            if "guardrails_enabled" not in st.session_state:
+                st.session_state.guardrails_enabled = guardrails.is_enabled()
+            
+            # Main toggle
+            guardrails_enabled = st.toggle(
+                "Enable Guardrails",
+                value=st.session_state.guardrails_enabled,
+                help="Enable Galileo Guardrails for input/output filtering and trade validation",
+                key="guardrails_main_toggle"
+            )
+            
+            if guardrails_enabled != st.session_state.guardrails_enabled:
+                st.session_state.guardrails_enabled = guardrails_enabled
+                if guardrails_enabled:
+                    guardrails.enable()
+                    os.environ["GUARDRAILS_ENABLED"] = "true"
+                else:
+                    guardrails.disable()
+                    os.environ["GUARDRAILS_ENABLED"] = "false"
+                # Force agent reinitialize
+                if "agent" in st.session_state:
+                    del st.session_state.agent
+                st.rerun()
+            
+            if guardrails_enabled:
+                with st.expander("⚙️ Guardrails Details", expanded=False):
+                    st.markdown("""
+                    **Active Protections:**
+                    
+                    **Input Filtering:**
+                    - 🔒 PII Detection (account numbers, SSN, credit cards)
+                    - 🚫 Sexism Detection
+                    - ⚠️ Toxicity Detection
+                    
+                    **Output Filtering:**
+                    - 🔒 PII Leakage Prevention
+                    - 🚫 Inappropriate Content Blocking
+                    - ⚠️ Harmful Content Prevention
+                    
+                    **Trade Protection:**
+                    - 📊 Context Adherence Check (70% threshold)
+                    - 🎯 Hallucination Detection
+                    - ⛔ Auto-block suspicious trades
+                    """)
+                    
+                    st.divider()
+                    
+                    # Show stats
+                    stats = guardrails.get_stats()
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.metric("Input Checks", stats["input_checks"])
+                        st.metric("Input Blocks", stats["input_blocks"])
+                    
+                    with col2:
+                        st.metric("Output Checks", stats["output_checks"])
+                        st.metric("Output Blocks", stats["output_blocks"])
+                    
+                    st.metric("Trade Checks", stats["trade_checks"])
+                    st.metric("Trade Blocks", stats["trade_blocks"])
+                    
+                    if stats["input_checks"] + stats["output_checks"] + stats["trade_checks"] > 0:
+                        block_rate = stats["block_rate"]
+                        st.progress(block_rate / 100, text=f"Block Rate: {block_rate:.1f}%")
+                    
+                    if st.button("Reset Stats", key="guardrails_reset"):
+                        guardrails.reset_stats()
+                        st.rerun()
+                
+                # Test examples
+                with st.expander("🧪 Test Guardrails", expanded=False):
+                    st.markdown("**Try these to trigger guardrails:**")
+                    
+                    test_queries = [
+                        ("PII Output", "Show me my account information"),
+                        ("PII Input", "My SSN is 123-45-6789, can you help?"),
+                        ("Hallucinated Trade", "Buy 1000 shares of XYZ"),
+                    ]
+                    
+                    for label, query in test_queries:
+                        if st.button(f"Test: {label}", key=f"test_gr_{label.replace(' ', '_')}"):
+                            st.session_state.example_query_pending = query
+                            st.rerun()
+            
+            else:
+                st.info("🔓 Guardrails disabled - all content will pass through unchecked")
+        
+        st.markdown("---")
+        
         # Chaos Engineering Settings
         st.markdown("### 🔥 Chaos Engineering")
         st.caption("Simulate real-world failures and anomalies")

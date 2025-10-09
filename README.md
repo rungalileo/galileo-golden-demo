@@ -311,6 +311,50 @@ streamlit run app.py
 
 See **[CHAOS_ENGINEERING.md](CHAOS_ENGINEERING.md)** and **[CHAOS_QUICK_START.md](CHAOS_QUICK_START.md)** for details.
 
+## Galileo Guardrails (Production Safety)
+
+Real-time content filtering and safety for production deployments!
+
+### Quick Start
+
+```bash
+pip install galileo-protect
+streamlit run app.py
+```
+
+**Sidebar → 🛡️ Galileo Guardrails → Enable**
+
+### Protections
+
+**Input Filtering:**
+- 🔒 **PII Detection** - Blocks SSN, account numbers, credit cards
+- 🚫 **Sexism Detection** - Filters discriminatory content
+- ⚠️ **Toxicity Detection** - Blocks harmful language
+
+**Output Filtering:**
+- 🔒 **PII Leakage Prevention** - Stops sensitive data exposure
+- 🚫 **Inappropriate Content** - Blocks sexist/toxic responses
+- ⚠️ **Safety Layer** - Comprehensive content filtering
+
+**Trade Protection:**
+- 📊 **Context Adherence** - Blocks trades < 70% confidence
+- 🎯 **Hallucination Detection** - Catches wrong amounts/prices
+- ⛔ **Auto-Block** - Prevents suspicious trades
+
+### Test It
+
+1. **Enable guardrails** (sidebar toggle)
+2. **Try**: "Show me my account information"
+3. **See**: 🛡️ **Guardrail Active** - PII blocked!
+
+**Other tests:**
+- "My SSN is 123-45-6789" → Input PII blocked
+- Enable chaos + "Buy 10 shares" → Trade blocked if hallucinated
+
+**Result:** Production-ready safety with real-time monitoring!
+
+See **[GUARDRAILS_GUIDE.md](GUARDRAILS_GUIDE.md)** for full documentation.
+
 ## What's Coming Next
 
 - **Live deployment URL** for easy demo access without local setup

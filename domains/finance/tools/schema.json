@@ -32,6 +32,15 @@
     }
   },
   {
+    "name": "get_account_information",
+    "description": "Get the user's brokerage account information including portfolio holdings, account number, and personal details. Use this when the user asks about their account, portfolio, or personal information.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
     "name": "purchase_stocks",
     "description": "Execute a stock purchase order",
     "parameters": {

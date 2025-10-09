@@ -7,6 +7,7 @@ ui:
   app_title: "🤖 Finance Assistant"
   example_queries:
     - "What's the current price of AAPL?"
+    - "Show me my account information"
     - "Buy 10 shares of NVDA"
   
 # Model configuration
@@ -25,6 +26,7 @@ rag:
 tools:
   - "get_stock_price"
   - "get_market_news"
+  - "get_account_information"
   - "purchase_stocks"
   - "sell_stocks"
 

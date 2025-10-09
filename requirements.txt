@@ -1,6 +1,7 @@
 streamlit
 openai
 galileo
+galileo-protect
 chromadb
 python-dotenv
 langchain
