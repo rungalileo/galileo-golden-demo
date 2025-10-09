@@ -550,8 +550,667 @@ def render_experiments_tab():
         """)
 
 
+def run_dataset_background(run_config):
+    """Run dataset through agent in background (called from Runs UI)"""
+    from galileo.datasets import get_dataset
+    from galileo import galileo_context
+    import uuid
+    import os
+    
+    try:
+        # Update status
+        st.session_state.run_status = "running"
+        st.session_state.run_progress = "Initializing run..."
+        
+        # Get Galileo project from environment
+        project_name = os.getenv("GALILEO_PROJECT", "finance-agent-demo")
+        
+        # Get session mode (multi-turn vs single-turn)
+        session_mode = run_config.get('session_mode', 'multi_turn')
+        run_name = run_config.get('run_name', 'Dataset Run')
+        
+        # For multi-turn: start one session for all queries
+        # For single-turn: we'll create a new session for each query
+        run_session_id = f"run-{uuid.uuid4().hex[:8]}"
+        
+        if session_mode == 'multi_turn':
+            print(f"\n🚀 Starting Multi-turn Galileo session: {run_name}")
+            print(f"   Project: {project_name} (set via GALILEO_PROJECT env)")
+            print(f"   Session ID: {run_session_id}")
+            print(f"   Mode: All queries in one session")
+            
+            try:
+                # Start session (project determined by GALILEO_PROJECT environment variable)
+                galileo_context.start_session(
+                    name=run_name,
+                    external_id=run_session_id
+                )
+                print(f"   ✓ Session started successfully")
+            except Exception as e:
+                print(f"   ⚠️  Warning: Could not start Galileo session: {e}")
+                print("   Logs may not be captured properly")
+        else:
+            print(f"\n🚀 Starting Single-turn run: {run_name}")
+            print(f"   Project: {project_name}")
+            print(f"   Mode: Each query gets its own session")
+            # Sessions will be created per-query in the loop
+        
+        # Get dataset
+        dataset = None
+        if run_config["dataset_source"] == "galileo_name":
+            st.session_state.run_progress = f"Fetching dataset: {run_config['dataset_name']}..."
+            dataset = get_dataset(name=run_config["dataset_name"])
+        elif run_config["dataset_source"] == "galileo_id":
+            st.session_state.run_progress = f"Fetching dataset ID: {run_config['dataset_id']}..."
+            dataset = get_dataset(id=run_config["dataset_id"])
+        elif run_config["dataset_source"] in ["inline", "csv_file"]:
+            dataset = run_config["inline_data"]
+        
+        if not dataset:
+            raise ValueError("Failed to load dataset")
+        
+        # Convert to list if needed
+        if not isinstance(dataset, list):
+            try:
+                # Galileo Dataset - use get_content() to get the actual data
+                if hasattr(dataset, 'get_content'):
+                    dataset_content = dataset.get_content()
+                    print(f"  Got dataset content: {type(dataset_content)}")
+                    # Convert content to list of dicts
+                    if hasattr(dataset_content, 'rows'):
+                        # Convert DatasetRow objects to dictionaries
+                        # IMPORTANT: Extract just the values_dict, not the full row structure
+                        converted_rows = []
+                        for row in dataset_content.rows:
+                            row_dict = None
+                            
+                            # Method 1: Access values_dict.additional_properties directly (the actual data)
+                            if hasattr(row, 'values_dict') and hasattr(row.values_dict, 'additional_properties'):
+                                row_dict = row.values_dict.additional_properties
+                            
+                            # Method 2: Try to access values_dict as dict
+                            elif hasattr(row, 'values_dict'):
+                                try:
+                                    if hasattr(row.values_dict, 'items'):
+                                        row_dict = {k: v for k, v in row.values_dict.items()}
+                                    else:
+                                        row_dict = row.values_dict
+                                except:
+                                    # Fallback to the full row.to_dict() which includes metadata
+                                    if hasattr(row, 'to_dict') and callable(row.to_dict):
+                                        full_row = row.to_dict()
+                                        # Extract just the values_dict part
+                                        if isinstance(full_row, dict) and 'values_dict' in full_row:
+                                            row_dict = full_row['values_dict']
+                                        else:
+                                            row_dict = full_row
+                            
+                            # Method 3: Already a dict
+                            elif isinstance(row, dict):
+                                row_dict = row
+                            
+                            if row_dict is not None:
+                                converted_rows.append(row_dict)
+                            else:
+                                print(f"  Warning: Could not convert row of type {type(row)}")
+                        
+                        dataset = converted_rows
+                    elif isinstance(dataset_content, list):
+                        dataset = dataset_content
+                    else:
+                        # Try to convert to list
+                        dataset = list(dataset_content)
+                elif hasattr(dataset, 'content'):
+                    # Try content property
+                    dataset_content = dataset.content
+                    print(f"  Got dataset content via property: {type(dataset_content)}")
+                    if hasattr(dataset_content, 'rows'):
+                        # Convert DatasetRow objects to dictionaries (same logic as above)
+                        # Extract just the values_dict, not the full row structure
+                        converted_rows = []
+                        for row in dataset_content.rows:
+                            row_dict = None
+                            
+                            # Method 1: Access values_dict.additional_properties directly
+                            if hasattr(row, 'values_dict') and hasattr(row.values_dict, 'additional_properties'):
+                                row_dict = row.values_dict.additional_properties
+                            
+                            # Method 2: Try to access values_dict as dict
+                            elif hasattr(row, 'values_dict'):
+                                try:
+                                    if hasattr(row.values_dict, 'items'):
+                                        row_dict = {k: v for k, v in row.values_dict.items()}
+                                    else:
+                                        row_dict = row.values_dict
+                                except:
+                                    if hasattr(row, 'to_dict') and callable(row.to_dict):
+                                        full_row = row.to_dict()
+                                        if isinstance(full_row, dict) and 'values_dict' in full_row:
+                                            row_dict = full_row['values_dict']
+                                        else:
+                                            row_dict = full_row
+                            
+                            # Method 3: Already a dict
+                            elif isinstance(row, dict):
+                                row_dict = row
+                            
+                            if row_dict is not None:
+                                converted_rows.append(row_dict)
+                        
+                        dataset = converted_rows
+                    elif isinstance(dataset_content, list):
+                        dataset = dataset_content
+                    else:
+                        dataset = list(dataset_content)
+                else:
+                    raise ValueError(f"Dataset type {type(dataset)} has no get_content() or content")
+                print(f"  Converted dataset to list: {len(dataset)} rows")
+                
+                # Debug: Show first row structure
+                if dataset:
+                    print(f"  First row type: {type(dataset[0])}")
+                    print(f"  First row keys: {list(dataset[0].keys()) if isinstance(dataset[0], dict) else 'Not a dict'}")
+                    if isinstance(dataset[0], dict):
+                        print(f"  First row sample: {dict(list(dataset[0].items())[:3])}")
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                raise ValueError(f"Failed to convert dataset to list (type: {type(dataset)}): {e}")
+        
+        st.session_state.run_progress = f"Loaded {len(dataset)} rows from dataset"
+        
+        # Get number of cycles
+        num_cycles = run_config.get("num_cycles", 1)
+        
+        # Initialize agent factory
+        st.session_state.run_progress = "Initializing agent..."
+        
+        # Ensure factory exists
+        if "factory" not in st.session_state:
+            from agent_factory import AgentFactory
+            st.session_state.factory = AgentFactory()
+        
+        # For multi-turn: create one agent with the session_id
+        # For single-turn: we'll create a new agent for each query
+        agent = None
+        if session_mode == 'multi_turn':
+            # Create agent with the run's session ID so logs are properly associated
+            print(f"   Creating agent with session_id: {run_session_id}")
+            agent = st.session_state.factory.create_agent(
+                domain=DOMAIN,
+                framework=FRAMEWORK,
+                session_id=run_session_id  # Use same session_id as Galileo session
+            )
+            
+            if agent is None:
+                raise ValueError("Failed to create agent - agent is None")
+            if not hasattr(agent, 'process_query'):
+                raise ValueError(f"Agent missing process_query method. Agent type: {type(agent)}")
+            
+            print(f"   ✓ Agent created successfully")
+        else:
+            print(f"   Agent will be created for each query")
+        
+        # Track results
+        total_processed = 0
+        total_rows = len(dataset) * num_cycles
+        
+        # Cycle through dataset
+        print(f"\n📋 Starting processing:")
+        print(f"   Dataset size: {len(dataset)} rows")
+        print(f"   Cycles: {num_cycles}")
+        print(f"   Total queries: {total_rows}")
+        
+        for cycle in range(num_cycles):
+            st.session_state.run_progress = f"Cycle {cycle + 1}/{num_cycles} - Processing rows..."
+            print(f"\n🔁 Cycle {cycle + 1}/{num_cycles}")
+            
+            for idx, row in enumerate(dataset):
+                # Get input - rows should now be flat dicts with actual data
+                if isinstance(row, dict):
+                    user_input = row.get('input', '') or row.get('query', '') or row.get('text', '')
+                else:
+                    user_input = ""
+                
+                if not user_input:
+                    if idx == 0:
+                        # Debug first row to understand structure
+                        print(f"   Debug: First row keys - {list(row.keys()) if isinstance(row, dict) else 'not a dict'}")
+                        if isinstance(row, dict) and len(row) > 0:
+                            print(f"   Debug: First few items - {dict(list(row.items())[:3])}")
+                    print(f"   ⚠️  Skipping row {idx + 1} - no input found")
+                    continue
+                
+                # Update progress
+                total_processed += 1
+                st.session_state.run_progress = (
+                    f"Cycle {cycle + 1}/{num_cycles} - "
+                    f"Row {idx + 1}/{len(dataset)} - "
+                    f"Total: {total_processed}/{total_rows}"
+                )
+                
+                # Process through agent
+                # Single-turn mode: create session and agent for each query
+                # Multi-turn mode: use existing session and agent
+                messages = [{"role": "user", "content": user_input}]
+                
+                if session_mode == 'single_turn':
+                    # Create a unique session for this query
+                    query_session_id = f"run-{uuid.uuid4().hex[:8]}"
+                    query_name = f"{run_name} - Query {total_processed}"
+                    
+                    try:
+                        # Start session for this query (project set via environment)
+                        galileo_context.start_session(
+                            name=query_name,
+                            external_id=query_session_id
+                        )
+                        
+                        # Create agent for this query
+                        query_agent = st.session_state.factory.create_agent(
+                            domain=DOMAIN,
+                            framework=FRAMEWORK,
+                            session_id=query_session_id
+                        )
+                        
+                        # Process the query
+                        print(f"  🔄 Processing row {idx + 1}/{len(dataset)}: {user_input[:60]}...")
+                        response = query_agent.process_query(messages)
+                        print(f"  ✓ Completed (response length: {len(response)} chars)")
+                        
+                        # Session will auto-close when agent goes out of scope
+                        
+                    except Exception as e:
+                        # Log error but continue
+                        print(f"  ✗ Error processing row {idx + 1}: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        response = f"Error: {str(e)}"
+                
+                else:  # multi_turn mode
+                    try:
+                        if agent.process_query is None:
+                            raise ValueError("agent.process_query is None")
+                        
+                        # Process the query - GalileoCallback will log everything
+                        print(f"  🔄 Processing row {idx + 1}/{len(dataset)}: {user_input[:60]}...")
+                        response = agent.process_query(messages)
+                        print(f"  ✓ Completed (response length: {len(response)} chars)")
+                        
+                    except Exception as e:
+                        # Log error but continue
+                        print(f"  ✗ Error processing row {idx + 1}: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        response = f"Error: {str(e)}"
+        
+        # Store results
+        st.session_state.run_results = {
+            "total_rows": len(dataset),
+            "num_cycles": num_cycles,
+            "total_processed": total_processed
+        }
+        st.session_state.run_status = "completed"
+        st.session_state.run_progress = f"Completed! Processed {total_processed} total queries ({len(dataset)} rows × {num_cycles} cycles)"
+        
+        # Sessions auto-close when agents go out of scope
+        print(f"\n✅ Processing complete:")
+        print(f"   Total processed: {total_processed} queries")
+        
+        if session_mode == 'multi_turn':
+            print(f"   Session: {run_name} (will auto-close)")
+            print(f"\n💡 View logs in Galileo Console:")
+            print(f"   Project: {project_name}")
+            print(f"   Session: {run_name}")
+        else:
+            print(f"   All sessions will auto-close (single-turn mode)")
+            print(f"\n💡 View logs in Galileo Console:")
+            print(f"   Project: {project_name}")
+            print(f"   Sessions: {run_name} - Query 1 through {total_processed}")
+        
+    except Exception as e:
+        # Sessions will auto-close on error
+        st.session_state.run_status = "failed"
+        st.session_state.run_progress = f"Error: {str(e)}"
+        st.session_state.run_error = str(e)
+        import traceback
+        st.session_state.run_traceback = traceback.format_exc()
+
+
+def render_runs_tab():
+    """Render the dataset runs tab for creating real logs"""
+    st.header("🔄 Dataset Runs")
+    
+    st.markdown("""
+    Pull a dataset from Galileo and run it through your agent to create **real production logs**.
+    
+    This is different from experiments:
+    - **Experiments**: Evaluation mode with metrics and scorers
+    - **Runs**: Production mode creating real session logs in Galileo
+    
+    Use this to:
+    - Generate logs for chaos testing
+    - Populate your Galileo project with realistic data
+    - Test guardrails with multiple scenarios
+    - Create baseline logs for monitoring
+    """)
+    
+    # Initialize run state
+    if "run_status" not in st.session_state:
+        st.session_state.run_status = "idle"
+    if "run_results" not in st.session_state:
+        st.session_state.run_results = None
+    
+    # Dataset Source Selection (OUTSIDE form so it updates immediately)
+    st.subheader("📊 Dataset Source")
+    dataset_source = st.radio(
+        "Choose dataset source:",
+        ["galileo_name", "galileo_id", "inline", "csv_file"],
+        format_func=lambda x: {
+            "galileo_name": "Galileo Dataset (by name)",
+            "galileo_id": "Galileo Dataset (by ID)",
+            "inline": "Sample Test Data",
+            "csv_file": "Upload CSV File"
+        }[x],
+        help="Where to get the dataset for the run",
+        key="run_dataset_source_radio"
+    )
+    
+    # Initialize dataset variables
+    dataset_name = None
+    dataset_id = None
+    inline_data = None
+    
+    # Handle dataset input based on source (OUTSIDE form for immediate updates)
+    if dataset_source == "galileo_name":
+        st.markdown("**Enter the name of your dataset in Galileo:**")
+        dataset_name = st.text_input(
+            "Dataset Name",
+            placeholder="e.g., finance-queries-synthetic",
+            help="Name of the dataset in Galileo",
+            key="run_dataset_name_input"
+        )
+    
+    elif dataset_source == "galileo_id":
+        st.markdown("**Enter the ID of your dataset in Galileo:**")
+        dataset_id = st.text_input(
+            "Dataset ID",
+            placeholder="e.g., abc-123-def",
+            help="ID of the dataset in Galileo",
+            key="run_dataset_id_input"
+        )
+    
+    elif dataset_source == "inline":
+        st.info("✓ Using built-in sample dataset (5 finance queries)")
+        inline_data = [
+            {"input": "What was Costco's revenue for Q3 2024?"},
+            {"input": "How is the S&P 500 performing this year?"},
+            {"input": "Should I invest in technology stocks?"},
+            {"input": "What are the current market trends?"},
+            {"input": "Can you explain what a 10-Q filing is?"}
+        ]
+        
+    elif dataset_source == "csv_file":
+        uploaded_file = st.file_uploader(
+            "Upload CSV file",
+            type=["csv"],
+            help="CSV with 'input' column",
+            key="run_csv_uploader"
+        )
+        if uploaded_file:
+            try:
+                df = pd.read_csv(uploaded_file)
+                st.success(f"✓ Loaded {len(df)} rows")
+                st.dataframe(df.head(), use_container_width=True)
+                inline_data = df.to_dict('records')
+            except Exception as e:
+                st.error(f"Error reading CSV: {e}")
+    
+    st.divider()
+    
+    # Run Configuration Form
+    with st.form("run_config"):
+        st.subheader("⚙️ Run Configuration")
+        
+        # Run name
+        run_name = st.text_input(
+            "Run Name",
+            value=f"dataset-run-{pd.Timestamp.now().strftime('%Y%m%d-%H%M')}",
+            help="Descriptive name for this run"
+        )
+        
+        # Number of cycles
+        num_cycles = st.number_input(
+            "Number of Cycles",
+            min_value=1,
+            max_value=100,
+            value=1,
+            help="How many times to cycle through the entire dataset (e.g., 3 means each row will be processed 3 times)"
+        )
+        
+        # Session grouping option
+        session_mode = st.radio(
+            "Session Grouping",
+            options=["multi_turn", "single_turn"],
+            format_func=lambda x: {
+                "multi_turn": "Multi-turn (All queries in one session)",
+                "single_turn": "Single-turn (Each query as separate session)"
+            }[x],
+            help="Multi-turn groups all queries under one session. Single-turn creates a separate session for each query.",
+            horizontal=True
+        )
+        
+        if session_mode == "multi_turn":
+            st.info(f"💡 This will process the dataset **{num_cycles}** time(s). All queries will be grouped in **one session**.")
+        else:
+            total_sessions = len(st.session_state.get('inline_data', [])) * num_cycles if dataset_source in ["inline", "csv_file"] else "N"
+            st.info(f"💡 This will process the dataset **{num_cycles}** time(s). Each query will create a **separate session** (total: {total_sessions} sessions).")
+        
+        st.divider()
+        
+        # Show current settings that will be honored
+        st.subheader("🎛️ Active Settings")
+        st.markdown("This run will honor your current chaos and guardrails settings:")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**Guardrails:**")
+            if "guardrails_enabled" in st.session_state and st.session_state.guardrails_enabled:
+                st.success("✅ Enabled")
+            else:
+                st.warning("🔓 Disabled")
+        
+        with col2:
+            st.markdown("**Chaos Engineering:**")
+            chaos_count = sum([
+                st.session_state.get("chaos_tool_instability", False),
+                st.session_state.get("chaos_sloppiness", False),
+                st.session_state.get("chaos_rag", False),
+                st.session_state.get("chaos_rate_limit", False),
+                st.session_state.get("chaos_data_corruption", False)
+            ])
+            if chaos_count > 0:
+                st.warning(f"🔥 {chaos_count} mode(s) active")
+            else:
+                st.success("😌 All systems normal")
+        
+        st.caption("💡 You can change these settings in the sidebar before running")
+        
+        st.divider()
+        
+        # Submit button
+        submitted = st.form_submit_button(
+            "🚀 Start Run",
+            type="primary",
+            use_container_width=True
+        )
+        
+        if submitted:
+            # Validate inputs
+            validation_error = None
+            
+            if not run_name or not run_name.strip():
+                validation_error = "Please provide a run name"
+            elif dataset_source == "galileo_name" and (not dataset_name or not dataset_name.strip()):
+                validation_error = "Please provide a dataset name"
+            elif dataset_source == "galileo_id" and (not dataset_id or not dataset_id.strip()):
+                validation_error = "Please provide a dataset ID"
+            elif dataset_source == "csv_file" and not inline_data:
+                validation_error = "Please upload a CSV file"
+            
+            if validation_error:
+                st.error(validation_error)
+            else:
+                # Store config and trigger run
+                run_config = {
+                    "run_name": run_name,
+                    "dataset_source": dataset_source,
+                    "dataset_name": dataset_name,
+                    "dataset_id": dataset_id,
+                    "inline_data": inline_data,
+                    "num_cycles": num_cycles,
+                    "session_mode": session_mode,
+                }
+                
+                st.session_state.current_run = run_config
+                st.session_state.run_status = "queued"
+                st.rerun()
+    
+    # Display run status
+    if st.session_state.run_status != "idle":
+        st.divider()
+        st.subheader("📊 Run Status")
+        
+        if st.session_state.run_status == "queued":
+            with st.spinner("Starting run..."):
+                # Run dataset
+                run_dataset_background(st.session_state.current_run)
+                st.rerun()
+        
+        elif st.session_state.run_status == "running":
+            st.info("⏳ Run in progress...")
+            if "run_progress" in st.session_state:
+                st.write(st.session_state.run_progress)
+            
+            # Show progress bar
+            progress_bar = st.progress(0)
+            st.caption("Processing dataset through agent...")
+        
+        elif st.session_state.run_status == "completed":
+            st.success("✅ Run completed successfully!")
+            
+            if st.session_state.run_results is not None:
+                results = st.session_state.run_results
+                
+                st.write(f"📊 Run Summary:")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("Dataset Rows", results.get("total_rows", 0))
+                with col2:
+                    st.metric("Cycles", results.get("num_cycles", 0))
+                with col3:
+                    st.metric("Total Processed", results.get("total_processed", 0))
+            
+            # Link to Galileo Console
+            st.markdown("---")
+            st.markdown("### 🔗 View Logs in Galileo")
+            st.markdown(f"""
+            Your run created real logs in Galileo. View them in [Galileo Console](https://console.galileo.ai):
+            - Run name: `{st.session_state.current_run.get('run_name', 'Unknown')}`
+            - Each query was processed through the agent with full logging
+            - Full traces with tool calls, RAG retrievals, and agent reasoning
+            - Look in your Galileo project for the logs
+            """)
+            
+            # Reset button
+            if st.button("Run Another Dataset", type="secondary"):
+                st.session_state.run_status = "idle"
+                st.session_state.run_results = None
+                st.rerun()
+        
+        elif st.session_state.run_status == "failed":
+            st.error(f"❌ Run failed")
+            if "run_error" in st.session_state:
+                st.error(f"**Error**: {st.session_state.run_error}")
+                with st.expander("View full error details", expanded=True):
+                    if "run_traceback" in st.session_state:
+                        st.code(st.session_state.run_traceback, language="python")
+                    else:
+                        st.code(st.session_state.run_error, language="python")
+                    
+                    # Add debugging info
+                    st.markdown("### Debugging Information")
+                    st.write("Check the terminal/console for additional error messages.")
+            
+            # Reset button
+            if st.button("Try Again", type="secondary"):
+                st.session_state.run_status = "idle"
+                st.rerun()
+    
+    # Help section
+    with st.expander("ℹ️ Help & Documentation"):
+        st.markdown("""
+        ### How Dataset Runs Work
+        
+        **What is a Dataset Run?**
+        - Pulls a dataset from Galileo (or uses inline/CSV data)
+        - Processes each row through the agent as a real query
+        - Creates production-style session logs in Galileo
+        - Can cycle through the dataset multiple times
+        
+        **Difference from Experiments:**
+        - **Experiments**: For evaluation with metrics and scorers
+        - **Runs**: For creating real logs (testing, demos, baselines)
+        
+        **Use Cases:**
+        - **Chaos Testing**: Enable chaos modes and run dataset to generate problematic logs
+        - **Guardrails Testing**: Test how guardrails handle various inputs
+        - **Demo Data**: Generate realistic logs for demos or testing
+        - **Baseline Logs**: Create a baseline set of logs for monitoring
+        
+        ### Cycling Through Dataset
+        
+        If you set **Number of Cycles = 3**:
+        - Each row in your dataset will be processed 3 times
+        - Total queries = Dataset size × Number of cycles
+        
+        ### Session Grouping
+        
+        **Multi-turn (All queries in one session)**:
+        - All queries grouped under a single Galileo session
+        - Good for: Analyzing overall patterns, conversation flow simulation
+        - View: One session with multiple turns
+        
+        **Single-turn (Each query as separate session)**:
+        - Each query gets its own Galileo session
+        - Good for: Independent query evaluation, easier filtering/analysis
+        - View: Multiple sessions, one query each
+        
+        ### Settings Honored
+        
+        The run will use your current sidebar settings:
+        - **Chaos Engineering**: All active chaos modes will apply
+        - **Guardrails**: If enabled, will filter inputs/outputs
+        - **Live Data**: Will use live or mock data based on your setting
+        
+        ### Creating Datasets
+        
+        - **Galileo Console**: Create datasets in your Galileo project
+        - **MCP Tool**: Use AI to generate synthetic datasets
+        - **CSV Upload**: Upload your own CSV with an `input` column
+        
+        ### Resources
+        
+        - [Galileo Console](https://console.galileo.ai)
+        - [Chaos Engineering Guide](CHAOS_ENGINEERING.md)
+        - [Guardrails Guide](GUARDRAILS_GUIDE.md)
+        """)
+
+
 def multi_domain_agent_app():
-    """Main agent app with tabs for chat and experiments"""
+    """Main agent app with tabs for chat, experiments, and runs"""
     # Setup environment and secrets (only once)
     if "environment_setup_done" not in st.session_state:
         setup_environment()
@@ -992,13 +1651,16 @@ def multi_domain_agent_app():
         st.markdown("[Quick Start](https://github.com)")
     
     # Main content with tabs
-    tab1, tab2 = st.tabs(["💬 Chat", "🧪 Experiments"])
+    tab1, tab2, tab3 = st.tabs(["💬 Chat", "🧪 Experiments", "🔄 Runs"])
     
     with tab1:
         render_chat_tab(app_title, example_queries)
     
     with tab2:
         render_experiments_tab()
+    
+    with tab3:
+        render_runs_tab()
 
 
 if __name__ == "__main__":
