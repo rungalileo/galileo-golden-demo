@@ -23,7 +23,8 @@ except ImportError:
 
 try:
     from alpha_vantage.timeseries import TimeSeries
-    from alpha_vantage.sectorperformance import SectorPerformances
+    # Note: sectorperformance module doesn't exist in newer versions
+    # We'll use TimeSeries for all stock data needs
     ALPHA_VANTAGE_AVAILABLE = True
 except ImportError:
     ALPHA_VANTAGE_AVAILABLE = False
