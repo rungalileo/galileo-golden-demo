@@ -18,6 +18,38 @@ load_dotenv(os.path.expanduser("~/.config/secrets/myapps.env"), override=False)
 # 2) then load per-app .env (if present) to override selectively
 load_dotenv(find_dotenv(usecwd=True), override=True)
 
+# 3) Load from Streamlit secrets if available (for Streamlit integration)
+try:
+    from setup_env import setup_environment
+    setup_environment()
+    print("✅ Loaded environment from .streamlit/secrets.toml")
+except Exception as e:
+    print(f"⚠️  Could not load Streamlit secrets: {e}")
+    print("   Falling back to .env variables")
+
+# Verify Galileo configuration
+galileo_console_url = os.getenv("GALILEO_CONSOLE_URL")
+galileo_api_key = os.getenv("GALILEO_API_KEY")
+
+if not galileo_console_url:
+    raise EnvironmentError(
+        "GALILEO_CONSOLE_URL is not set! Please set it in one of:\n"
+        "  1. .streamlit/secrets.toml (galileo_console_url = \"https://your-instance.galileo.ai\")\n"
+        "  2. .env file (GALILEO_CONSOLE_URL=https://your-instance.galileo.ai)\n"
+        "  3. Environment variable: export GALILEO_CONSOLE_URL=https://your-instance.galileo.ai"
+    )
+
+if not galileo_api_key:
+    raise EnvironmentError(
+        "GALILEO_API_KEY is not set! Please set it in one of:\n"
+        "  1. .streamlit/secrets.toml (galileo_api_key = \"your-key\")\n"
+        "  2. .env file (GALILEO_API_KEY=your-key)\n"
+        "  3. Environment variable: export GALILEO_API_KEY=your-key"
+    )
+
+print(f"🔗 Galileo Console URL: {galileo_console_url}")
+print(f"🔑 Galileo API Key: {'*' * 20}{galileo_api_key[-8:]}")
+
 # Configuration
 DOMAIN = "finance"
 FRAMEWORK = "LangGraph"
