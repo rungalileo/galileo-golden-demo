@@ -9,9 +9,8 @@ from agent_factory import AgentFactory
 from setup_env import setup_environment
 from langchain_core.messages import AIMessage, HumanMessage
 from agent_frameworks.langgraph.langgraph_rag import get_domain_rag_system
+from helpers.galileo_api_helpers import get_galileo_app_url, get_galileo_project_id, get_galileo_log_stream_id
 import os
-
-# TODO: Add sidebar with link to traces
 
 # Load environment variables
 load_dotenv()
@@ -100,9 +99,41 @@ def orchestrate_streamlit_and_get_user_input(
         st.session_state.session_id = session_id
         try:
             galileo_context.start_session(name="Finance Agent Demo", external_id=session_id)
+            # Store the galileo logger for sidebar link
+            st.session_state.galileo_logger = galileo_context
         except Exception as e:
             st.error(f"Failed to start Galileo session: {str(e)}")
             st.stop()
+
+    # Add sidebar with Galileo trace link
+    with st.sidebar:
+        st.subheader("Galileo Tracing")
+        
+        # Get project and log stream names from environment variables (set by setup_environment)
+        project_name = os.environ.get("GALILEO_PROJECT", "")
+        log_stream_name = os.environ.get("GALILEO_LOG_STREAM", "")
+        
+        if project_name and log_stream_name:
+            try:
+                # Get the console URL and project/log stream info
+                console_url = get_galileo_app_url()
+                project_id = get_galileo_project_id(project_name)
+                
+                if project_id:
+                    log_stream_id = get_galileo_log_stream_id(project_id, log_stream_name)
+                    
+                    if log_stream_id:
+                        project_url = f"{console_url}/project/{project_id}/log-streams/{log_stream_id}"
+                        st.markdown(f"[📊 View traces in Galileo]({project_url})")
+                    else:
+                        st.write("Log stream not found")
+                else:
+                    st.write("Project not found")
+                    
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+        else:
+            st.write("Galileo project/log stream not configured")
 
     # Show example queries
     example_query = show_example_queries(example_query_1, example_query_2)
