@@ -17,6 +17,7 @@ Not a production reference architecture or replacement for customer-specific POC
 - Python 3.8+
 - OpenAI API key
 - Galileo API key
+- Pinecone API keys (for both local and hosted environments)
 
 ### Setup
 
@@ -49,6 +50,11 @@ Not a production reference architecture or replacement for customer-specific POC
    galileo_api_key = "your_galileo_api_key_here"
    galileo_project = "your_project_name"
    galileo_log_stream = "your_log_stream_name"
+   
+   # Pinecone Configuration
+   pinecone_api_key_local = "your_local_project_api_key"
+   pinecone_api_key_hosted = "your_hosted_project_api_key"
+   environment = "local"  # or "hosted"
    ```
 
 5. **Run the Streamlit app**
@@ -161,12 +167,23 @@ Place your RAG documents in the `docs/` directory:
 
 ### 4. Set Up Vector Database
 
-Run this command once when adding a new domain:
+The app uses Pinecone for vector storage. This is a **one-time setup** per domain and environment:
+
 ```bash
-python helpers/setup_vectordb.py your_domain_name
+# For local demos
+python helpers/setup_vectordb.py your_domain_name local
+
+# For hosted demos  
+python helpers/setup_vectordb.py your_domain_name hosted
 ```
 
-This creates a persistent vector database at `domains/your_domain_name/chroma_db/` that only needs to be set up once per domain.
+**Important Notes:**
+- You need both project API keys to create indexes using the setup scripts
+- Once indexes are created, you only need the environment and matching API key in your secrets file
+- This processes documents from `domains/your_domain_name/docs/` directory
+- Creates Pinecone indexes that persist in the cloud and don't need to be rebuilt
+
+See [PINECONE_SETUP.md](PINECONE_SETUP.md) for detailed configuration instructions.
 
 ### 5. Update App Configuration (Temporary)
 
@@ -184,9 +201,20 @@ DOMAIN = "your_domain_name"  # Change this line
 1. **User Input** → Streamlit UI captures user message
 2. **Agent Processing** → AgentFactory creates domain-specific agent
 3. **Tool Execution** → Agent decides which tools to call based on user intent
-4. **RAG Integration** → Vector database provides relevant context when needed
+4. **RAG Integration** → Pinecone vector database provides relevant context when needed
 5. **Response Generation** → Agent synthesizes final response
 6. **Observability** → All interactions logged to Galileo automatically
+
+### Vector Database Architecture
+
+The app uses **Pinecone** for vector storage with environment-based configuration:
+
+- **Local Demos**: Uses `galileo-demo-local` Pinecone project
+- **Hosted Demos (i.e. streamlit)**: Uses `galileo-demo-hosted` Pinecone project
+- **Index Naming**: `{domain}-{environment}-index` (e.g., `finance-local-index`)
+- **Automatic Selection**: When the app executes vectorDB searches, the app automatically uses the correct project based on environment setting
+
+See [PINECONE_SETUP.md](PINECONE_SETUP.md) for detailed configuration instructions.
 
 ## Code Structure
 
@@ -211,10 +239,11 @@ galileo-golden-demo/
 │       ├── docs/          # RAG documents
 │       └── tools/         # Domain tools
 ├── helpers/                # Utility scripts
-│   ├── setup_vectordb.py  # Vector database setup
+│   ├── setup_vectordb.py  # Pinecone vector database setup
 │   └── test_vectordb.py   # Vector database testing
-└── tools/                 # Shared tools
-    └── rag_retrieval.py   # General RAG functionality (Currently Unused)
+├── tools/                 # Shared tools
+│   └── rag_retrieval.py   # General RAG functionality (not implemented)
+└── PINECONE_SETUP.md      # Detailed Pinecone configuration guide
 ```
 
 ### For Sales Engineers

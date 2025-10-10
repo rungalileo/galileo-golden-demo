@@ -25,7 +25,10 @@ def setup_environment():
             "GALILEO_PROJECT": secrets.get("galileo_project", ""),
             "GALILEO_LOG_STREAM": secrets.get("galileo_log_stream", ""),
             "GALILEO_CONSOLE_URL": secrets.get("galileo_console_url", "https://app.galileo.ai"),
-            "ADMIN_KEY": secrets.get("admin_key", "")
+            "ADMIN_KEY": secrets.get("admin_key", ""),
+            "PINECONE_API_KEY_LOCAL": secrets.get("pinecone_api_key_local", ""),
+            "PINECONE_API_KEY_HOSTED": secrets.get("pinecone_api_key_hosted", ""),
+            "ENVIRONMENT": secrets.get("environment", "local")
         }
         
         for key, value in env_vars.items():

@@ -19,7 +19,6 @@ from galileo.handlers.langchain import GalileoCallback
 
 # Import RAG retrieval function
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from tools.rag_retrieval import create_domain_retrieval_function
 from .langgraph_rag import create_domain_rag_tool
 
 

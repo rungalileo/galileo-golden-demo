@@ -15,7 +15,7 @@ pyyaml
 toml
 unstructured
 unstructured[pdf]
-langchain_chroma
+langchain-pinecone
 arize-phoenix-otel
 arize-phoenix
 openinference-instrumentation-openai

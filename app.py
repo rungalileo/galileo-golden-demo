@@ -8,6 +8,7 @@ from galileo import galileo_context
 from agent_factory import AgentFactory
 from setup_env import setup_environment
 from langchain_core.messages import AIMessage, HumanMessage
+from agent_frameworks.langgraph.langgraph_rag import get_domain_rag_system
 import os
 
 # TODO: Add sidebar with link to traces
@@ -19,6 +20,21 @@ load_dotenv()
 # Configuration - easily changeable for different domains
 DOMAIN = "finance"  # Could be "healthcare", "legal", etc.
 FRAMEWORK = "LangGraph"
+
+
+def initialize_rag_systems():
+    """Initialize RAG systems at app startup for better performance"""
+    try:
+        
+        # Initialize RAG system for the current domain
+        print(f"🔧 Initializing RAG system for domain: {DOMAIN}")
+        rag_system = get_domain_rag_system(DOMAIN)
+        print(f"✅ RAG system initialized successfully")
+        
+        return True
+    except Exception as e:
+        print(f"❌ Failed to initialize RAG system: {e}")
+        return False
 
 
 def escape_dollar_signs(text: str) -> str:
@@ -148,6 +164,11 @@ def multi_domain_agent_app():
     if "environment_setup_done" not in st.session_state:
         setup_environment()
         st.session_state.environment_setup_done = True
+    
+    # Initialize RAG systems (only once)
+    if "rag_systems_initialized" not in st.session_state:
+        initialize_rag_systems()
+        st.session_state.rag_systems_initialized = True
     
     # Initialize AgentFactory once
     if "factory" not in st.session_state:
