@@ -87,7 +87,7 @@ def show_example_queries(query_1: str, query_2: str):
 def orchestrate_streamlit_and_get_user_input(
     agent_title: str, example_query_1: str, example_query_2: str
 ):
-    """Set up the Streamlit interface and get user input - simplified like John Deere example"""
+    """Set up the Streamlit interface and get user input"""
     # App title and description
     st.title(agent_title)
     
@@ -97,13 +97,9 @@ def orchestrate_streamlit_and_get_user_input(
     if "session_id" not in st.session_state:
         session_id = str(uuid.uuid4())[:10]
         st.session_state.session_id = session_id
-        try:
-            galileo_context.start_session(name="Finance Agent Demo", external_id=session_id)
-            # Store the galileo logger for sidebar link
-            st.session_state.galileo_logger = galileo_context
-        except Exception as e:
-            st.error(f"Failed to start Galileo session: {str(e)}")
-            st.stop()
+    # Create state variable but don't start Galileo session until we have user input
+    if "galileo_session_started" not in st.session_state:
+        st.session_state.galileo_session_started = False
 
     # Add sidebar with Galileo trace link
     with st.sidebar:
@@ -152,6 +148,16 @@ def orchestrate_streamlit_and_get_user_input(
 def process_input_for_simple_app(user_input: str | None):
     """Process user input and generate response - using AgentFactory directly"""
     if user_input:
+        # Start Galileo session on first user input
+        if not st.session_state.galileo_session_started:
+            try:
+                galileo_context.start_session(name="Finance Agent Demo", external_id=st.session_state.session_id)
+                st.session_state.galileo_logger = galileo_context
+                st.session_state.galileo_session_started = True
+            except Exception as e:
+                st.error(f"Failed to start Galileo session: {str(e)}")
+                st.stop()
+        
         # Add user message to chat history
         user_message = HumanMessage(content=user_input)
         st.session_state.messages.append({"message": user_message, "agent": "user"})
