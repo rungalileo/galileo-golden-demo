@@ -97,9 +97,11 @@ Examples:
 - `healthcare-local-index` (in galileo-demo-local project)
 - `healthcare-hosted-index` (in galileo-demo-hosted project)
 
+You shouldn't have to configure this in the script. We will automatically do this if you properly configure the domain you add.
+
 ## Application Usage
 
-The application automatically uses the correct Pinecone project based on the `environment` variable:
+When the agent queries the vector DB, the application automatically uses the correct Pinecone project based on the `environment` variable:
 
 - **Local deployments**: Set `environment = "local"` → Uses `galileo-demo-local` project
 - **Hosted deployments**: Set `environment = "hosted"` → Uses `galileo-demo-hosted` project
