@@ -16,6 +16,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from base_agent import BaseAgent
 from domain_manager import DomainConfig
 from galileo.handlers.langchain import GalileoCallback
+import streamlit as st
 
 # Import chaos engine
 try:
@@ -53,7 +54,36 @@ class LangGraphAgent(BaseAgent):
     def __init__(self, domain_config: DomainConfig, session_id: str = None):
         super().__init__(domain_config, session_id)
         self.graph = None
-        self.config = {"configurable": {"thread_id": self.session_id}, "callbacks": [GalileoCallback()]}
+        
+        # Phoenix is initialized at module load in app.py (before LangChain imports)
+        # No need for lazy initialization here
+        
+        # Collect all active callbacks (check both existence AND toggle state)
+        callbacks = [GalileoCallback()]
+        
+        # Add LangSmith tracer if enabled in UI
+        if (hasattr(st, 'session_state') and 
+            hasattr(st.session_state, 'langsmith_tracer') and
+            getattr(st.session_state, 'logger_langsmith', False)):
+            callbacks.append(st.session_state.langsmith_tracer)
+            print("   ✓ LangSmith tracer callback added to agent")
+        
+        # Add Langfuse callback if enabled in UI
+        if (hasattr(st, 'session_state') and 
+            hasattr(st.session_state, 'langfuse_handler') and
+            getattr(st.session_state, 'logger_langfuse', False)):
+            callbacks.append(st.session_state.langfuse_handler)
+            print("   ✓ Langfuse callback added to agent")
+        
+        # Add Braintrust callback if enabled in UI
+        if (hasattr(st, 'session_state') and 
+            hasattr(st.session_state, 'braintrust_handler') and
+            getattr(st.session_state, 'logger_braintrust', False)):
+            callbacks.append(st.session_state.braintrust_handler)
+            print("   ✓ Braintrust callback added to agent")
+        
+        self.config = {"configurable": {"thread_id": self.session_id}, "callbacks": callbacks}
+        print(f"   ✓ Agent initialized with {len(callbacks)} callback(s)")
     
     def load_tools(self) -> None:
         """Load tools from the domain's tools directory and add RAG if enabled"""

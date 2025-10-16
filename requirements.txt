@@ -24,3 +24,9 @@ openinference-instrumentation-langchain
 yfinance
 requests
 alpha-vantage
+arize-otel 
+opentelemetry-sdk 
+opentelemetry-exporter-otlp
+langfuse
+braintrust
+braintrust-langchain

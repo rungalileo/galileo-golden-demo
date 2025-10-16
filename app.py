@@ -3,29 +3,318 @@ Galileo Demo App with Experiments Support
 """
 import uuid
 import streamlit as st
-import phoenix as px
-from dotenv import load_dotenv, find_dotenv
-from galileo import galileo_context
-from agent_factory import AgentFactory
-from setup_env import setup_environment
-from langchain_core.messages import AIMessage, HumanMessage
-from phoenix.otel import register
 import os
 import pandas as pd
 import threading
 
-# Load environment variables
+# ============================================================================
+# CRITICAL: Load environment variables BEFORE any LangChain imports!
+# LangSmith checks LANGCHAIN_TRACING_V2 when langchain modules are imported
+# ============================================================================
+from dotenv import load_dotenv, find_dotenv
+from setup_env import setup_environment
+
 # 1) load global/shared first
 load_dotenv(os.path.expanduser("~/.config/secrets/myapps.env"), override=False)
 # 2) then load per-app .env (if present) to override selectively
 load_dotenv(find_dotenv(usecwd=True), override=True)
 
-# Initialize Phoenix tracing
-tracer_provider = register(
-  project_name="galileo-demo",
-  endpoint="https://app.phoenix.arize.com/s/paul/v1/traces",
-  auto_instrument=True
-)
+# 3) Load from secrets.toml
+# This runs once when the module is first imported
+# Environment variables persist for the entire Python process
+# Check if already loaded to avoid printing the message multiple times
+if not os.getenv('_GALILEO_ENV_LOADED'):
+    setup_environment()
+    os.environ['_GALILEO_ENV_LOADED'] = 'true'
+
+# ============================================================================
+# CRITICAL: Initialize Phoenix BEFORE importing LangChain!
+# Phoenix instrumentation must be set up before LangChain modules are loaded
+# ============================================================================
+phoenix_endpoint = os.getenv("PHOENIX_ENDPOINT")
+phoenix_api_key = os.getenv("PHOENIX_API_KEY")
+phoenix_project = os.getenv("PHOENIX_PROJECT", "galileo-demo")
+
+# Store Phoenix/Arize credentials for later initialization
+# Actual initialization happens after session state is available
+_phoenix_credentials_available = bool(phoenix_endpoint and phoenix_api_key)
+_arize_credentials_available = bool(os.getenv("ARIZE_API_KEY") and os.getenv("ARIZE_SPACE_ID"))
+
+# Read OTLP platform preference from file
+def _get_otlp_preference():
+    """Read the OTLP platform preference from file"""
+    pref_file = os.path.join(os.path.dirname(__file__), ".otlp_preference")
+    try:
+        if os.path.exists(pref_file):
+            with open(pref_file, "r") as f:
+                return f.read().strip().lower()
+    except:
+        pass
+    return "phoenix"  # Default to Phoenix
+
+def _save_otlp_preference(platform):
+    """Save the OTLP platform preference to file"""
+    pref_file = os.path.join(os.path.dirname(__file__), ".otlp_preference")
+    try:
+        with open(pref_file, "w") as f:
+            f.write(platform.lower())
+    except Exception as e:
+        print(f"Failed to save OTLP preference: {e}")
+
+_otlp_preference = _get_otlp_preference()
+
+def _initialize_phoenix_otlp():
+    """Initialize Phoenix OTLP tracing (must be called before LangChain imports)"""
+    if os.getenv('_PHOENIX_INITIALIZED'):
+        return True
+    
+    print(f"\n🔭 Initializing Phoenix (before LangChain import)...")
+    
+    try:
+        from openinference.instrumentation.langchain import LangChainInstrumentor
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk import trace as trace_sdk
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry import trace
+        from opentelemetry.sdk.resources import Resource
+        
+        # Create OTLP exporter with Bearer token auth and project headers
+        exporter = OTLPSpanExporter(
+            endpoint=phoenix_endpoint,
+            headers={
+                "authorization": f"Bearer {phoenix_api_key}",
+                "project": phoenix_project,
+                "x-project": phoenix_project,
+                "x-project-name": phoenix_project,
+            }
+        )
+        
+        # Create resource with project attributes
+        resource = Resource.create({
+            "service.name": phoenix_project,
+            "project.name": phoenix_project,
+            "openinference.project.name": phoenix_project,
+        })
+        
+        # Create tracer provider with resource and BatchSpanProcessor
+        tracer_provider = trace_sdk.TracerProvider(resource=resource)
+        tracer_provider.add_span_processor(BatchSpanProcessor(exporter))
+        trace.set_tracer_provider(tracer_provider)
+        
+        # Instrument LangChain with OpenInference semantic conventions
+        LangChainInstrumentor().instrument(
+            tracer_provider=tracer_provider,
+            skip_dep_check=True
+        )
+        
+        os.environ['_PHOENIX_INITIALIZED'] = 'true'
+        print(f"   ✅ Phoenix initialized with BatchSpanProcessor")
+        print(f"   Project: {phoenix_project}")
+        print(f"   Endpoint: {phoenix_endpoint}")
+        return True
+    except Exception as e:
+        print(f"   ⚠️  Phoenix pre-init failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+# Global flag to prevent re-initialization (more reliable than env var in Streamlit)
+_arize_ax_initialized = False
+
+def _initialize_arize_ax_otlp():
+    """Initialize Arize AX OTLP tracing (must be called before LangChain imports)"""
+    global _arize_ax_initialized
+    
+    if _arize_ax_initialized:
+        return True  # Silent return if already initialized
+    
+    print(f"\n🔭 Initializing Arize AX (before LangChain import)...")
+    
+    space_id = os.getenv("ARIZE_SPACE_ID")
+    api_key = os.getenv("ARIZE_API_KEY")
+    project = os.getenv("ARIZE_PROJECT", "galileo-demo")
+    
+    if not space_id or not api_key:
+        print(f"   ❌ Arize AX credentials not set!")
+        return False
+    
+    try:
+        # Use manual OTLP setup (same as Phoenix) which we know sends traces successfully
+        from openinference.instrumentation.langchain import LangChainInstrumentor
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk import trace as trace_sdk
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry import trace
+        from opentelemetry.sdk.resources import Resource
+        
+        # Arize OTLP endpoint (HTTP)
+        arize_endpoint = "https://otlp.arize.com/v1/traces"
+        
+        # Create OTLP exporter with Arize-specific headers
+        # Based on Arize documentation for HTTP OTLP
+        exporter = OTLPSpanExporter(
+            endpoint=arize_endpoint,
+            headers={
+                "authorization": api_key,
+                "space_id": space_id,
+                "model_id": project,
+                "model_version": "production",
+            }
+        )
+        
+        # Create resource with OpenInference-specific attributes
+        # These are critical for Arize to classify span types
+        resource = Resource.create({
+            "service.name": project,
+            "model_id": project,
+            "model_version": "production",
+            # OpenInference attributes for proper span classification
+            "openinference.project.name": project,
+        })
+        
+        # Create tracer provider with resource and BatchSpanProcessor
+        tracer_provider = trace_sdk.TracerProvider(resource=resource)
+        tracer_provider.add_span_processor(BatchSpanProcessor(exporter))
+        trace.set_tracer_provider(tracer_provider)
+        
+        # Instrument LangChain with OpenInference semantic conventions
+        # This adds the span.kind and other attributes needed for type classification
+        LangChainInstrumentor().instrument(
+            tracer_provider=tracer_provider,
+            skip_dep_check=True
+        )
+        
+        # Mark as initialized
+        _arize_ax_initialized = True
+        os.environ['_ARIZE_AX_INITIALIZED'] = 'true'
+        
+        print(f"   ✅ Arize AX initialized with BatchSpanProcessor + OpenInference")
+        print(f"   Model ID: {project}")
+        print(f"   Endpoint: {arize_endpoint}")
+        return True
+    except Exception as e:
+        print(f"   ❌ Arize AX pre-init failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+# Initialize OTLP platform at module load based on saved preference (ONCE ONLY)
+# This code runs ONCE when the module is first imported
+if not os.getenv('_OTLP_INITIALIZED'):
+    if _otlp_preference == "phoenix" and _phoenix_credentials_available:
+        _initialize_phoenix_otlp()
+    elif _otlp_preference == "arize ax" and _arize_credentials_available:
+        _initialize_arize_ax_otlp()
+    os.environ['_OTLP_INITIALIZED'] = 'true'
+
+# NOW we can import LangChain - Phoenix instrumentation is ready!
+import phoenix as px
+from galileo import galileo_context
+from agent_factory import AgentFactory
+from langchain_core.messages import AIMessage, HumanMessage
+from arize.otel import register as arize_register
+from langfuse import Langfuse
+from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
+from braintrust import init_logger as braintrust_init_logger
+from braintrust_langchain import BraintrustCallbackHandler, set_global_handler as braintrust_set_global_handler
+
+# Tracing initialization will happen inside multi_domain_agent_app() where st.session_state is available
+def _initialize_callback_platforms():
+    st.session_state.tracing_initialized = True
+    
+    print("\n🔧 Initializing callback-based observability platforms...")
+    platforms_enabled = []
+    
+    # ============================================================================
+    # OTLP Platforms (Phoenix/Arize AX) - Already initialized at module load
+    # ============================================================================
+    if os.getenv('_PHOENIX_INITIALIZED'):
+        platforms_enabled.append("Phoenix")
+        print(f"✅ Phoenix - initialized at module load")
+    elif os.getenv('_ARIZE_AX_INITIALIZED'):
+        platforms_enabled.append("Arize AX")
+        print(f"✅ Arize AX - initialized at module load")
+    else:
+        print(f"⏭️  No OTLP platform enabled")
+    
+    # ============================================================================
+    # LANGSMITH - Uses callbacks (only if enabled in UI)
+    # ============================================================================
+    if hasattr(st.session_state, 'logger_langsmith') and st.session_state.logger_langsmith:
+        langsmith_api_key = os.getenv("LANGCHAIN_API_KEY")
+        langsmith_project = os.getenv("LANGCHAIN_PROJECT")
+        
+        if langsmith_api_key:
+            try:
+                # Create explicit LangSmith tracer callback
+                from langchain.callbacks.tracers import LangChainTracer
+                from langsmith import Client
+                
+                langsmith_client = Client(api_key=langsmith_api_key)
+                langsmith_tracer = LangChainTracer(
+                    project_name=langsmith_project,
+                    client=langsmith_client
+                )
+                
+                st.session_state.langsmith_tracer = langsmith_tracer
+                platforms_enabled.append("LangSmith")
+                print(f"✅ LangSmith tracing initialized")
+                print(f"   🎯 Traces will go to project: {langsmith_project}")
+            except Exception as e:
+                print(f"   ⚠️ Failed to create LangSmith tracer: {e}")
+        else:
+            print(f"   ⚠️ LangSmith enabled but missing LANGCHAIN_API_KEY")
+    else:
+        print(f"   ⏭️  LangSmith disabled (UI toggle off)")
+    
+    # ============================================================================
+    # LANGFUSE - Callback handler (only if enabled in UI)
+    # ============================================================================
+    if hasattr(st.session_state, 'logger_langfuse') and st.session_state.logger_langfuse:
+        try:
+            langfuse_pk = os.getenv("LANGFUSE_API_PK")
+            langfuse_sk = os.getenv("LANGFUSE_API_SK")
+            langfuse_host = os.getenv("LANGFUSE_HOST_URL") or os.getenv("LANGFUSE_HOST")
+            
+            if langfuse_pk and langfuse_sk and langfuse_host:
+                langfuse = Langfuse(public_key=langfuse_pk, secret_key=langfuse_sk, host=langfuse_host)
+                st.session_state.langfuse_handler = LangfuseCallbackHandler()
+                platforms_enabled.append("Langfuse")
+                print(f"✅ Langfuse callback initialized")
+            else:
+                print(f"   ⚠️ Langfuse enabled but missing credentials")
+        except Exception as e:
+            print(f"   ⚠️ Failed to initialize Langfuse: {e}")
+    else:
+        print(f"   ⏭️  Langfuse disabled (UI toggle off)")
+    
+    # ============================================================================
+    # BRAINTRUST - Callback handler (only if enabled in UI)
+    # ============================================================================
+    if hasattr(st.session_state, 'logger_braintrust') and st.session_state.logger_braintrust:
+        try:
+            braintrust_api_key = os.getenv("BRAINTRUST_API_KEY")
+            braintrust_project = os.getenv("BRAINTRUST_PROJECT")
+            
+            if braintrust_api_key and braintrust_project:
+                braintrust_init_logger(api_key=braintrust_api_key, project=braintrust_project)
+                st.session_state.braintrust_handler = BraintrustCallbackHandler()
+                braintrust_set_global_handler(st.session_state.braintrust_handler)
+                platforms_enabled.append("Braintrust")
+                print(f"✅ Braintrust callback initialized")
+            else:
+                print(f"   ⚠️ Braintrust enabled but missing credentials")
+        except Exception as e:
+            print(f"   ⚠️ Failed to initialize Braintrust: {e}")
+    else:
+        print(f"   ⏭️  Braintrust disabled (UI toggle off)")
+    
+    # ============================================================================
+    # SUMMARY
+    # ============================================================================
+    print(f"\n🎉 Tracing initialized for {len(platforms_enabled)} platform(s): {', '.join(platforms_enabled)}")
+    print(f"   Note: Galileo tracing via GalileoCallback (initialized per-agent)\n")
+
 
 # Configuration - easily changeable for different domains
 DOMAIN = "finance"  # Could be "healthcare", "legal", etc.
@@ -1211,10 +1500,8 @@ def render_runs_tab():
 
 def multi_domain_agent_app():
     """Main agent app with tabs for chat, experiments, and runs"""
-    # Setup environment and secrets (only once)
-    if "environment_setup_done" not in st.session_state:
-        setup_environment()
-        st.session_state.environment_setup_done = True
+    # Environment setup already done at module import time (top of file)
+    # No need to call setup_environment() again
     
     # Initialize AgentFactory once
     if "factory" not in st.session_state:
@@ -1245,6 +1532,25 @@ def multi_domain_agent_app():
             galileo_context.start_session(name="Finance Agent Demo", external_id=session_id)
         except Exception as e:
             st.error(f"Failed to start Galileo session: {str(e)}")
+    
+    # Initialize logger toggle defaults (must be in app context, not module level)
+    if "logger_phoenix" not in st.session_state:
+        st.session_state.logger_phoenix = (_otlp_preference == "phoenix")
+    if "logger_arize_ax" not in st.session_state:
+        st.session_state.logger_arize_ax = (_otlp_preference == "arize ax")
+    if "logger_langsmith" not in st.session_state:
+        langsmith_available = os.getenv("LANGCHAIN_API_KEY")
+        st.session_state.logger_langsmith = bool(langsmith_available)
+    if "logger_langfuse" not in st.session_state:
+        langfuse_available = os.getenv("LANGFUSE_API_PK") and os.getenv("LANGFUSE_API_SK")
+        st.session_state.logger_langfuse = bool(langfuse_available)
+    if "logger_braintrust" not in st.session_state:
+        braintrust_available = os.getenv("BRAINTRUST_API_KEY") and os.getenv("BRAINTRUST_PROJECT")
+        st.session_state.logger_braintrust = bool(braintrust_available)
+    
+    # Initialize callback-based tracing platforms (only once)
+    if "tracing_initialized" not in st.session_state:
+        _initialize_callback_platforms()
     
     # Sidebar with navigation and settings
     with st.sidebar:
@@ -1649,6 +1955,142 @@ def multi_domain_agent_app():
         st.markdown("### 📚 Documentation")
         st.markdown("[Experiments Guide](https://github.com)")
         st.markdown("[Quick Start](https://github.com)")
+        
+        st.markdown("---")
+        
+        # Logger Controls (at bottom of sidebar)
+        st.markdown("### 📊 Observability Platforms")
+        st.caption("Galileo is always enabled")
+        
+        # Session state is already initialized at module level (before tracing init)
+        with st.expander("⚙️ Configure Loggers", expanded=False):
+            st.markdown("**OpenTelemetry Platform** (select one)")
+            
+            # Check if running on localhost - simpler approach
+            # Check for common development environment indicators
+            is_localhost = True  # Default to localhost/development mode
+            
+            # Check if deployed (common production environment variables)
+            if os.getenv("STREAMLIT_SERVER_PORT") or os.getenv("STREAMLIT_DEPLOYMENT"):
+                is_localhost = False
+            
+            # Override: always allow switching if explicitly set
+            if os.getenv("ALLOW_OTLP_SWITCHING") == "true":
+                is_localhost = True
+            
+            if not is_localhost:
+                st.warning("⚠️ OTLP platform switching disabled in production. Change requires app restart with new environment variables.")
+            else:
+                st.caption("💡 **Important:** Changing OTLP platform requires a **hard reset** of the app")
+                st.caption("Use Ctrl+C to stop the server, then restart with `streamlit run app.py`")
+                st.caption("Callback platforms (below) work instantly without restart")
+            
+            # Determine current selection
+            if st.session_state.logger_phoenix:
+                current_otlp = "Phoenix"
+            elif st.session_state.logger_arize_ax:
+                current_otlp = "Arize AX"
+            else:
+                current_otlp = "None"
+            
+            # Build options based on available credentials
+            otlp_options = ["None"]
+            if phoenix_endpoint and phoenix_api_key:
+                otlp_options.append("Phoenix")
+            if os.getenv("ARIZE_API_KEY"):
+                otlp_options.append("Arize AX")
+            
+            # Radio button for OTLP platform selection (disabled in production)
+            otlp_selection = st.radio(
+                "Select OTLP Platform:",
+                options=otlp_options,
+                index=otlp_options.index(current_otlp) if current_otlp in otlp_options else 0,
+                help="Choose Phoenix or Arize AX for OpenTelemetry tracing (mutually exclusive). Requires hard reset to take effect.",
+                key="otlp_radio",
+                horizontal=True,
+                disabled=not is_localhost
+            )
+            
+            # Update session state based on selection
+            if otlp_selection != current_otlp:
+                # Save preference to file for next restart
+                _save_otlp_preference(otlp_selection)
+                
+                # Update session state
+                st.session_state.logger_phoenix = (otlp_selection == "Phoenix")
+                st.session_state.logger_arize_ax = (otlp_selection == "Arize AX")
+                
+                # Show hard reset instructions
+                st.info(f"✅ OTLP platform changed to: **{otlp_selection}**")
+                st.warning("⚠️ **Hard reset required:** Press Ctrl+C to stop the server, then run `streamlit run app.py` again")
+                st.caption("OpenTelemetry tracer providers cannot be changed at runtime")
+            
+            st.divider()
+            st.markdown("**Callback-based Platforms**")
+            
+            # LangSmith
+            langsmith_enabled = st.checkbox(
+                "LangSmith",
+                value=st.session_state.logger_langsmith,
+                help="LangChain LangSmith tracing",
+                key="langsmith_checkbox",
+                disabled=not (os.getenv("LANGCHAIN_API_KEY"))
+            )
+            if langsmith_enabled != st.session_state.logger_langsmith:
+                st.session_state.logger_langsmith = langsmith_enabled
+                if "tracing_initialized" in st.session_state:
+                    del st.session_state.tracing_initialized
+                if "agent" in st.session_state:
+                    del st.session_state.agent
+                st.rerun()
+            
+            # Langfuse
+            langfuse_enabled = st.checkbox(
+                "Langfuse",
+                value=st.session_state.logger_langfuse,
+                help="Langfuse observability",
+                key="langfuse_checkbox",
+                disabled=not (os.getenv("LANGFUSE_API_PK") and os.getenv("LANGFUSE_API_SK"))
+            )
+            if langfuse_enabled != st.session_state.logger_langfuse:
+                st.session_state.logger_langfuse = langfuse_enabled
+                if "tracing_initialized" in st.session_state:
+                    del st.session_state.tracing_initialized
+                if "agent" in st.session_state:
+                    del st.session_state.agent
+                st.rerun()
+            
+            # Braintrust
+            braintrust_enabled = st.checkbox(
+                "Braintrust",
+                value=st.session_state.logger_braintrust,
+                help="Braintrust AI evaluation",
+                key="braintrust_checkbox",
+                disabled=not (os.getenv("BRAINTRUST_API_KEY") and os.getenv("BRAINTRUST_PROJECT"))
+            )
+            if braintrust_enabled != st.session_state.logger_braintrust:
+                st.session_state.logger_braintrust = braintrust_enabled
+                if "tracing_initialized" in st.session_state:
+                    del st.session_state.tracing_initialized
+                if "agent" in st.session_state:
+                    del st.session_state.agent
+                st.rerun()
+            
+            # Show status
+            st.divider()
+            enabled_platforms = ["Galileo (always on)"]
+            if st.session_state.logger_phoenix:
+                enabled_platforms.append("Phoenix")
+            if st.session_state.logger_arize_ax:
+                enabled_platforms.append("Arize AX")
+            if st.session_state.logger_langsmith:
+                enabled_platforms.append("LangSmith")
+            if st.session_state.logger_langfuse:
+                enabled_platforms.append("Langfuse")
+            if st.session_state.logger_braintrust:
+                enabled_platforms.append("Braintrust")
+            
+            st.success(f"✅ Active: {', '.join(enabled_platforms)}")
     
     # Main content with tabs
     tab1, tab2, tab3 = st.tabs(["💬 Chat", "🧪 Experiments", "🔄 Runs"])

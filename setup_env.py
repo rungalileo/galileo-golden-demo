@@ -6,39 +6,46 @@ import toml
 from pathlib import Path
 
 
-def setup_environment():
+def setup_environment(verbose=True):
     """Load secrets from .streamlit/secrets.toml and set environment variables"""
     secrets_path = Path(".streamlit/secrets.toml")
     
     if not secrets_path.exists():
-        print("⚠️  .streamlit/secrets.toml not found. Please create it with your API keys.")
+        if verbose:
+            print("⚠️  .streamlit/secrets.toml not found. Please create it with your API keys.")
         return
     
     try:
         # Load secrets
         secrets = toml.load(secrets_path)
         
-        # Set environment variables
-        env_vars = {
-            "OPENAI_API_KEY": secrets.get("openai_api_key", ""),
-            "GALILEO_API_KEY": secrets.get("galileo_api_key", ""),
-            "GALILEO_PROJECT": secrets.get("galileo_project", ""),
-            "GALILEO_LOG_STREAM": secrets.get("galileo_log_stream", ""),
-            "GALILEO_CONSOLE_URL": secrets.get("galileo_console_url", "https://app.galileo.ai"),
-            "ADMIN_KEY": secrets.get("admin_key", "")
-        }
+        # Convert all secrets to uppercase environment variable names
+        # and set them as environment variables
+        vars_set = 0
+        vars_skipped = 0
         
-        for key, value in env_vars.items():
-            if value:  # Only set if value is not empty
-                os.environ[key] = value
-                # print(f"✅ Set {key}")
-            else:
-                print(f"⚠️  {key} not set (empty value)")
+        for key, value in secrets.items():
+            if isinstance(value, (str, int, float, bool)):
+                # Convert key to uppercase for environment variable
+                env_key = key.upper()
+                
+                # Convert value to string
+                env_value = str(value)
+                
+                if env_value and env_value.lower() != "none":
+                    os.environ[env_key] = env_value
+                    vars_set += 1
+                else:
+                    vars_skipped += 1
+                    if key == "admin_key" and verbose:  # Only warn for expected empty values
+                        print(f"⚠️  {env_key} not set (empty value)")
         
-        print("🔧 Environment setup complete!")
+        if verbose:
+            print(f"🔧 Environment setup complete! ({vars_set} variables loaded)")
         
     except Exception as e:
-        print(f"❌ Error loading secrets: {e}")
+        if verbose:
+            print(f"❌ Error loading secrets: {e}")
 
 
 if __name__ == "__main__":

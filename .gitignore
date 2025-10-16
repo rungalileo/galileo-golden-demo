@@ -18,6 +18,9 @@ env/
 *.sqlite3
 data_level*.bin
 
+# OTLP platform preference (user-specific)
+.otlp_preference
+
 # Python
 __pycache__/
 *.py[cod]
