@@ -157,7 +157,11 @@ def your_tool_name(param1: str) -> str:
     """
     # Your logic here
     return "Tool result"
+
+ TOOLS = [your_tool_name]
 ```
+
+Make sure you export your tools in this file by creating a `TOOLS` array at the end of your file
 
 ### 3. Add Domain Documents
 
