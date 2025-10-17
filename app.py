@@ -28,30 +28,16 @@ if not os.getenv('_GALILEO_ENV_LOADED'):
     os.environ['_GALILEO_ENV_LOADED'] = 'true'
 
 # ============================================================================
-# CRITICAL: Initialize Phoenix BEFORE importing LangChain!
-# Phoenix instrumentation must be set up before LangChain modules are loaded
+# CRITICAL: Initialize OTLP tracing BEFORE importing LangChain!
+# OpenTelemetry instrumentation must be set up before LangChain modules are loaded
 # ============================================================================
-phoenix_endpoint = os.getenv("PHOENIX_ENDPOINT")
-phoenix_api_key = os.getenv("PHOENIX_API_KEY")
-phoenix_project = os.getenv("PHOENIX_PROJECT", "galileo-demo")
+from tracing_setup import initialize_otlp_tracing, _get_otlp_preference
 
-# Store Phoenix/Arize credentials for later initialization
-# Actual initialization happens after session state is available
-_phoenix_credentials_available = bool(phoenix_endpoint and phoenix_api_key)
-_arize_credentials_available = bool(os.getenv("ARIZE_API_KEY") and os.getenv("ARIZE_SPACE_ID"))
+# Initialize OTLP tracing (Phoenix or Arize AX) - happens once at module load
+_otlp_platform = initialize_otlp_tracing()
+_otlp_preference = _get_otlp_preference()  # Store for UI initialization
 
-# Read OTLP platform preference from file
-def _get_otlp_preference():
-    """Read the OTLP platform preference from file"""
-    pref_file = os.path.join(os.path.dirname(__file__), ".otlp_preference")
-    try:
-        if os.path.exists(pref_file):
-            with open(pref_file, "r") as f:
-                return f.read().strip().lower()
-    except:
-        pass
-    return "phoenix"  # Default to Phoenix
-
+# Helper function to save OTLP preference (for UI changes)
 def _save_otlp_preference(platform):
     """Save the OTLP platform preference to file"""
     pref_file = os.path.join(os.path.dirname(__file__), ".otlp_preference")
@@ -61,151 +47,11 @@ def _save_otlp_preference(platform):
     except Exception as e:
         print(f"Failed to save OTLP preference: {e}")
 
-_otlp_preference = _get_otlp_preference()
-
-def _initialize_phoenix_otlp():
-    """Initialize Phoenix OTLP tracing (must be called before LangChain imports)"""
-    if os.getenv('_PHOENIX_INITIALIZED'):
-        return True
-    
-    print(f"\n🔭 Initializing Phoenix (before LangChain import)...")
-    
-    try:
-        from openinference.instrumentation.langchain import LangChainInstrumentor
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-        from opentelemetry.sdk import trace as trace_sdk
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry import trace
-        from opentelemetry.sdk.resources import Resource
-        
-        # Create OTLP exporter with Bearer token auth and project headers
-        exporter = OTLPSpanExporter(
-            endpoint=phoenix_endpoint,
-            headers={
-                "authorization": f"Bearer {phoenix_api_key}",
-                "project": phoenix_project,
-                "x-project": phoenix_project,
-                "x-project-name": phoenix_project,
-            }
-        )
-        
-        # Create resource with project attributes
-        resource = Resource.create({
-            "service.name": phoenix_project,
-            "project.name": phoenix_project,
-            "openinference.project.name": phoenix_project,
-        })
-        
-        # Create tracer provider with resource and BatchSpanProcessor
-        tracer_provider = trace_sdk.TracerProvider(resource=resource)
-        tracer_provider.add_span_processor(BatchSpanProcessor(exporter))
-        trace.set_tracer_provider(tracer_provider)
-        
-        # Instrument LangChain with OpenInference semantic conventions
-        LangChainInstrumentor().instrument(
-            tracer_provider=tracer_provider,
-            skip_dep_check=True
-        )
-        
-        os.environ['_PHOENIX_INITIALIZED'] = 'true'
-        print(f"   ✅ Phoenix initialized with BatchSpanProcessor")
-        print(f"   Project: {phoenix_project}")
-        print(f"   Endpoint: {phoenix_endpoint}")
-        return True
-    except Exception as e:
-        print(f"   ⚠️  Phoenix pre-init failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-# Global flag to prevent re-initialization (more reliable than env var in Streamlit)
-_arize_ax_initialized = False
-
-def _initialize_arize_ax_otlp():
-    """Initialize Arize AX OTLP tracing (must be called before LangChain imports)"""
-    global _arize_ax_initialized
-    
-    if _arize_ax_initialized:
-        return True  # Silent return if already initialized
-    
-    print(f"\n🔭 Initializing Arize AX (before LangChain import)...")
-    
-    space_id = os.getenv("ARIZE_SPACE_ID")
-    api_key = os.getenv("ARIZE_API_KEY")
-    project = os.getenv("ARIZE_PROJECT", "galileo-demo")
-    
-    if not space_id or not api_key:
-        print(f"   ❌ Arize AX credentials not set!")
-        return False
-    
-    try:
-        # Use manual OTLP setup (same as Phoenix) which we know sends traces successfully
-        from openinference.instrumentation.langchain import LangChainInstrumentor
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-        from opentelemetry.sdk import trace as trace_sdk
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry import trace
-        from opentelemetry.sdk.resources import Resource
-        
-        # Arize OTLP endpoint (HTTP)
-        arize_endpoint = "https://otlp.arize.com/v1/traces"
-        
-        # Create OTLP exporter with Arize-specific headers
-        # Based on Arize documentation for HTTP OTLP
-        exporter = OTLPSpanExporter(
-            endpoint=arize_endpoint,
-            headers={
-                "authorization": api_key,
-                "space_id": space_id,
-                "model_id": project,
-                "model_version": "production",
-            }
-        )
-        
-        # Create resource with OpenInference-specific attributes
-        # These are critical for Arize to classify span types
-        resource = Resource.create({
-            "service.name": project,
-            "model_id": project,
-            "model_version": "production",
-            # OpenInference attributes for proper span classification
-            "openinference.project.name": project,
-        })
-        
-        # Create tracer provider with resource and BatchSpanProcessor
-        tracer_provider = trace_sdk.TracerProvider(resource=resource)
-        tracer_provider.add_span_processor(BatchSpanProcessor(exporter))
-        trace.set_tracer_provider(tracer_provider)
-        
-        # Instrument LangChain with OpenInference semantic conventions
-        # This adds the span.kind and other attributes needed for type classification
-        LangChainInstrumentor().instrument(
-            tracer_provider=tracer_provider,
-            skip_dep_check=True
-        )
-        
-        # Mark as initialized
-        _arize_ax_initialized = True
-        os.environ['_ARIZE_AX_INITIALIZED'] = 'true'
-        
-        print(f"   ✅ Arize AX initialized with BatchSpanProcessor + OpenInference")
-        print(f"   Model ID: {project}")
-        print(f"   Endpoint: {arize_endpoint}")
-        return True
-    except Exception as e:
-        print(f"   ❌ Arize AX pre-init failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-# Initialize OTLP platform at module load based on saved preference (ONCE ONLY)
-# This code runs ONCE when the module is first imported
-if not os.getenv('_OTLP_INITIALIZED'):
-    if _otlp_preference == "phoenix" and _phoenix_credentials_available:
-        _initialize_phoenix_otlp()
-    elif _otlp_preference == "arize ax" and _arize_credentials_available:
-        _initialize_arize_ax_otlp()
-    os.environ['_OTLP_INITIALIZED'] = 'true'
+# Store credentials availability for UI
+phoenix_endpoint = os.getenv("PHOENIX_ENDPOINT")
+phoenix_api_key = os.getenv("PHOENIX_API_KEY")
+_phoenix_credentials_available = bool(phoenix_endpoint and phoenix_api_key)
+_arize_credentials_available = bool(os.getenv("ARIZE_API_KEY") and os.getenv("ARIZE_SPACE_ID"))
 
 # NOW we can import LangChain - Phoenix instrumentation is ready!
 import phoenix as px

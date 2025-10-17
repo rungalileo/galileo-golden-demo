@@ -3,16 +3,8 @@ Galileo Experiment Runner - Run experiments with synthetic datasets
 """
 import os
 from dotenv import load_dotenv, find_dotenv
-from galileo.datasets import get_dataset
-from galileo.experiments import run_experiment
-from galileo.schema.metrics import GalileoScorers
 
-# To see all available scorers, run: print(dir(GalileoScorers))
-from galileo import galileo_context, log
-from agent_factory import AgentFactory
-from typing import Dict, Any, List
-
-# Load environment variables
+# Load environment variables FIRST (before any other imports)
 # 1) load global/shared first
 load_dotenv(os.path.expanduser("~/.config/secrets/myapps.env"), override=False)
 # 2) then load per-app .env (if present) to override selectively
@@ -26,6 +18,27 @@ try:
 except Exception as e:
     print(f"⚠️  Could not load Streamlit secrets: {e}")
     print("   Falling back to .env variables")
+
+# ============================================================================
+# CRITICAL: Initialize OTLP tracing BEFORE importing LangChain or agent code
+# This ensures Phoenix/Arize AX traces are captured during experiment runs
+# ============================================================================
+from tracing_setup import initialize_otlp_tracing
+otlp_platform = initialize_otlp_tracing()
+if otlp_platform != "none":
+    print(f"✅ OTLP tracing enabled for experiments: {otlp_platform}")
+else:
+    print("⚠️  OTLP tracing not configured (traces will not go to Phoenix/Arize AX)")
+
+# NOW import LangChain-dependent modules
+from galileo.datasets import get_dataset
+from galileo.experiments import run_experiment
+from galileo.schema.metrics import GalileoScorers
+
+# To see all available scorers, run: print(dir(GalileoScorers))
+from galileo import galileo_context, log
+from agent_factory import AgentFactory
+from typing import Dict, Any, List
 
 # Verify Galileo configuration
 galileo_console_url = os.getenv("GALILEO_CONSOLE_URL")
