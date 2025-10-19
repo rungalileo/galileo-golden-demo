@@ -80,6 +80,7 @@ def setup_agent():
     return agent
 
 
+@log(span_type="workflow", name="Agent Query Processing")
 def run_agent_query(input: str, agent) -> str:
     """
     Run a single query through the agent with Galileo logging
