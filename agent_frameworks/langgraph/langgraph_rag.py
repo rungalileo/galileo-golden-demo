@@ -1,18 +1,21 @@
 """
 LangGraph RAG Integration
 Handles RAG retrieval logic for LangGraph agents using LangChain's retrieval chain pattern.
+Uses Pinecone for vector storage with environment-based configuration.
 """
 import os
 from pathlib import Path
 from typing import Optional
 from langchain import hub
-from langchain_chroma import Chroma
+from langchain_pinecone import PineconeVectorStore
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_core.tools import tool
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
+from pinecone import Pinecone
 from domain_manager import DomainManager
+from setup_env import setup_environment
 
 
 # Global cache for RAG instances
@@ -20,16 +23,20 @@ _rag_cache = {}
 
 
 class DomainRAGSystem:
-    """RAG system for a specific domain with lazy initialization"""
+    """RAG system for a specific domain with eager initialization"""
     
     def __init__(self, domain_name: str, top_k: int = 5):
         self.domain_name = domain_name
         self.top_k = top_k
         self.retrieval_chain = None
         self._initialized = False
+        self._pinecone_client = None
+        
+        # Initialize immediately when created
+        self.initialize()
         
     def initialize(self):
-        """Initialize the RAG system with lazy loading"""
+        """Initialize the RAG system with eager loading"""
         if self._initialized:
             return
             
@@ -46,22 +53,40 @@ class DomainRAGSystem:
             embedding_model = vectorstore_config.get("embedding_model", "text-embedding-3-large")
             llm_model = model_config.get("model_name", "gpt-4o")
             
-            # Check if vector database exists
-            domain_path = Path("domains") / self.domain_name
-            vector_db_dir = domain_path / "chroma_db"
+            # Initialize environment
+            setup_environment()
             
-            if not vector_db_dir.exists():
-                raise ValueError(f"Vector database not found for domain '{self.domain_name}' at {vector_db_dir}. Please run: python helpers/setup_vectordb.py {self.domain_name}")
+            # Get environment and API key
+            environment = os.environ.get("ENVIRONMENT", "local")
+            
+            if environment == "local":
+                api_key = os.environ.get("PINECONE_API_KEY_LOCAL")
+            elif environment == "hosted":
+                api_key = os.environ.get("PINECONE_API_KEY_HOSTED")
+            else:
+                raise ValueError(f"Invalid environment: {environment}. Must be 'local' or 'hosted'")
+            
+            if not api_key:
+                raise ValueError(f"Pinecone API key not found for environment '{environment}'. Please add it to .streamlit/secrets.toml")
+            
+            # Initialize Pinecone client
+            if self._pinecone_client is None:
+                self._pinecone_client = Pinecone(api_key=api_key)
+            
+            # Create index name based on domain and environment
+            index_name = f"{self.domain_name}-{environment}-index"
+            
+            # Check if index exists
+            if not self._pinecone_client.has_index(index_name):
+                raise ValueError(f"Pinecone index not found: {index_name}. Please run: python helpers/setup_vectordb.py {self.domain_name} {environment}")
+            
+            # Get the index
+            index = self._pinecone_client.Index(index_name)
             
             # Initialize embeddings and vector store
             embeddings = OpenAIEmbeddings(model=embedding_model)
-            collection_name = f"{self.domain_name}_collection"
             
-            vector_store = Chroma(
-                collection_name=collection_name,
-                embedding_function=embeddings,
-                persist_directory=str(vector_db_dir),
-            )
+            vector_store = PineconeVectorStore(index=index, embedding=embeddings)
             
             # Create retriever
             retriever = vector_store.as_retriever(search_kwargs={"k": self.top_k})
@@ -91,10 +116,7 @@ class DomainRAGSystem:
             
     def search(self, query: str) -> str:
         """Search the domain's knowledge base"""
-        # Lazy initialization - only initialize when first used
-        if not self._initialized:
-            self.initialize()
-            
+        # System should already be initialized at startup
         if not self.retrieval_chain:
             return f"❌ RAG system not initialized for domain '{self.domain_name}'. Please check your vector database setup."
             

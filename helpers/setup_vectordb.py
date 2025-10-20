@@ -22,21 +22,35 @@ from langchain_community.document_loaders.csv_loader import CSVLoader
 from langchain_community.document_loaders import DirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
-from langchain_chroma import Chroma
+from langchain_pinecone import PineconeVectorStore
+from pinecone import Pinecone, ServerlessSpec
 import getpass
+import uuid
 
 
-def setup_vectordb_for_domain(domain_name: str):
+def setup_vectordb_for_domain(domain_name: str, environment: str):
     """
     Set up vector database for a specific domain using its configuration.
     
     Args:
         domain_name: Name of the domain (e.g., 'finance')
+        environment: Environment to use ('local' or 'hosted')
     """
-    print(f"Setting up vector database for domain: {domain_name}")
+    print(f"Setting up vector database for domain: {domain_name} in {environment} environment")
     
     # Initialize environment
     setup_environment()
+    
+    # Set up Pinecone project based on environment
+    if environment == "local":
+        pinecone_project = "galileo-demo-local"
+    elif environment == "hosted":
+        pinecone_project = "galileo-demo-hosted"
+    else:
+        print(f"❌ Invalid environment: {environment}. Must be 'local' or 'hosted'")
+        return False
+    
+    print(f"Using Pinecone project: {pinecone_project}")
     
     # Load domain configuration
     domain_manager = DomainManager()
@@ -105,37 +119,75 @@ def setup_vectordb_for_domain(domain_name: str):
     if not os.environ.get("OPENAI_API_KEY"):
         os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter API key for OpenAI: ")
     
+    # Get the appropriate Pinecone API key based on environment
+    if environment == "local":
+        pinecone_key = os.environ.get("PINECONE_API_KEY_LOCAL")
+        if not pinecone_key:
+            pinecone_key = getpass.getpass("Enter API key for Pinecone (galileo-demo-local project): ")
+    elif environment == "hosted":
+        pinecone_key = os.environ.get("PINECONE_API_KEY_HOSTED")
+        if not pinecone_key:
+            pinecone_key = getpass.getpass("Enter API key for Pinecone (galileo-demo-hosted project): ")
+    
+    # Set the Pinecone API key for this session
+    os.environ["PINECONE_API_KEY"] = pinecone_key
+    
     # Initialize embeddings
     embeddings = OpenAIEmbeddings(model=embedding_model)
     
-    # Set up domain-specific vector store directory
-    domain_path = Path("domains") / domain_name
-    vector_db_dir = domain_path / "chroma_db"
+    # Initialize Pinecone client
+    pc = Pinecone(api_key=pinecone_key)
     
-    # Create directory if it doesn't exist
-    vector_db_dir.mkdir(parents=True, exist_ok=True)
+    # Create index name based on domain and environment
+    index_name = f"{domain_name}-{environment}-index"
     
-    collection_name = f"{domain_name}_collection"
+    print(f"Creating Pinecone index: {index_name}")
     
-    print(f"Creating vector store at: {vector_db_dir}")
-    print(f"Collection name: {collection_name}")
+    # Check if index exists and has correct dimension
+    if pc.has_index(index_name):
+        # Check if existing index has correct dimension
+        index_info = pc.describe_index(index_name)
+        existing_dimension = index_info.dimension
+        expected_dimension = 3072 if embedding_model == "text-embedding-3-large" else 1536
+        
+        if existing_dimension != expected_dimension:
+            print(f"⚠️  Existing index has wrong dimension: {existing_dimension}, expected: {expected_dimension}")
+            print(f"Deleting existing index: {index_name}")
+            pc.delete_index(index_name)
+            # Wait for deletion to complete
+            import time
+            time.sleep(5)
+            print(f"Creating new Pinecone index: {index_name}")
+        else:
+            print(f"Using existing Pinecone index: {index_name}")
+            print(f"Index dimension: {existing_dimension}")
     
-    # Can also intitialize from client directly, but this abstraction seems fine
-    # https://python.langchain.com/docs/integrations/vectorstores/chroma/#initialization-from-client
+    if not pc.has_index(index_name):
+        print(f"Creating new Pinecone index: {index_name}")
+        # Use correct dimension for text-embedding-3-large (3072)
+        dimension = 3072 if embedding_model == "text-embedding-3-large" else 1536
+        print(f"Using dimension: {dimension} for embedding model: {embedding_model}")
+        pc.create_index(
+            name=index_name,
+            dimension=dimension,
+            metric="cosine",
+            spec=ServerlessSpec(cloud="aws", region="us-east-1"),
+        )
+    
+    # Get the index
+    index = pc.Index(index_name)
+    
     # Create vector store
-    vector_store = Chroma(
-        collection_name=collection_name,
-        embedding_function=embeddings,
-        persist_directory=str(vector_db_dir),
-    )
+    vector_store = PineconeVectorStore(index=index, embedding=embeddings)
     
-    # Add documents to vector store
+    # Add documents to vector store with UUIDs
     print("Adding documents to vector store...")
-    vector_store.add_documents(all_docs)
+    uuids = [str(uuid.uuid4()) for _ in range(len(all_docs))]
+    vector_store.add_documents(documents=all_docs, ids=uuids)
     
     print(f"✅ Successfully created vector database for {domain_name}")
-    print(f"📁 Vector DB saved to: {vector_db_dir}")
     print(f"📊 Total documents embedded: {len(all_docs)}")
+    print(f"🔗 Pinecone index: {index_name}")
     
     return True
 
@@ -143,11 +195,16 @@ def setup_vectordb_for_domain(domain_name: str):
 def main():
     """Main function with CLI interface"""
     parser = argparse.ArgumentParser(
-        description="Set up vector database for a specific domain"
+        description="Set up vector database for a specific domain using Pinecone"
     )
     parser.add_argument(
         "domain", 
         help="Domain name (e.g., 'finance')"
+    )
+    parser.add_argument(
+        "environment",
+        choices=["local", "hosted"],
+        help="Environment to use ('local' for galileo-demo-local, 'hosted' for galileo-demo-hosted)"
     )
     parser.add_argument(
         "--list-domains", 
@@ -165,7 +222,7 @@ def main():
             print(f"  - {domain}")
         return
     
-    success = setup_vectordb_for_domain(args.domain)
+    success = setup_vectordb_for_domain(args.domain, args.environment)
     if not success:
         sys.exit(1)
 
