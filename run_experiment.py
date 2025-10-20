@@ -37,6 +37,7 @@ from galileo.schema.metrics import GalileoScorers
 
 # To see all available scorers, run: print(dir(GalileoScorers))
 from galileo import galileo_context, log
+from galileo.handlers.langchain import GalileoCallback
 from agent_factory import AgentFactory
 from typing import Dict, Any, List
 
@@ -80,7 +81,6 @@ def setup_agent():
     return agent
 
 
-@log(span_type="workflow", name="Agent Query Processing")
 def run_agent_query(input: str, agent) -> str:
     """
     Run a single query through the agent with Galileo logging
@@ -92,6 +92,25 @@ def run_agent_query(input: str, agent) -> str:
     Returns:
         The agent's response
     """
+    # Check if we're inside an experiment context
+    galileo_logger = galileo_context.get_logger_instance()
+    is_in_experiment = galileo_logger.current_parent() is not None
+    
+    # Configure agent callback for experiment mode
+    if is_in_experiment:
+        # Create callback that doesn't start/flush traces when in experiment
+        # This allows the experiment infrastructure to manage tracing
+        galileo_callback = GalileoCallback(
+            galileo_logger,
+            start_new_trace=False,
+            flush_on_chain_end=False
+        )
+        # Override the agent's config to use the proper callback
+        agent.config = {
+            "configurable": {"thread_id": agent.session_id}, 
+            "callbacks": [galileo_callback]
+        }
+    
     # Convert input to message format expected by agent
     messages = [{"role": "user", "content": input}]
     
