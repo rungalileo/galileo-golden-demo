@@ -146,6 +146,35 @@ MOCK_PRICE_DB = {
     }
 }
 
+def _extract_status_code(error_msg: str) -> str:
+    """
+    Extract HTTP status code from error message.
+    
+    Args:
+        error_msg: Error message that may contain a status code
+        
+    Returns:
+        Status code as string (defaults to "500" if not found)
+    """
+    # Check for specific status codes in order of specificity
+    status_codes = ["503", "502", "504", "500", "401", "403", "404", "405", "429"]
+    for code in status_codes:
+        if code in error_msg:
+            return code
+    
+    # Check for error types
+    if "timeout" in error_msg.lower() or "connection" in error_msg.lower():
+        return "timeout"
+    elif "ssl" in error_msg.lower() or "certificate" in error_msg.lower():
+        return "ssl_error"
+    elif "dns" in error_msg.lower():
+        return "dns_error"
+    elif "malformed" in error_msg.lower() or "invalid" in error_msg.lower():
+        return "invalid_response"
+    
+    return "500"  # Default to internal server error
+
+
 def _log_to_galileo(galileo_logger: GalileoLogger, ticker: str, result: dict, start_time: float) -> None:
     """
     Helper function to log stock price lookup to Galileo.
@@ -188,11 +217,46 @@ def get_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None)
         chaos = get_chaos_engine()
         should_fail, error_msg = chaos.should_fail_api_call("Stock Price API")
         if should_fail:
+            # Log the failure to Galileo with detailed metadata
+            if galileo_logger:
+                status_code = _extract_status_code(error_msg)
+                galileo_logger.add_tool_span(
+                    input=json.dumps({"ticker": ticker}),
+                    output=json.dumps({"error": error_msg, "success": False}),
+                    name="Get Stock Price",
+                    duration_ns=int((time.time() - start_time) * 1000000),
+                    metadata={
+                        "ticker": ticker,
+                        "error": "true",
+                        "error_type": "network_failure",
+                        "status_code": status_code,
+                        "chaos_injected": "true",
+                        "failure_rate": "25%"
+                    },
+                    tags=["stocks", "price", "error", "chaos", f"status_{status_code}"]
+                )
             raise Exception(error_msg)
         
         # Chaos: Check for rate limit
         should_rate_limit, error_msg = chaos.should_fail_rate_limit("Stock Price API")
         if should_rate_limit:
+            # Log rate limit error to Galileo
+            if galileo_logger:
+                galileo_logger.add_tool_span(
+                    input=json.dumps({"ticker": ticker}),
+                    output=json.dumps({"error": error_msg, "success": False}),
+                    name="Get Stock Price",
+                    duration_ns=int((time.time() - start_time) * 1000000),
+                    metadata={
+                        "ticker": ticker,
+                        "error": "true",
+                        "error_type": "rate_limit",
+                        "status_code": "429",
+                        "chaos_injected": "true",
+                        "failure_rate": "15%"
+                    },
+                    tags=["stocks", "price", "error", "chaos", "rate_limit", "status_429"]
+                )
             raise Exception(error_msg)
         
         # Chaos: Inject latency
@@ -555,3 +619,13 @@ TOOLS = [
     purchase_stocks,
     sell_stocks
 ]
+
+# Optionally add chaos tools for demonstrating observability value
+try:
+    from .chaos_tools import should_use_chaos_tools, CHAOS_TOOLS
+    if should_use_chaos_tools():
+        logging.warning("⚠️  CHAOS MODE ENABLED: Adding confusing tools for observability testing")
+        TOOLS = TOOLS + CHAOS_TOOLS
+        logging.info(f"Total tools available: {len(TOOLS)} (including {len(CHAOS_TOOLS)} chaos tools)")
+except ImportError:
+    pass  # chaos_tools.py not available

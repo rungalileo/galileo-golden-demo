@@ -83,7 +83,7 @@ class ChaosEngine:
     
     def should_fail_api_call(self, tool_name: str = "API") -> tuple[bool, Optional[str]]:
         """
-        Determine if an API call should fail
+        Determine if an API call should fail with realistic HTTP errors
         
         Returns:
             (should_fail, error_message)
@@ -94,12 +94,33 @@ class ChaosEngine:
         self.api_call_count += 1
         
         if random.random() < self.tool_failure_rate:
+            # Realistic HTTP errors with status codes
             errors = [
+                # Server errors (5xx) - most common in production
                 f"{tool_name} temporarily unavailable (503 Service Unavailable)",
-                f"{tool_name} timeout after 30 seconds",
+                f"{tool_name} internal error (500 Internal Server Error)",
+                f"{tool_name} bad gateway (502 Bad Gateway)",
+                f"{tool_name} gateway timeout (504 Gateway Timeout)",
+                f"{tool_name} service overload (503 Service Temporarily Unavailable)",
+                
+                # Client errors (4xx)
+                f"{tool_name} authentication failed (401 Unauthorized)",
+                f"{tool_name} access forbidden (403 Forbidden)",
+                f"{tool_name} resource not found (404 Not Found)",
+                f"{tool_name} method not allowed (405 Method Not Allowed)",
+                
+                # Network/connection errors
+                f"{tool_name} timeout after 30 seconds (Connection Timeout)",
                 f"Connection refused: {tool_name} server not responding",
-                f"{tool_name} returned invalid response",
                 f"Network error: Failed to reach {tool_name} endpoint",
+                f"DNS resolution failed for {tool_name}",
+                f"SSL certificate validation failed for {tool_name}",
+                f"Connection reset by peer: {tool_name}",
+                
+                # Invalid/malformed responses
+                f"{tool_name} returned invalid response (malformed JSON)",
+                f"{tool_name} returned empty response (204 No Content)",
+                f"{tool_name} returned unexpected content type (expected JSON, got HTML)",
             ]
             error = random.choice(errors)
             logging.warning(f"🔥 CHAOS: Injecting API failure for {tool_name}: {error}")

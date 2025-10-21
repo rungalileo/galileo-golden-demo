@@ -1188,7 +1188,8 @@ def render_runs_tab():
                 st.session_state.get("chaos_sloppiness", False),
                 st.session_state.get("chaos_rag", False),
                 st.session_state.get("chaos_rate_limit", False),
-                st.session_state.get("chaos_data_corruption", False)
+                st.session_state.get("chaos_data_corruption", False),
+                st.session_state.get("chaos_tools", False)
             ])
             if chaos_count > 0:
                 st.warning(f"🔥 {chaos_count} mode(s) active")
@@ -1713,6 +1714,8 @@ def multi_domain_agent_app():
                 st.session_state.chaos_rate_limit = False
             if "chaos_data_corruption" not in st.session_state:
                 st.session_state.chaos_data_corruption = False
+            if "chaos_tools" not in st.session_state:
+                st.session_state.chaos_tools = False
             
             with st.expander("⚙️ Chaos Controls", expanded=False):
                 # Tool Instability
@@ -1776,12 +1779,30 @@ def multi_domain_agent_app():
                     st.session_state.chaos_data_corruption = data_corruption
                     chaos.enable_data_corruption(data_corruption)
                 
+                # Chaos Tools (Tool Proliferation)
+                chaos_tools = st.checkbox(
+                    "🔧 Confusing Tools",
+                    value=st.session_state.chaos_tools,
+                    help="Add 17 similar but problematic tools (22 total) - includes API schema evolution, version drift, and breaking changes. Demonstrates the value of observability!",
+                    key="chaos_tools_checkbox"
+                )
+                if chaos_tools != st.session_state.chaos_tools:
+                    st.session_state.chaos_tools = chaos_tools
+                    # Set environment variable
+                    os.environ["USE_CHAOS_TOOLS"] = "true" if chaos_tools else "false"
+                    # Force agent reload to pick up new tools
+                    if "agent" in st.session_state:
+                        del st.session_state.agent
+                    st.info(f"{'✅ Enabled' if chaos_tools else '❌ Disabled'} chaos tools (agent will reload)")
+                
                 st.divider()
                 
                 # Show chaos stats
                 stats = chaos.get_stats()
-                if any([stats['tool_instability'], stats['sloppiness'], stats['rag_chaos'], 
-                       stats['rate_limit_chaos'], stats['data_corruption']]):
+                chaos_active = any([stats['tool_instability'], stats['sloppiness'], stats['rag_chaos'], 
+                                   stats['rate_limit_chaos'], stats['data_corruption'], 
+                                   st.session_state.chaos_tools])
+                if chaos_active:
                     st.markdown("**Active Chaos:**")
                     active_chaos = []
                     if stats['tool_instability']:
@@ -1794,6 +1815,8 @@ def multi_domain_agent_app():
                         active_chaos.append("⏱️ Rate Limits")
                     if stats['data_corruption']:
                         active_chaos.append("💥 Data Corruption")
+                    if st.session_state.chaos_tools:
+                        active_chaos.append("🔧 Confusing Tools (22 tools)")
                     
                     for item in active_chaos:
                         st.caption(item)
@@ -1810,7 +1833,8 @@ def multi_domain_agent_app():
                 st.session_state.chaos_sloppiness,
                 st.session_state.chaos_rag,
                 st.session_state.chaos_rate_limit,
-                st.session_state.chaos_data_corruption
+                st.session_state.chaos_data_corruption,
+                st.session_state.chaos_tools
             ])
             if active_count > 0:
                 st.caption(f"🔥 {active_count} chaos mode(s) active")
