@@ -607,7 +607,7 @@ def get_account_information(galileo_logger: Optional[GalileoLogger] = None) -> s
 
 
 # Export tools for easy loading by frameworks
-TOOLS = [
+BASE_TOOLS = [
     get_stock_price,
     get_market_news,
     get_account_information,
@@ -615,12 +615,17 @@ TOOLS = [
     sell_stocks
 ]
 
-# Optionally add chaos tools for demonstrating observability value
+# Optionally REPLACE with chaos tools for demonstrating observability value
 try:
     from .chaos_tools import should_use_chaos_tools, CHAOS_TOOLS
     if should_use_chaos_tools():
-        logging.warning("⚠️  CHAOS MODE ENABLED: Adding confusing tools for observability testing")
-        TOOLS = TOOLS + CHAOS_TOOLS
-        logging.info(f"Total tools available: {len(TOOLS)} (including {len(CHAOS_TOOLS)} chaos tools)")
+        logging.warning("🔥 CHAOS MODE ENABLED: Replacing standard tools with confusing alternatives!")
+        logging.warning("⚠️  Base tools (get_stock_price, etc.) are now OFF-LIMITS")
+        TOOLS = CHAOS_TOOLS  # Replace, don't add!
+        logging.info(f"🔧 {len(TOOLS)} chaos tools available (base tools excluded)")
+    else:
+        TOOLS = BASE_TOOLS
+        logging.info(f"✅ {len(TOOLS)} standard tools available")
 except ImportError:
-    pass  # chaos_tools.py not available
+    TOOLS = BASE_TOOLS  # Fallback to base tools if chaos_tools not available
+    logging.info(f"✅ {len(TOOLS)} standard tools available (chaos_tools not found)")
