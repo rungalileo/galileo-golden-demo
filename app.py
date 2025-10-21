@@ -1783,7 +1783,7 @@ def multi_domain_agent_app():
                 chaos_tools = st.checkbox(
                     "🔧 Confusing Tools",
                     value=st.session_state.chaos_tools,
-                    help="REPLACE standard tools with 17 confusing alternatives - agent must choose between imperfect options. Includes API schema evolution, version drift, and breaking changes!",
+                    help="Replaces get_stock_price with 17 confusing alternatives while keeping other tools standard. Agent must choose between imperfect options with similar names. Includes API schema evolution, version drift, and breaking changes!",
                     key="chaos_tools_checkbox"
                 )
                 if chaos_tools != st.session_state.chaos_tools:
@@ -1816,7 +1816,7 @@ def multi_domain_agent_app():
                     if stats['data_corruption']:
                         active_chaos.append("💥 Data Corruption")
                     if st.session_state.chaos_tools:
-                        active_chaos.append("🔧 Confusing Tools (17 tools, base excluded)")
+                        active_chaos.append("🔧 Confusing Tools (17 chaos + 4 standard = 21 total)")
                     
                     for item in active_chaos:
                         st.caption(item)

@@ -615,17 +615,46 @@ BASE_TOOLS = [
     sell_stocks
 ]
 
+# Helper function to get chaos tools (lazy import to avoid circular dependency)
+def _get_chaos_tools():
+    """Lazy import of chaos tools to avoid circular dependency at module load time."""
+    import sys
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    if current_dir not in sys.path:
+        sys.path.insert(0, current_dir)
+    
+    import chaos_tools
+    return chaos_tools.CHAOS_TOOLS
+
+
 # Optionally REPLACE with chaos tools for demonstrating observability value
-try:
-    from .chaos_tools import should_use_chaos_tools, CHAOS_TOOLS
-    if should_use_chaos_tools():
+use_chaos = os.getenv("USE_CHAOS_TOOLS", "false").lower() == "true"
+logging.info(f"🔍 USE_CHAOS_TOOLS environment variable: {os.getenv('USE_CHAOS_TOOLS', 'not set')} -> {use_chaos}")
+
+if use_chaos:
+    try:
+        # Lazy import to avoid circular dependency
+        CHAOS_TOOLS = _get_chaos_tools()
         logging.warning("🔥 CHAOS MODE ENABLED: Replacing standard tools with confusing alternatives!")
-        logging.warning("⚠️  Base tools (get_stock_price, etc.) are now OFF-LIMITS")
-        TOOLS = CHAOS_TOOLS  # Replace, don't add!
-        logging.info(f"🔧 {len(TOOLS)} chaos tools available (base tools excluded)")
-    else:
-        TOOLS = BASE_TOOLS
-        logging.info(f"✅ {len(TOOLS)} standard tools available")
-except ImportError:
-    TOOLS = BASE_TOOLS  # Fallback to base tools if chaos_tools not available
-    logging.info(f"✅ {len(TOOLS)} standard tools available (chaos_tools not found)")
+        logging.warning("⚠️  Base get_stock_price tool is now OFF-LIMITS")
+        
+        # Combine chaos stock price tools with the other necessary tools
+        # The agent needs purchase, sell, news, and account info to function
+        # But we provide 17 confusing options for stock price lookups
+        TOOLS = CHAOS_TOOLS + [
+            get_market_news,
+            get_account_information,
+            purchase_stocks,
+            sell_stocks
+        ]
+        logging.info(f"🔧 {len(TOOLS)} total tools: {len(CHAOS_TOOLS)} chaos stock price tools + 4 standard tools")
+        logging.info(f"📋 Chaos tool names: {[t.__name__ for t in CHAOS_TOOLS[:5]]}...")
+        logging.info(f"📋 Standard tool names: get_market_news, get_account_information, purchase_stocks, sell_stocks")
+    except ImportError as e:
+        TOOLS = BASE_TOOLS  # Fallback to base tools if chaos_tools not available
+        logging.warning(f"⚠️  Failed to import chaos_tools: {e}")
+        logging.info(f"✅ {len(TOOLS)} standard tools available (using fallback)")
+else:
+    TOOLS = BASE_TOOLS
+    logging.info(f"✅ {len(TOOLS)} standard tools available")
+    logging.info(f"📋 Standard tool names: {[t.__name__ for t in TOOLS]}")

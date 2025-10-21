@@ -27,23 +27,52 @@ import os
 import logging
 import random
 from typing import Optional, Dict, Any
+from pydantic import BaseModel, Field
 from galileo import GalileoLogger
 
-# Import the base tools we'll create confusion around
-try:
-    from .logic import get_stock_price as _base_get_stock_price
-    from .logic import get_market_news as _base_get_market_news
-    from .logic import MOCK_PRICE_DB
-except ImportError:
-    # Fallback for different import contexts
-    import sys
-    from pathlib import Path
-    tools_dir = Path(__file__).parent
-    if str(tools_dir) not in sys.path:
-        sys.path.insert(0, str(tools_dir))
-    from logic import get_stock_price as _base_get_stock_price
-    from logic import get_market_news as _base_get_market_news
-    from logic import MOCK_PRICE_DB
+
+# =============================================================================
+# Pydantic Input Schemas (to avoid JsonSchema errors with GalileoLogger)
+# =============================================================================
+
+class StockTickerInput(BaseModel):
+    """Input schema for tools that take a single ticker parameter."""
+    ticker: str = Field(..., description="The stock ticker symbol (e.g., AAPL, GOOGL, MSFT)")
+
+class StockTickersInput(BaseModel):
+    """Input schema for tools that take multiple tickers."""
+    tickers: str = Field(..., description="Comma-separated list of stock ticker symbols (e.g., AAPL,GOOGL,MSFT)")
+
+
+# Lazy import helpers to avoid circular dependency
+_base_funcs = {}
+
+def _get_base_function(name: str):
+    """Lazy import of base functions to avoid circular dependency."""
+    if not _base_funcs:
+        import sys
+        from pathlib import Path
+        tools_dir = Path(__file__).parent
+        if str(tools_dir) not in sys.path:
+            sys.path.insert(0, str(tools_dir))
+        import logic
+        _base_funcs['get_stock_price'] = logic.get_stock_price
+        _base_funcs['get_market_news'] = logic.get_market_news
+        _base_funcs['MOCK_PRICE_DB'] = logic.MOCK_PRICE_DB
+    return _base_funcs[name]
+
+# Wrapper functions that lazy-load the base functions
+def _base_get_stock_price(ticker: str, galileo_logger=None) -> str:
+    """Wrapper for base get_stock_price with lazy import."""
+    return _get_base_function('get_stock_price')(ticker, galileo_logger)
+
+def _base_get_market_news(ticker: str, limit: int = 5, galileo_logger=None) -> str:
+    """Wrapper for base get_market_news with lazy import."""
+    return _get_base_function('get_market_news')(ticker, limit, galileo_logger)
+
+def _get_mock_price_db():
+    """Get the MOCK_PRICE_DB with lazy import."""
+    return _get_base_function('MOCK_PRICE_DB')
 
 # Try to import live data functions
 try:
@@ -583,6 +612,23 @@ def get_stock_price_alpha_vantage_direct(ticker: str, galileo_logger: Optional[G
 # =============================================================================
 # Export chaos tools
 # =============================================================================
+
+# Import the non-stock-price tools from logic module
+# These are needed for the agent to function (purchase, sell, news, account info)
+# We only create chaos variations for get_stock_price to demonstrate confusion
+import sys
+import os
+from pathlib import Path
+
+# Get the parent directory to import from logic
+parent_dir = str(Path(__file__).parent)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+# Import the other necessary tools from logic.py
+# We'll add these at the end since we can't import them here (circular dependency)
+# Instead, we'll let logic.py add them when it assembles CHAOS_TOOLS
+
 
 # All the confusing alternatives (all still log to Galileo)
 CHAOS_TOOLS = [

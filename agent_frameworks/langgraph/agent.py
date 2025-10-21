@@ -118,11 +118,46 @@ class LangGraphAgent(BaseAgent):
                 None
             )
             
+            # If no schema found (e.g., for chaos tools), create a simple schema
+            # that excludes the galileo_logger parameter (which causes JsonSchema errors)
+            args_schema = None
+            if tool_schema_dict:
+                # Use existing schema from schema.json
+                args_schema = tool_schema_dict.get("parameters")
+            else:
+                # Create a basic schema for tools without schema.json entries (e.g., chaos tools)
+                # This avoids JsonSchema errors with GalileoLogger parameter
+                import inspect
+                sig = inspect.signature(tool_func)
+                params = []
+                for param_name, param in sig.parameters.items():
+                    if param_name != "galileo_logger":  # Skip galileo_logger
+                        params.append(param_name)
+                
+                # If tool takes a "ticker" parameter, use StockTickerInput schema
+                if "ticker" in params and len(params) == 1:
+                    try:
+                        from pydantic import BaseModel, Field
+                        class StockTickerInput(BaseModel):
+                            ticker: str = Field(..., description="The stock ticker symbol (e.g., AAPL, GOOGL, MSFT)")
+                        args_schema = StockTickerInput
+                    except ImportError:
+                        pass  # Fall back to None
+                # If tool takes "tickers" parameter, use StockTickersInput schema
+                elif "tickers" in params:
+                    try:
+                        from pydantic import BaseModel, Field
+                        class StockTickersInput(BaseModel):
+                            tickers: str = Field(..., description="Comma-separated list of stock ticker symbols")
+                        args_schema = StockTickersInput
+                    except ImportError:
+                        pass
+            
             langchain_tool = StructuredTool.from_function(
                 func=tool_func,
                 name=tool_func.__name__,
                 description=tool_schema_dict.get("description") if tool_schema_dict else tool_func.__doc__ or f"Tool: {tool_func.__name__}",
-                args_schema=tool_schema_dict.get("parameters") if tool_schema_dict else None
+                args_schema=args_schema
             )
             self.tools.append(langchain_tool)
         
