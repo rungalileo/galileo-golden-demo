@@ -254,7 +254,7 @@ class ChaosEngine:
     
     def should_disconnect_rag(self) -> tuple[bool, Optional[str]]:
         """
-        Determine if RAG should fail
+        Determine if RAG should fail (works for ChromaDB, Pinecone, or any vector DB)
         
         Returns:
             (should_fail, error_message)
@@ -264,11 +264,27 @@ class ChaosEngine:
         
         if random.random() < self.rag_failure_rate:
             errors = [
+                # Generic vector DB errors
                 "Vector database connection timeout",
-                "ChromaDB service unavailable",
+                "Vector database service unavailable",
                 "Embedding model failed to respond",
                 "RAG retrieval returned empty results",
                 "Document index corrupted",
+                
+                # Pinecone-specific errors
+                "Pinecone index unavailable (503 Service Unavailable)",
+                "Pinecone API rate limit exceeded (429 Too Many Requests)",
+                "Pinecone connection timeout after 30 seconds",
+                "Pinecone index not found (404 Not Found)",
+                
+                # ChromaDB-specific errors
+                "ChromaDB service unavailable",
+                "ChromaDB connection refused",
+                
+                # Embedding errors
+                "OpenAI Embeddings API timeout",
+                "Embedding dimension mismatch error",
+                "Failed to generate embeddings for query",
             ]
             error = random.choice(errors)
             self.rag_failures += 1
