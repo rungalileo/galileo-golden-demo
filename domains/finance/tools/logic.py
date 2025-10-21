@@ -19,6 +19,27 @@ from typing import Optional
 from galileo import GalileoLogger
 import streamlit as st
 
+
+class APIError(Exception):
+    """
+    Custom exception for API errors with searchable metadata.
+    
+    The error message will include the status code and metadata in a format
+    that Galileo can index and search.
+    """
+    def __init__(self, message: str, status_code: str = "500", error_type: str = "network_failure", **kwargs):
+        super().__init__(message)
+        self.status_code = status_code
+        self.error_type = error_type
+        self.metadata = kwargs
+        self.metadata['status_code'] = status_code
+        self.metadata['error_type'] = error_type
+    
+    def __str__(self):
+        # Format: [STATUS_CODE] message | metadata as key=value
+        metadata_str = " | ".join([f"{k}={v}" for k, v in self.metadata.items()])
+        return f"[{self.status_code}] {super().__str__()} | {metadata_str}"
+
 # Import chaos engine
 try:
     import sys
@@ -175,28 +196,29 @@ def _extract_status_code(error_msg: str) -> str:
     return "500"  # Default to internal server error
 
 
-def _log_to_galileo(galileo_logger: GalileoLogger, ticker: str, result: dict, start_time: float) -> None:
+def _add_success_metadata(result: dict, ticker: str, data_source: str = "mock") -> dict:
     """
-    Helper function to log stock price lookup to Galileo.
+    Add success metadata to result for Galileo visibility.
     
     Args:
-        galileo_logger: Galileo logger for observability
-        ticker: The ticker symbol that was looked up
-        result: The price data found
-        start_time: The start time of the lookup operation
+        result: The stock price data
+        ticker: The ticker symbol
+        data_source: Source of data (live, mock, etc.)
+        
+    Returns:
+        Enhanced result with metadata
     """
-    galileo_logger.add_tool_span(
-        input=json.dumps({"ticker": ticker}),
-        output=json.dumps(result),
-        name="Get Stock Price",
-        duration_ns=int((time.time() - start_time) * 1000000),
-        metadata={
+    # Add metadata that will be visible in Galileo traces
+    result_with_metadata = {
+        **result,
+        "_metadata": {
+            "status_code": "200",
+            "success": True,
             "ticker": ticker,
-            "price": str(result["price"]),
-            "found": "true"
-        },
-        tags=["stocks", "price", "lookup"]
-    )
+            "data_source": data_source
+        }
+    }
+    return result_with_metadata
 
 def get_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
     """
@@ -217,47 +239,26 @@ def get_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None)
         chaos = get_chaos_engine()
         should_fail, error_msg = chaos.should_fail_api_call("Stock Price API")
         if should_fail:
-            # Log the failure to Galileo with detailed metadata
-            if galileo_logger:
-                status_code = _extract_status_code(error_msg)
-                galileo_logger.add_tool_span(
-                    input=json.dumps({"ticker": ticker}),
-                    output=json.dumps({"error": error_msg, "success": False}),
-                    name="Get Stock Price",
-                    duration_ns=int((time.time() - start_time) * 1000000),
-                    metadata={
-                        "ticker": ticker,
-                        "error": "true",
-                        "error_type": "network_failure",
-                        "status_code": status_code,
-                        "chaos_injected": "true",
-                        "failure_rate": "25%"
-                    },
-                    tags=["stocks", "price", "error", "chaos", f"status_{status_code}"]
-                )
-            raise Exception(error_msg)
+            # Extract status code and raise structured exception
+            status_code = _extract_status_code(error_msg)
+            raise APIError(
+                error_msg,
+                status_code=status_code,
+                error_type="network_failure",
+                ticker=ticker,
+                chaos_injected=True
+            )
         
         # Chaos: Check for rate limit
         should_rate_limit, error_msg = chaos.should_fail_rate_limit("Stock Price API")
         if should_rate_limit:
-            # Log rate limit error to Galileo
-            if galileo_logger:
-                galileo_logger.add_tool_span(
-                    input=json.dumps({"ticker": ticker}),
-                    output=json.dumps({"error": error_msg, "success": False}),
-                    name="Get Stock Price",
-                    duration_ns=int((time.time() - start_time) * 1000000),
-                    metadata={
-                        "ticker": ticker,
-                        "error": "true",
-                        "error_type": "rate_limit",
-                        "status_code": "429",
-                        "chaos_injected": "true",
-                        "failure_rate": "15%"
-                    },
-                    tags=["stocks", "price", "error", "chaos", "rate_limit", "status_429"]
-                )
-            raise Exception(error_msg)
+            raise APIError(
+                error_msg,
+                status_code="429",
+                error_type="rate_limit",
+                ticker=ticker,
+                chaos_injected=True
+            )
         
         # Chaos: Inject latency
         delay = chaos.inject_latency()
@@ -269,15 +270,16 @@ def get_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None)
         try:
             logging.info(f"Fetching live data for {ticker}")
             result_json = get_live_stock_price(ticker, galileo_logger)
+            result_dict = json.loads(result_json)
             
             # Chaos: Maybe corrupt the data
             if CHAOS_AVAILABLE:
                 chaos = get_chaos_engine()
-                result_dict = json.loads(result_json)
                 result_dict = chaos.corrupt_data(result_dict)
-                result_json = json.dumps(result_dict)
             
-            return result_json
+            # Add success metadata
+            result_dict = _add_success_metadata(result_dict, ticker, "live")
+            return json.dumps(result_dict)
         except Exception as e:
             logging.warning(f"Live data failed, falling back to mock: {e}")
             # Fall through to mock data
@@ -287,8 +289,7 @@ def get_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None)
         if ticker in MOCK_PRICE_DB:
             logging.info(f"Found {ticker} in mock database")
             result = MOCK_PRICE_DB[ticker]
-            if galileo_logger:
-                _log_to_galileo(galileo_logger, ticker, result, start_time)
+            result = _add_success_metadata(result, ticker, "mock")
             return json.dumps(result)
             
         # If not found, return a default mock price
@@ -302,8 +303,7 @@ def get_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None)
             "low": 99.00,
             "open": 100.00
         }
-        if galileo_logger:
-            _log_to_galileo(galileo_logger, ticker, result, start_time)
+        result = _add_success_metadata(result, ticker, "mock_default")
         return json.dumps(result)
         
     except Exception as e:
@@ -313,8 +313,7 @@ def get_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None)
         if ticker in MOCK_PRICE_DB:
             logging.info(f"Found {ticker} in mock database after error")
             result = MOCK_PRICE_DB[ticker]
-            if galileo_logger:
-                _log_to_galileo(galileo_logger, ticker, result, start_time)
+            result = _add_success_metadata(result, ticker, "mock")
             return json.dumps(result)
             
         # If not found in mock database, return a default mock price
@@ -328,8 +327,7 @@ def get_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None)
             "low": 99.00,
             "open": 100.00
         }
-        if galileo_logger:
-            _log_to_galileo(galileo_logger, ticker, result, start_time)
+        result = _add_success_metadata(result, ticker, "mock_default")
         return json.dumps(result)
 
 
@@ -401,11 +399,14 @@ def purchase_stocks(ticker: str, quantity: int, price: float, galileo_logger: Op
             "total_with_fees": total_with_fees,
             "status": "completed",
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "description": "Purchase of stocks completed successfully"
+            "description": "Purchase of stocks completed successfully",
+            "_metadata": {
+                "status_code": "201",  # 201 Created for successful purchase
+                "success": True,
+                "operation": "purchase"
+            }
         }
         
-        if galileo_logger:
-            _log_purchase_to_galileo(galileo_logger, ticker, quantity, price, order_id, start_time)
         return json.dumps(result)
         
     except Exception as e:
@@ -481,11 +482,14 @@ def sell_stocks(ticker: str, quantity: int, price: float, galileo_logger: Option
             "total_with_fees": total_with_fees,
             "status": "completed",
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "description": "Sale of stocks completed successfully"
+            "description": "Sale of stocks completed successfully",
+            "_metadata": {
+                "status_code": "201",  # 201 Created for successful sale
+                "success": True,
+                "operation": "sell"
+            }
         }
         
-        if galileo_logger:
-            _log_sale_to_galileo(galileo_logger, ticker, quantity, price, order_id, start_time)
         return json.dumps(result)
         
     except Exception as e:
@@ -530,22 +534,13 @@ def get_market_news(ticker: Optional[str] = None, limit: int = 5, galileo_logger
         ],
         "count": 1,
         "source": "Mock News (Enable live data for real news)",
-        "note": "This is mock data. Enable USE_LIVE_DATA=true and configure ALPHA_VANTAGE_API_KEY or NEWSAPI_KEY for real news."
+        "note": "This is mock data. Enable USE_LIVE_DATA=true and configure ALPHA_VANTAGE_API_KEY or NEWSAPI_KEY for real news.",
+        "_metadata": {
+            "status_code": "200",
+            "success": True,
+            "data_source": "mock"
+        }
     }
-    
-    if galileo_logger:
-        galileo_logger.add_tool_span(
-            input=json.dumps({"ticker": ticker, "limit": limit}),
-            output=json.dumps(result),
-            name="Get Market News",
-            duration_ns=int((time.time() - start_time) * 1000000),
-            metadata={
-                "ticker": ticker or "general",
-                "count": str(limit),
-                "source": "mock"
-            },
-            tags=["news", "market", "mock"]
-        )
     
     return json.dumps(result)
 
