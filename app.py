@@ -58,6 +58,7 @@ _arize_credentials_available = bool(os.getenv("ARIZE_API_KEY") and os.getenv("AR
 # NOW we can import LangChain - Phoenix instrumentation is ready!
 import phoenix as px
 from galileo import galileo_context
+from galileo.logger import GalileoLogger
 from agent_factory import AgentFactory
 from langchain_core.messages import AIMessage, HumanMessage
 from arize.otel import register as arize_register
@@ -266,15 +267,10 @@ def orchestrate_streamlit_and_get_user_input(
 def process_input_for_simple_app(user_input: str | None):
     """Process user input and generate response - using AgentFactory directly"""
     if user_input:
-        # Start Galileo session on first user input
-        if not st.session_state.galileo_session_started:
-            try:
-                galileo_context.start_session(name="Finance Agent Demo", external_id=st.session_state.session_id)
-                st.session_state.galileo_logger = galileo_context
-                st.session_state.galileo_session_started = True
-            except Exception as e:
-                st.error(f"Failed to start Galileo session: {str(e)}")
-                st.stop()
+        # Session is already started in render_chat_tab() before agent creation
+        # Just log that we're processing a message
+        print(f"💬 Processing message for user {st.session_state.session_id}")
+        print(f"   Logger instance ID: {id(st.session_state.galileo_logger)}")
         
         # Add user message to chat history
         user_message = HumanMessage(content=user_input)
@@ -315,6 +311,23 @@ def process_input_for_simple_app(user_input: str | None):
 
 def render_chat_tab(app_title: str, example_queries: list):
     """Render the chat interface tab"""
+    
+    # IMPORTANT: Start Galileo session BEFORE creating agent
+    # This ensures the agent's GalileoCallback can find the logger in session_state
+    if not st.session_state.get("galileo_session_started", False):
+        try:
+            # Create a new logger instance for this Streamlit user session
+            # This prevents race conditions in multi-user deployments
+            logger = GalileoLogger()
+            logger.start_session(name="Finance Agent Demo", external_id=st.session_state.session_id)
+            st.session_state.galileo_logger = logger
+            st.session_state.galileo_session_started = True
+            print(f"✅ [NEW SESSION] Started Galileo session for user {st.session_state.session_id}")
+            print(f"   Logger instance ID: {id(logger)}")
+        except Exception as e:
+            st.error(f"Failed to start Galileo session: {str(e)}")
+            st.stop()
+    
     user_input = orchestrate_streamlit_and_get_user_input(
         app_title,
         example_queries[0] if len(example_queries) > 0 else "Hello, how can you help me?",
@@ -322,6 +335,7 @@ def render_chat_tab(app_title: str, example_queries: list):
     )
     
     # Create agent dynamically using AgentFactory - works for any domain!
+    # Agent is created AFTER session is started so it picks up the logger
     if "agent" not in st.session_state:
         st.session_state.agent = st.session_state.factory.create_agent(
             domain=DOMAIN, 
@@ -713,7 +727,7 @@ def render_experiments_tab():
 def run_dataset_background(run_config):
     """Run dataset through agent in background (called from Runs UI)"""
     from galileo.datasets import get_dataset
-    from galileo import galileo_context
+    from galileo.logger import GalileoLogger
     import uuid
     import os
     
@@ -740,12 +754,16 @@ def run_dataset_background(run_config):
             print(f"   Mode: All queries in one session")
             
             try:
-                # Start session (project determined by GALILEO_PROJECT environment variable)
-                galileo_context.start_session(
+                # Create a new logger instance for this run (thread-safe for multi-user)
+                # This prevents race conditions on Streamlit Cloud
+                run_logger = GalileoLogger()
+                run_logger.start_session(
                     name=run_name,
                     external_id=run_session_id
                 )
-                print(f"   ✓ Session started successfully")
+                # Store logger in session state for this run
+                st.session_state.run_logger = run_logger
+                print(f"   ✓ Session started successfully with dedicated logger instance")
             except Exception as e:
                 print(f"   ⚠️  Warning: Could not start Galileo session: {e}")
                 print("   Logs may not be captured properly")
@@ -960,11 +978,14 @@ def run_dataset_background(run_config):
                     query_name = f"{run_name} - Query {total_processed}"
                     
                     try:
-                        # Start session for this query (project set via environment)
-                        galileo_context.start_session(
+                        # Create a new logger instance for this query (thread-safe for multi-user)
+                        query_logger = GalileoLogger()
+                        query_logger.start_session(
                             name=query_name,
                             external_id=query_session_id
                         )
+                        # Store in a temporary variable for this query's agent
+                        st.session_state.query_logger = query_logger
                         
                         # Create agent for this query
                         query_agent = st.session_state.factory.create_agent(
