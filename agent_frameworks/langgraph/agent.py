@@ -58,28 +58,7 @@ class LangGraphAgent(BaseAgent):
         # No need for lazy initialization here
         
         # Collect all active callbacks (check both existence AND toggle state)
-        # Use per-user logger instance from session_state for thread safety in multi-user deployments
-        galileo_logger = None
-        if hasattr(st, 'session_state'):
-            # Check for logger instances in different contexts (chat, runs, queries)
-            galileo_logger = (
-                getattr(st.session_state, 'galileo_logger', None) or  # Chat tab
-                getattr(st.session_state, 'run_logger', None) or      # Runs tab (multi-turn)
-                getattr(st.session_state, 'query_logger', None)       # Runs tab (single-turn)
-            )
-        
-        if galileo_logger:
-            # Pass logger with start_new_trace=True so each user message creates a trace
-            # but NOT a new session (session is already started on the logger)
-            callbacks = [GalileoCallback(
-                galileo_logger,
-                start_new_trace=True,  # Create traces for each message in the session
-                flush_on_chain_end=True  # Flush after each message completes
-            )]
-            print(f"   ✓ Using per-user Galileo logger instance for session {self.session_id}")
-        else:
-            callbacks = [GalileoCallback()]
-            print(f"   ⚠️  No session logger found, using default GalileoCallback")
+        callbacks = [GalileoCallback()]
         
         # Add LangSmith tracer if enabled in UI
         if (hasattr(st, 'session_state') and 
