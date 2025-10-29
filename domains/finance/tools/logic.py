@@ -53,34 +53,28 @@ except ImportError as e:
     CHAOS_AVAILABLE = False
     logging.warning(f"Chaos engine not available: {e}")
 
-# Check if live data should be used
-USE_LIVE_DATA = os.getenv("USE_LIVE_DATA", "false").lower() == "true"
-
-# Try to import live data module
-if USE_LIVE_DATA:
+# Try to import live data module (check if libraries are available)
+# We don't cache USE_LIVE_DATA - it will be checked dynamically at runtime
+try:
+    # Try relative import first (when loaded as module)
     try:
-        # Try relative import first (when loaded as module)
-        try:
-            from .live_data import get_live_stock_price, get_live_market_news
-        except ImportError:
-            # Fall back to absolute import (when run directly)
-            import sys
-            from pathlib import Path
-            # Add domains/finance/tools to path
-            tools_dir = Path(__file__).parent
-            if str(tools_dir) not in sys.path:
-                sys.path.insert(0, str(tools_dir))
-            from live_data import get_live_stock_price, get_live_market_news
-        
-        LIVE_DATA_AVAILABLE = True
-        logging.info("✓ Live data mode enabled")
-    except ImportError as e:
-        LIVE_DATA_AVAILABLE = False
-        logging.warning(f"Live data requested but not available: {e}")
-        logging.warning("Falling back to mock data. Install: pip install yfinance alpha-vantage")
-else:
+        from .live_data import get_live_stock_price, get_live_market_news
+    except ImportError:
+        # Fall back to absolute import (when run directly)
+        import sys
+        from pathlib import Path
+        # Add domains/finance/tools to path
+        tools_dir = Path(__file__).parent
+        if str(tools_dir) not in sys.path:
+            sys.path.insert(0, str(tools_dir))
+        from live_data import get_live_stock_price, get_live_market_news
+    
+    LIVE_DATA_AVAILABLE = True
+    logging.info("✓ Live data libraries available (yfinance/alpha-vantage)")
+except ImportError as e:
     LIVE_DATA_AVAILABLE = False
-    logging.info("Using mock data mode")
+    logging.info("✓ Live data libraries not installed - using mock data only")
+    logging.info("   To enable live data: pip install yfinance alpha-vantage")
 
 # Mock database for testing
 MOCK_PRICE_DB = {
@@ -265,8 +259,10 @@ def get_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None)
         if delay > 0:
             time.sleep(delay)
     
-    # Try live data first if enabled
-    if USE_LIVE_DATA and LIVE_DATA_AVAILABLE:
+    # Try live data first if enabled (check dynamically to respect UI toggle)
+    use_live_data = os.getenv("USE_LIVE_DATA", "false").lower() == "true"
+    
+    if use_live_data and LIVE_DATA_AVAILABLE:
         try:
             logging.info(f"Fetching live data for {ticker}")
             result_json = get_live_stock_price(ticker, galileo_logger)
@@ -512,8 +508,10 @@ def get_market_news(ticker: Optional[str] = None, limit: int = 5, galileo_logger
     """
     start_time = time.time()
     
-    # Try live news if enabled
-    if USE_LIVE_DATA and LIVE_DATA_AVAILABLE:
+    # Try live news if enabled (check dynamically to respect UI toggle)
+    use_live_data = os.getenv("USE_LIVE_DATA", "false").lower() == "true"
+    
+    if use_live_data and LIVE_DATA_AVAILABLE:
         try:
             logging.info(f"Fetching live news for {ticker or 'market'}")
             return get_live_market_news(ticker, limit, galileo_logger)

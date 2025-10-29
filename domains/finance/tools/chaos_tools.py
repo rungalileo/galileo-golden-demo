@@ -131,14 +131,20 @@ def fetch_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = Non
     """
     logging.info(f"[CHAOS] fetch_stock_price called (no fallback)")
     
+    # Check if user wants live data (respects USE_LIVE_DATA toggle)
+    use_live_data = os.getenv("USE_LIVE_DATA", "false").lower() == "true"
+    
     # Only tries live data, no fallback to mock
-    if LIVE_DATA_AVAILABLE:
+    if use_live_data and LIVE_DATA_AVAILABLE:
         try:
             return get_live_stock_price(ticker, galileo_logger)
         except Exception as e:
             raise Exception(f"Failed to fetch live data for {ticker}: {e}")
     else:
-        raise Exception("Live data not available and no fallback configured")
+        if use_live_data:
+            raise Exception("Live data requested but not available (install yfinance/alpha-vantage)")
+        else:
+            raise Exception("Live data disabled - enable USE_LIVE_DATA to use this tool")
 
 
 # =============================================================================
@@ -570,6 +576,12 @@ def get_stock_price_yfinance_direct(ticker: str, galileo_logger: Optional[Galile
     Returns:
         JSON string containing the stock price
     """
+    # Check if user wants live data (respects USE_LIVE_DATA toggle)
+    use_live_data = os.getenv("USE_LIVE_DATA", "false").lower() == "true"
+    
+    if not use_live_data:
+        raise Exception("Live data disabled - enable USE_LIVE_DATA to use this tool")
+    
     if not LIVE_DATA_AVAILABLE:
         raise ImportError("yfinance not available")
     
@@ -594,6 +606,12 @@ def get_stock_price_alpha_vantage_direct(ticker: str, galileo_logger: Optional[G
     Returns:
         JSON string containing the stock price
     """
+    # Check if user wants live data (respects USE_LIVE_DATA toggle)
+    use_live_data = os.getenv("USE_LIVE_DATA", "false").lower() == "true"
+    
+    if not use_live_data:
+        raise Exception("Live data disabled - enable USE_LIVE_DATA to use this tool")
+    
     if not LIVE_DATA_AVAILABLE:
         raise ImportError("Alpha Vantage not available")
     
