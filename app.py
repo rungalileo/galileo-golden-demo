@@ -70,7 +70,7 @@ from braintrust_langchain import BraintrustCallbackHandler, set_global_handler a
 def _initialize_callback_platforms():
     st.session_state.tracing_initialized = True
     
-    print("\n🔧 Initializing callback-based observability platforms...")
+    print("\nTools: Initializing callback-based observability platforms...")
     platforms_enabled = []
     
     # ============================================================================
@@ -78,12 +78,12 @@ def _initialize_callback_platforms():
     # ============================================================================
     if os.getenv('_PHOENIX_INITIALIZED'):
         platforms_enabled.append("Phoenix")
-        print(f"✅ Phoenix - initialized at module load")
+        print(f"[OK] Phoenix - initialized at module load")
     elif os.getenv('_ARIZE_AX_INITIALIZED'):
         platforms_enabled.append("Arize AX")
-        print(f"✅ Arize AX - initialized at module load")
+        print(f"[OK] Arize AX - initialized at module load")
     else:
-        print(f"⏭️  No OTLP platform enabled")
+        print(f" No OTLP platform enabled")
     
     # ============================================================================
     # LANGSMITH - Uses callbacks (only if enabled in UI)
@@ -106,14 +106,14 @@ def _initialize_callback_platforms():
                 
                 st.session_state.langsmith_tracer = langsmith_tracer
                 platforms_enabled.append("LangSmith")
-                print(f"✅ LangSmith tracing initialized")
-                print(f"   🎯 Traces will go to project: {langsmith_project}")
+                print(f"[OK] LangSmith tracing initialized")
+                print(f"    Traces will go to project: {langsmith_project}")
             except Exception as e:
-                print(f"   ⚠️ Failed to create LangSmith tracer: {e}")
+                print(f"   [!] Failed to create LangSmith tracer: {e}")
         else:
-            print(f"   ⚠️ LangSmith enabled but missing LANGCHAIN_API_KEY")
+            print(f"   [!] LangSmith enabled but missing LANGCHAIN_API_KEY")
     else:
-        print(f"   ⏭️  LangSmith disabled (UI toggle off)")
+        print(f"    LangSmith disabled (UI toggle off)")
     
     # ============================================================================
     # LANGFUSE - Callback handler (only if enabled in UI)
@@ -128,13 +128,13 @@ def _initialize_callback_platforms():
                 langfuse = Langfuse(public_key=langfuse_pk, secret_key=langfuse_sk, host=langfuse_host)
                 st.session_state.langfuse_handler = LangfuseCallbackHandler()
                 platforms_enabled.append("Langfuse")
-                print(f"✅ Langfuse callback initialized")
+                print(f"[OK] Langfuse callback initialized")
             else:
-                print(f"   ⚠️ Langfuse enabled but missing credentials")
+                print(f"   [!] Langfuse enabled but missing credentials")
         except Exception as e:
-            print(f"   ⚠️ Failed to initialize Langfuse: {e}")
+            print(f"   [!] Failed to initialize Langfuse: {e}")
     else:
-        print(f"   ⏭️  Langfuse disabled (UI toggle off)")
+        print(f"    Langfuse disabled (UI toggle off)")
     
     # ============================================================================
     # BRAINTRUST - Callback handler (only if enabled in UI)
@@ -149,13 +149,13 @@ def _initialize_callback_platforms():
                 st.session_state.braintrust_handler = BraintrustCallbackHandler()
                 braintrust_set_global_handler(st.session_state.braintrust_handler)
                 platforms_enabled.append("Braintrust")
-                print(f"✅ Braintrust callback initialized")
+                print(f"[OK] Braintrust callback initialized")
             else:
-                print(f"   ⚠️ Braintrust enabled but missing credentials")
+                print(f"   [!] Braintrust enabled but missing credentials")
         except Exception as e:
-            print(f"   ⚠️ Failed to initialize Braintrust: {e}")
+            print(f"   [!] Failed to initialize Braintrust: {e}")
     else:
-        print(f"   ⏭️  Braintrust disabled (UI toggle off)")
+        print(f"    Braintrust disabled (UI toggle off)")
     
     # ============================================================================
     # SUMMARY
@@ -173,13 +173,13 @@ def initialize_rag_systems():
     try:
         
         # Initialize RAG system for the current domain
-        print(f"🔧 Initializing RAG system for domain: {DOMAIN}")
+        print(f"Tools: Initializing RAG system for domain: {DOMAIN}")
         rag_system = get_domain_rag_system(DOMAIN)
-        print(f"✅ RAG system initialized successfully")
+        print(f"[OK] RAG system initialized successfully")
         
         return True
     except Exception as e:
-        print(f"❌ Failed to initialize RAG system: {e}")
+        print(f"[X] Failed to initialize RAG system: {e}")
         return False
 
 
@@ -215,8 +215,8 @@ def display_chat_history():
 
 def show_example_queries(query_1: str, query_2: str):
     """Show example queries demonstrating the finance system"""
-    st.subheader("💡 Try these examples")
-
+    st.markdown("**Try these examples:**")
+    
     # Use a container with custom CSS to reduce spacing
     with st.container():
         col1, col2 = st.columns([0.48, 0.48])
@@ -406,7 +406,7 @@ def run_experiment_background(experiment_config):
 
 def render_experiments_tab():
     """Render the experiments configuration and execution tab"""
-    st.header("🧪 Run Experiments")
+    st.header("Run Experiments")
     
     st.markdown("""
     Configure and run Galileo experiments to evaluate your agent's performance.
@@ -420,7 +420,7 @@ def render_experiments_tab():
         st.session_state.experiment_results = None
     
     # Dataset Source Selection (OUTSIDE form so it updates immediately)
-    st.subheader("📊 Dataset Source")
+    st.subheader("Dataset Source")
     dataset_source = st.radio(
         "Choose dataset source:",
         ["galileo_name", "galileo_id", "inline", "csv_file"],
@@ -459,7 +459,7 @@ def render_experiments_tab():
         )
     
     elif dataset_source == "inline":
-        st.info("✓ Using built-in sample dataset (5 finance queries)")
+        st.info("[OK] Using built-in sample dataset (5 finance queries)")
         inline_data = [
             {
                 "input": "What was Costco's revenue for Q3 2024?",
@@ -493,7 +493,7 @@ def render_experiments_tab():
         if uploaded_file:
             try:
                 df = pd.read_csv(uploaded_file)
-                st.success(f"✓ Loaded {len(df)} rows")
+                st.success(f"[OK] Loaded {len(df)} rows")
                 st.dataframe(df.head(), use_container_width=True)
                 inline_data = df.to_dict('records')
             except Exception as e:
@@ -503,7 +503,7 @@ def render_experiments_tab():
     
     # Experiment Configuration Form
     with st.form("experiment_config"):
-        st.subheader("📋 Experiment Configuration")
+        st.subheader("Experiment Configuration")
         
         # Experiment name
         experiment_name = st.text_input(
@@ -522,7 +522,7 @@ def render_experiments_tab():
         st.divider()
         
         # Metrics Selection
-        st.subheader("📏 Evaluation Metrics")
+        st.subheader(".Evaluation Metrics")
         st.markdown("Select which metrics to evaluate:")
         
         col1, col2 = st.columns(2)
@@ -560,7 +560,7 @@ def render_experiments_tab():
         
         # Submit button
         submitted = st.form_submit_button(
-            "🚀 Run Experiment",
+            " Run Experiment",
             type="primary",
             use_container_width=True
         )
@@ -603,7 +603,7 @@ def render_experiments_tab():
     # Display experiment status
     if st.session_state.experiment_status != "idle":
         st.divider()
-        st.subheader("📊 Experiment Status")
+        st.subheader("Experiment Status")
         
         if st.session_state.experiment_status == "queued":
             with st.spinner("Starting experiment..."):
@@ -621,14 +621,14 @@ def render_experiments_tab():
             st.caption("Processing queries through agent...")
         
         elif st.session_state.experiment_status == "completed":
-            st.success("✅ Experiment completed successfully!")
+            st.success("[OK] Experiment completed successfully!")
             
             if st.session_state.experiment_results is not None:
                 results = st.session_state.experiment_results
                 
                 # Check if results is a list/dict and has content
                 if isinstance(results, list) and len(results) > 0:
-                    st.write(f"📊 Processed {len(results)} rows")
+                    st.write(f".Processed {len(results)} rows")
                     
                     # Show sample results
                     st.subheader("Sample Results")
@@ -638,18 +638,18 @@ def render_experiments_tab():
                         st.warning(f"Could not display sample result: {e}")
                         st.code(str(results[0]))
                 elif isinstance(results, dict):
-                    st.write(f"📊 Experiment completed")
+                    st.write(f"Experiment completed")
                     st.subheader("Results")
                     st.json(results)
                 else:
-                    st.write(f"📊 Experiment completed")
+                    st.write(f"Experiment completed")
                     st.info("Results returned successfully (check Galileo Console for details)")
             else:
-                st.info("📊 Experiment completed - check Galileo Console for results")
+                st.info("Experiment completed - check Galileo Console for results")
             
             # Link to Galileo Console
             st.markdown("---")
-            st.markdown("### 🔗 View Full Results")
+            st.markdown("### View Full Results")
             st.markdown(f"""
             View detailed results in [Galileo Console](https://console.galileo.ai):
             - Project: `{st.session_state.current_experiment['project_name']}`
@@ -663,7 +663,7 @@ def render_experiments_tab():
                 st.rerun()
         
         elif st.session_state.experiment_status == "failed":
-            st.error(f"❌ Experiment failed")
+            st.error(f"[X] Experiment failed")
             if "experiment_error" in st.session_state:
                 st.error(st.session_state.experiment_error)
                 with st.expander("View error details"):
@@ -678,7 +678,7 @@ def render_experiments_tab():
                 st.rerun()
     
     # Help section
-    with st.expander("ℹ️ Help & Documentation"):
+    with st.expander("Help & Documentation"):
         st.markdown("""
         ### How to Run Experiments
         
@@ -734,7 +734,7 @@ def run_dataset_background(run_config):
         run_session_id = f"run-{uuid.uuid4().hex[:8]}"
         
         if session_mode == 'multi_turn':
-            print(f"\n🚀 Starting Multi-turn Galileo session: {run_name}")
+            print(f"\n Starting Multi-turn Galileo session: {run_name}")
             print(f"   Project: {project_name} (set via GALILEO_PROJECT env)")
             print(f"   Session ID: {run_session_id}")
             print(f"   Mode: All queries in one session")
@@ -745,12 +745,12 @@ def run_dataset_background(run_config):
                     name=run_name,
                     external_id=run_session_id
                 )
-                print(f"   ✓ Session started successfully")
+                print(f"   [OK] Session started successfully")
             except Exception as e:
-                print(f"   ⚠️  Warning: Could not start Galileo session: {e}")
+                print(f"   [!]  Warning: Could not start Galileo session: {e}")
                 print("   Logs may not be captured properly")
         else:
-            print(f"\n🚀 Starting Single-turn run: {run_name}")
+            print(f"\n Starting Single-turn run: {run_name}")
             print(f"   Project: {project_name}")
             print(f"   Mode: Each query gets its own session")
             # Sessions will be created per-query in the loop
@@ -907,7 +907,7 @@ def run_dataset_background(run_config):
             if not hasattr(agent, 'process_query'):
                 raise ValueError(f"Agent missing process_query method. Agent type: {type(agent)}")
             
-            print(f"   ✓ Agent created successfully")
+            print(f"   [OK] Agent created successfully")
         else:
             print(f"   Agent will be created for each query")
         
@@ -916,7 +916,7 @@ def run_dataset_background(run_config):
         total_rows = len(dataset) * num_cycles
         
         # Cycle through dataset
-        print(f"\n📋 Starting processing:")
+        print(f"\n.Starting processing:")
         print(f"   Dataset size: {len(dataset)} rows")
         print(f"   Cycles: {num_cycles}")
         print(f"   Total queries: {total_rows}")
@@ -938,7 +938,7 @@ def run_dataset_background(run_config):
                         print(f"   Debug: First row keys - {list(row.keys()) if isinstance(row, dict) else 'not a dict'}")
                         if isinstance(row, dict) and len(row) > 0:
                             print(f"   Debug: First few items - {dict(list(row.items())[:3])}")
-                    print(f"   ⚠️  Skipping row {idx + 1} - no input found")
+                    print(f"   [!]  Skipping row {idx + 1} - no input found")
                     continue
                 
                 # Update progress
@@ -974,9 +974,9 @@ def run_dataset_background(run_config):
                         )
                         
                         # Process the query
-                        print(f"  🔄 Processing row {idx + 1}/{len(dataset)}: {user_input[:60]}...")
+                        print(f"  .Processing row {idx + 1}/{len(dataset)}: {user_input[:60]}...")
                         response = query_agent.process_query(messages)
-                        print(f"  ✓ Completed (response length: {len(response)} chars)")
+                        print(f"  [OK] Completed (response length: {len(response)} chars)")
                         
                         # Session will auto-close when agent goes out of scope
                         
@@ -993,9 +993,9 @@ def run_dataset_background(run_config):
                             raise ValueError("agent.process_query is None")
                         
                         # Process the query - GalileoCallback will log everything
-                        print(f"  🔄 Processing row {idx + 1}/{len(dataset)}: {user_input[:60]}...")
+                        print(f"  .Processing row {idx + 1}/{len(dataset)}: {user_input[:60]}...")
                         response = agent.process_query(messages)
-                        print(f"  ✓ Completed (response length: {len(response)} chars)")
+                        print(f"  [OK] Completed (response length: {len(response)} chars)")
                         
                     except Exception as e:
                         # Log error but continue
@@ -1014,17 +1014,17 @@ def run_dataset_background(run_config):
         st.session_state.run_progress = f"Completed! Processed {total_processed} total queries ({len(dataset)} rows × {num_cycles} cycles)"
         
         # Sessions auto-close when agents go out of scope
-        print(f"\n✅ Processing complete:")
+        print(f"\n[OK] Processing complete:")
         print(f"   Total processed: {total_processed} queries")
         
         if session_mode == 'multi_turn':
             print(f"   Session: {run_name} (will auto-close)")
-            print(f"\n💡 View logs in Galileo Console:")
+            print(f"\nView logs in Galileo Console:")
             print(f"   Project: {project_name}")
             print(f"   Session: {run_name}")
         else:
             print(f"   All sessions will auto-close (single-turn mode)")
-            print(f"\n💡 View logs in Galileo Console:")
+            print(f"\nView logs in Galileo Console:")
             print(f"   Project: {project_name}")
             print(f"   Sessions: {run_name} - Query 1 through {total_processed}")
         
@@ -1039,7 +1039,7 @@ def run_dataset_background(run_config):
 
 def render_runs_tab():
     """Render the dataset runs tab for creating real logs"""
-    st.header("🔄 Dataset Runs")
+    st.header("Dataset Runs")
     
     st.markdown("""
     Pull a dataset from Galileo and run it through your agent to create **real production logs**.
@@ -1062,7 +1062,7 @@ def render_runs_tab():
         st.session_state.run_results = None
     
     # Dataset Source Selection (OUTSIDE form so it updates immediately)
-    st.subheader("📊 Dataset Source")
+    st.subheader("Dataset Source")
     dataset_source = st.radio(
         "Choose dataset source:",
         ["galileo_name", "galileo_id", "inline", "csv_file"],
@@ -1101,7 +1101,7 @@ def render_runs_tab():
         )
     
     elif dataset_source == "inline":
-        st.info("✓ Using built-in sample dataset (5 finance queries)")
+        st.info("[OK] Using built-in sample dataset (5 finance queries)")
         inline_data = [
             {"input": "What was Costco's revenue for Q3 2024?"},
             {"input": "How is the S&P 500 performing this year?"},
@@ -1120,7 +1120,7 @@ def render_runs_tab():
         if uploaded_file:
             try:
                 df = pd.read_csv(uploaded_file)
-                st.success(f"✓ Loaded {len(df)} rows")
+                st.success(f"[OK] Loaded {len(df)} rows")
                 st.dataframe(df.head(), use_container_width=True)
                 inline_data = df.to_dict('records')
             except Exception as e:
@@ -1130,7 +1130,7 @@ def render_runs_tab():
     
     # Run Configuration Form
     with st.form("run_config"):
-        st.subheader("⚙️ Run Configuration")
+        st.subheader("Settings: Run Configuration")
         
         # Run name
         run_name = st.text_input(
@@ -1161,15 +1161,15 @@ def render_runs_tab():
         )
         
         if session_mode == "multi_turn":
-            st.info(f"💡 This will process the dataset **{num_cycles}** time(s). All queries will be grouped in **one session**.")
+            st.info(f"This will process the dataset **{num_cycles}** time(s). All queries will be grouped in **one session**.")
         else:
             total_sessions = len(st.session_state.get('inline_data', [])) * num_cycles if dataset_source in ["inline", "csv_file"] else "N"
-            st.info(f"💡 This will process the dataset **{num_cycles}** time(s). Each query will create a **separate session** (total: {total_sessions} sessions).")
+            st.info(f"This will process the dataset **{num_cycles}** time(s). Each query will create a **separate session** (total: {total_sessions} sessions).")
         
         st.divider()
         
         # Show current settings that will be honored
-        st.subheader("🎛️ Active Settings")
+        st.subheader("Settings: Active Settings")
         st.markdown("This run will honor your current chaos and guardrails settings:")
         
         col1, col2 = st.columns(2)
@@ -1177,7 +1177,7 @@ def render_runs_tab():
         with col1:
             st.markdown("**Guardrails:**")
             if "guardrails_enabled" in st.session_state and st.session_state.guardrails_enabled:
-                st.success("✅ Enabled")
+                st.success("[OK] Enabled")
             else:
                 st.warning("🔓 Disabled")
         
@@ -1192,17 +1192,17 @@ def render_runs_tab():
                 st.session_state.get("chaos_tools", False)
             ])
             if chaos_count > 0:
-                st.warning(f"🔥 {chaos_count} mode(s) active")
+                st.warning(f"Chaos: {chaos_count} mode(s) active")
             else:
-                st.success("😌 All systems normal")
+                st.success("All systems normal")
         
-        st.caption("💡 You can change these settings in the sidebar before running")
+        st.caption("You can change these settings in the sidebar before running")
         
         st.divider()
         
         # Submit button
         submitted = st.form_submit_button(
-            "🚀 Start Run",
+            " Start Run",
             type="primary",
             use_container_width=True
         )
@@ -1241,7 +1241,7 @@ def render_runs_tab():
     # Display run status
     if st.session_state.run_status != "idle":
         st.divider()
-        st.subheader("📊 Run Status")
+        st.subheader(".Run Status")
         
         if st.session_state.run_status == "queued":
             with st.spinner("Starting run..."):
@@ -1259,12 +1259,12 @@ def render_runs_tab():
             st.caption("Processing dataset through agent...")
         
         elif st.session_state.run_status == "completed":
-            st.success("✅ Run completed successfully!")
+            st.success("[OK] Run completed successfully!")
             
             if st.session_state.run_results is not None:
                 results = st.session_state.run_results
                 
-                st.write(f"📊 Run Summary:")
+                st.write(f".Run Summary:")
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
@@ -1276,7 +1276,7 @@ def render_runs_tab():
             
             # Link to Galileo Console
             st.markdown("---")
-            st.markdown("### 🔗 View Logs in Galileo")
+            st.markdown("### View Logs in Galileo")
             st.markdown(f"""
             Your run created real logs in Galileo. View them in [Galileo Console](https://console.galileo.ai):
             - Run name: `{st.session_state.current_run.get('run_name', 'Unknown')}`
@@ -1292,7 +1292,7 @@ def render_runs_tab():
                 st.rerun()
         
         elif st.session_state.run_status == "failed":
-            st.error(f"❌ Run failed")
+            st.error(f"[X] Run failed")
             if "run_error" in st.session_state:
                 st.error(f"**Error**: {st.session_state.run_error}")
                 with st.expander("View full error details", expanded=True):
@@ -1311,7 +1311,7 @@ def render_runs_tab():
                 st.rerun()
     
     # Help section
-    with st.expander("ℹ️ Help & Documentation"):
+    with st.expander("Help & Documentation"):
         st.markdown("""
         ### How Dataset Runs Work
         
@@ -1375,6 +1375,118 @@ def multi_domain_agent_app():
     # Environment setup already done at module import time (top of file)
     # No need to call setup_environment() again
     
+    # Apply newspaper-style CSS that respects light/dark mode
+    st.markdown("""
+    <style>
+    /* Newspaper-style typography for both light and dark modes */
+    .stApp { 
+        font-family: 'Georgia', 'Times New Roman', serif; 
+    }
+    
+    /* Headers with newspaper style */
+    h1, h2, h3 { 
+        font-family: 'Georgia', 'Times New Roman', serif; 
+        border-bottom: 2px solid currentColor; 
+        padding-bottom: 0.3em; 
+        font-weight: bold;
+        opacity: 0.9;
+    }
+    
+    /* Buttons with subtle borders */
+    .stButton button { 
+        border: 2px solid currentColor; 
+        font-family: 'Georgia', 'Times New Roman', serif; 
+        font-weight: bold;
+        opacity: 0.9;
+    }
+    
+    /* Input fields with borders */
+    .stTextInput input, .stTextArea textarea, .stSelectbox select { 
+        border: 1px solid currentColor;
+        opacity: 0.85;
+    }
+    
+    /* Sidebar with subtle distinction */
+    [data-testid="stSidebar"] { 
+        border-right: 2px solid currentColor;
+        opacity: 0.95;
+    }
+    
+    /* Chat messages with borders */
+    .stChatMessage { 
+        border: 1px solid currentColor;
+        opacity: 0.9;
+    }
+    
+    /* Code blocks with subtle background */
+    .stCodeBlock { 
+        border: 1px solid currentColor;
+        opacity: 0.9;
+    }
+    
+    /* Dividers */
+    hr { 
+        border-width: 2px;
+        opacity: 0.5;
+    }
+    
+    /* Expanders with newspaper style */
+    .streamlit-expanderHeader { 
+        border: 1px solid currentColor; 
+        font-family: 'Georgia', 'Times New Roman', serif; 
+        font-weight: bold;
+        opacity: 0.9;
+    }
+    
+    /* Tabs styled like newspaper section tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0.25rem;
+        border-bottom: 2px solid currentColor;
+        padding-bottom: 0;
+    }
+    
+    .stTabs [data-baseweb="tab"] { 
+        font-family: 'Georgia', 'Times New Roman', serif; 
+        font-weight: bold;
+        font-size: 1.1rem;
+        padding: 0.75rem 1.5rem;
+        border: 2px solid currentColor;
+        border-bottom: none;
+        background-color: transparent;
+        opacity: 0.6;
+        border-radius: 8px 8px 0 0;
+        margin-bottom: -2px;
+        position: relative;
+    }
+    
+    .stTabs [data-baseweb="tab"]:hover {
+        opacity: 0.8;
+    }
+    
+    .stTabs [aria-selected="true"] { 
+        opacity: 1;
+        border-bottom: 2px solid var(--background-color);
+        z-index: 1;
+    }
+    
+    /* Remove all emoji space */
+    .stMarkdown p { 
+        font-family: 'Georgia', 'Times New Roman', serif;
+    }
+    
+    /* Reduce excessive spacing around elements */
+    .element-container { 
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Tighter spacing for subheaders */
+    h2, h3 {
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     # Initialize AgentFactory once
     if "factory" not in st.session_state:
         st.session_state.factory = AgentFactory()
@@ -1392,7 +1504,7 @@ def multi_domain_agent_app():
     
     # Extract UI configuration from domain config
     ui_config = st.session_state.domain_config.get("ui", {})
-    app_title = ui_config.get("app_title", f"🤖 {DOMAIN.title()} Assistant")
+    app_title = ui_config.get("app_title", f" {DOMAIN.title()} Assistant")
     example_queries = ui_config.get("example_queries", [
         "Hello, how can you help me?",
         "What can you do?"
@@ -1434,7 +1546,7 @@ def multi_domain_agent_app():
         st.markdown("---")
         
         # Session info
-        st.markdown("### 📊 Session Info")
+        st.markdown("### .Session Info")
         st.caption(f"Session ID: `{st.session_state.session_id}`")
         st.caption(f"Domain: `{DOMAIN}`")
         st.caption(f"Framework: `{FRAMEWORK}`")
@@ -1442,7 +1554,7 @@ def multi_domain_agent_app():
         st.markdown("---")
         
         # Live Data Settings
-        st.markdown("### ⚙️ Live Data Settings")
+        st.markdown("### Settings: Live Data Settings")
         
         # Initialize settings if not exists
         if "use_live_data" not in st.session_state:
@@ -1490,7 +1602,7 @@ def multi_domain_agent_app():
         col1, col2 = st.columns([3, 1])
         with col1:
             if hasattr(st.session_state, 'config_source'):
-                st.caption(f"💡 From: {st.session_state.config_source}")
+                st.caption(f"From: {st.session_state.config_source}")
         with col2:
             if st.button("🔄", help="Reload from config", key="reload_settings", use_container_width=True):
                 # Clear session state to force reload
@@ -1544,26 +1656,26 @@ def multi_domain_agent_app():
             
             # Show status indicator
             if data_source == "auto":
-                st.caption("🔄 Will try: Yahoo → Alpha Vantage → Mock")
+                st.caption(".Will try: Yahoo → Alpha Vantage → Mock")
             elif data_source == "yfinance":
-                st.caption("✓ Using Yahoo Finance (no API key needed)")
+                st.caption("[OK] Using Yahoo Finance (no API key needed)")
             elif data_source == "alpha_vantage":
                 api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
                 if api_key:
-                    st.caption("✓ Alpha Vantage key configured")
+                    st.caption("[OK] Alpha Vantage key configured")
                 else:
-                    st.caption("⚠️ Alpha Vantage key not set")
+                    st.caption("[!] Alpha Vantage key not set")
             elif data_source == "finnhub":
                 api_key = os.getenv("FINNHUB_API_KEY")
                 if api_key:
-                    st.caption("✓ Finnhub key configured")
+                    st.caption("[OK] Finnhub key configured")
                 else:
-                    st.caption("⚠️ Finnhub key not set")
+                    st.caption("[!] Finnhub key not set")
         else:
-            st.caption("📊 Using mock data")
+            st.caption(".Using mock data")
         
         # Quick test button
-        with st.expander("🧪 Test Live Data"):
+        with st.expander("Test Live Data"):
             st.markdown("""
             **Quick Test:**
             1. Toggle live data ON above
@@ -1585,7 +1697,7 @@ def multi_domain_agent_app():
         st.markdown("---")
         
         # Galileo Guardrails Settings
-        st.markdown("### 🛡️ Galileo Guardrails")
+        st.markdown("### Security: Galileo Guardrails")
         st.caption("Real-time content filtering and safety")
         
         # Import guardrails
@@ -1624,23 +1736,23 @@ def multi_domain_agent_app():
                 st.rerun()
             
             if guardrails_enabled:
-                with st.expander("⚙️ Guardrails Details", expanded=False):
+                with st.expander("Settings: Guardrails Details", expanded=False):
                     st.markdown("""
                     **Active Protections:**
                     
                     **Input Filtering:**
                     - 🔒 PII Detection (account numbers, SSN, credit cards)
                     - 🚫 Sexism Detection
-                    - ⚠️ Toxicity Detection
+                    - [!] Toxicity Detection
                     
                     **Output Filtering:**
                     - 🔒 PII Leakage Prevention
                     - 🚫 Inappropriate Content Blocking
-                    - ⚠️ Harmful Content Prevention
+                    - [!] Harmful Content Prevention
                     
                     **Trade Protection:**
-                    - 📊 Context Adherence Check (70% threshold)
-                    - 🎯 Hallucination Detection
+                    - .Context Adherence Check (70% threshold)
+                    -  Hallucination Detection
                     - ⛔ Auto-block suspicious trades
                     """)
                     
@@ -1670,7 +1782,7 @@ def multi_domain_agent_app():
                         st.rerun()
                 
                 # Test examples
-                with st.expander("🧪 Test Guardrails", expanded=False):
+                with st.expander("Test Guardrails", expanded=False):
                     st.markdown("**Try these to trigger guardrails:**")
                     
                     test_queries = [
@@ -1690,7 +1802,7 @@ def multi_domain_agent_app():
         st.markdown("---")
         
         # Chaos Engineering Settings
-        st.markdown("### 🔥 Chaos Engineering")
+        st.markdown("### Chaos: Chaos Engineering")
         st.caption("Simulate real-world failures and anomalies")
         
         # Import chaos engine
@@ -1717,10 +1829,10 @@ def multi_domain_agent_app():
             if "chaos_tools" not in st.session_state:
                 st.session_state.chaos_tools = False
             
-            with st.expander("⚙️ Chaos Controls", expanded=False):
+            with st.expander("Settings: Chaos Controls", expanded=False):
                 # Tool Instability
                 tool_instability = st.checkbox(
-                    "🔌 Tool Instability",
+                    "Tool Instability",
                     value=st.session_state.chaos_tool_instability,
                     help="Randomly fail API calls (25% chance) - simulates network issues, timeouts, service outages",
                     key="chaos_tool_instability_checkbox"
@@ -1733,7 +1845,7 @@ def multi_domain_agent_app():
                 
                 # Sloppiness (Number Transpositions)
                 sloppiness = st.checkbox(
-                    "🔢 Sloppiness",
+                    "Sloppiness",
                     value=st.session_state.chaos_sloppiness,
                     help="Randomly transpose numbers in responses (30% chance) - simulates hallucinations and data errors",
                     key="chaos_sloppiness_checkbox"
@@ -1746,7 +1858,7 @@ def multi_domain_agent_app():
                 
                 # RAG Chaos
                 rag_chaos = st.checkbox(
-                    "📚 RAG Disconnects",
+                    "RAG Disconnects",
                     value=st.session_state.chaos_rag,
                     help="Randomly disconnect RAG database (20% chance) - simulates vector DB failures",
                     key="chaos_rag_checkbox"
@@ -1759,7 +1871,7 @@ def multi_domain_agent_app():
                 
                 # Rate Limit Chaos
                 rate_limit = st.checkbox(
-                    "⏱️ Rate Limits",
+                    "Rate Limits",
                     value=st.session_state.chaos_rate_limit,
                     help="Randomly trigger rate limit errors (15% chance) - simulates API quota exhaustion",
                     key="chaos_rate_limit_checkbox"
@@ -1770,7 +1882,7 @@ def multi_domain_agent_app():
                 
                 # Data Corruption
                 data_corruption = st.checkbox(
-                    "💥 Data Corruption",
+                    "Data Corruption",
                     value=st.session_state.chaos_data_corruption,
                     help="Randomly corrupt API responses (20% chance) - wrong prices, missing fields, invalid data",
                     key="chaos_data_corruption_checkbox"
@@ -1781,7 +1893,7 @@ def multi_domain_agent_app():
                 
                 # Chaos Tools (Tool Proliferation)
                 chaos_tools = st.checkbox(
-                    "🔧 Confusing Tools",
+                    "Tools: Confusing Tools",
                     value=st.session_state.chaos_tools,
                     help="Replaces get_stock_price with 17 confusing alternatives while keeping other tools standard. Agent must choose between imperfect options with similar names. Includes API schema evolution, version drift, and breaking changes!",
                     key="chaos_tools_checkbox"
@@ -1793,7 +1905,7 @@ def multi_domain_agent_app():
                     # Force agent reload to pick up new tools
                     if "agent" in st.session_state:
                         del st.session_state.agent
-                    st.info(f"{'✅ Enabled' if chaos_tools else '❌ Disabled'} chaos tools (agent will reload)")
+                    st.info(f"{'[OK] Enabled' if chaos_tools else '[X] Disabled'} chaos tools (agent will reload)")
                 
                 st.divider()
                 
@@ -1806,17 +1918,17 @@ def multi_domain_agent_app():
                     st.markdown("**Active Chaos:**")
                     active_chaos = []
                     if stats['tool_instability']:
-                        active_chaos.append("🔌 Tool Instability")
+                        active_chaos.append("Tool Instability")
                     if stats['sloppiness']:
-                        active_chaos.append(f"🔢 Sloppiness ({stats['sloppy_outputs']} so far)")
+                        active_chaos.append(f"Sloppiness ({stats['sloppy_outputs']} so far)")
                     if stats['rag_chaos']:
-                        active_chaos.append(f"📚 RAG Chaos ({stats['rag_failures']} so far)")
+                        active_chaos.append(f"RAG Chaos ({stats['rag_failures']} so far)")
                     if stats['rate_limit_chaos']:
-                        active_chaos.append("⏱️ Rate Limits")
+                        active_chaos.append("Rate Limits")
                     if stats['data_corruption']:
-                        active_chaos.append("💥 Data Corruption")
+                        active_chaos.append("Data Corruption")
                     if st.session_state.chaos_tools:
-                        active_chaos.append("🔧 Confusing Tools (17 chaos + 4 standard = 21 total)")
+                        active_chaos.append("Tools: Confusing Tools (17 chaos + 4 standard = 21 total)")
                     
                     for item in active_chaos:
                         st.caption(item)
@@ -1837,32 +1949,32 @@ def multi_domain_agent_app():
                 st.session_state.chaos_tools
             ])
             if active_count > 0:
-                st.caption(f"🔥 {active_count} chaos mode(s) active")
+                st.caption(f"Chaos: {active_count} chaos mode(s) active")
             else:
-                st.caption("😌 All systems normal")
+                st.caption("All systems normal")
         
         st.markdown("---")
         
         # Links
-        st.markdown("### 🔗 Links")
+        st.markdown("### Links")
         st.markdown("[Galileo Console](https://console.galileo.ai)")
         st.markdown("[Phoenix Traces](https://app.phoenix.arize.com)")
         
         st.markdown("---")
         
         # Documentation
-        st.markdown("### 📚 Documentation")
+        st.markdown("### Documentation")
         st.markdown("[Experiments Guide](https://github.com)")
         st.markdown("[Quick Start](https://github.com)")
         
         st.markdown("---")
         
         # Logger Controls (at bottom of sidebar)
-        st.markdown("### 📊 Observability Platforms")
+        st.markdown("### Observability Platforms")
         st.caption("Galileo is always enabled")
         
         # Session state is already initialized at module level (before tracing init)
-        with st.expander("⚙️ Configure Loggers", expanded=False):
+        with st.expander("Settings: Configure Loggers", expanded=False):
             st.markdown("**OpenTelemetry Platform** (select one)")
             
             # Check if running on localhost - simpler approach
@@ -1878,9 +1990,9 @@ def multi_domain_agent_app():
                 is_localhost = True
             
             if not is_localhost:
-                st.warning("⚠️ OTLP platform switching disabled in production. Change requires app restart with new environment variables.")
+                st.warning("[!] OTLP platform switching disabled in production. Change requires app restart with new environment variables.")
             else:
-                st.caption("💡 **Important:** Changing OTLP platform requires a **hard reset** of the app")
+                st.caption("**Important:** Changing OTLP platform requires a **hard reset** of the app")
                 st.caption("Use Ctrl+C to stop the server, then restart with `streamlit run app.py`")
                 st.caption("Callback platforms (below) work instantly without restart")
             
@@ -1920,8 +2032,8 @@ def multi_domain_agent_app():
                 st.session_state.logger_arize_ax = (otlp_selection == "Arize AX")
                 
                 # Show hard reset instructions
-                st.info(f"✅ OTLP platform changed to: **{otlp_selection}**")
-                st.warning("⚠️ **Hard reset required:** Press Ctrl+C to stop the server, then run `streamlit run app.py` again")
+                st.info(f"[OK] OTLP platform changed to: **{otlp_selection}**")
+                st.warning("[!] **Hard reset required:** Press Ctrl+C to stop the server, then run `streamlit run app.py` again")
                 st.caption("OpenTelemetry tracer providers cannot be changed at runtime")
             
             st.divider()
@@ -1989,10 +2101,10 @@ def multi_domain_agent_app():
             if st.session_state.logger_braintrust:
                 enabled_platforms.append("Braintrust")
             
-            st.success(f"✅ Active: {', '.join(enabled_platforms)}")
+            st.success(f"[OK] Active: {', '.join(enabled_platforms)}")
     
     # Main content with tabs
-    tab1, tab2, tab3 = st.tabs(["💬 Chat", "🧪 Experiments", "🔄 Runs"])
+    tab1, tab2, tab3 = st.tabs(["Chat", "Experiments", "Runs"])
     
     with tab1:
         render_chat_tab(app_title, example_queries)
