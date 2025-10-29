@@ -1189,7 +1189,8 @@ def render_runs_tab():
                 st.session_state.get("chaos_rag", False),
                 st.session_state.get("chaos_rate_limit", False),
                 st.session_state.get("chaos_data_corruption", False),
-                st.session_state.get("chaos_tools", False)
+                st.session_state.get("chaos_tools", False),
+                st.session_state.get("chaos_llm_hallucination", False)
             ])
             if chaos_count > 0:
                 st.warning(f"Chaos: {chaos_count} mode(s) active")
@@ -1828,6 +1829,8 @@ def multi_domain_agent_app():
                 st.session_state.chaos_data_corruption = False
             if "chaos_tools" not in st.session_state:
                 st.session_state.chaos_tools = False
+            if "chaos_llm_hallucination" not in st.session_state:
+                st.session_state.chaos_llm_hallucination = False
             
             with st.expander("Settings: Chaos Controls", expanded=False):
                 # Tool Instability
@@ -1907,13 +1910,27 @@ def multi_domain_agent_app():
                         del st.session_state.agent
                     st.info(f"{'[OK] Enabled' if chaos_tools else '[X] Disabled'} chaos tools (agent will reload)")
                 
+                # LLM Hallucination Mode
+                llm_hallucination = st.checkbox(
+                    "LLM Hallucinations",
+                    value=st.session_state.chaos_llm_hallucination,
+                    help="Instruct LLM to occasionally hallucinate (20% of responses) - transposes digits, makes plausible errors. This is injected into the system prompt, so hallucinations come from the LLM itself and won't show in post-processing traces.",
+                    key="chaos_llm_hallucination_checkbox"
+                )
+                if llm_hallucination != st.session_state.chaos_llm_hallucination:
+                    st.session_state.chaos_llm_hallucination = llm_hallucination
+                    # Force agent reload to pick up modified system prompt
+                    if "agent" in st.session_state:
+                        del st.session_state.agent
+                    st.info(f"{'[OK] Enabled' if llm_hallucination else '[X] Disabled'} LLM hallucinations (agent will reload with modified prompt)")
+                
                 st.divider()
                 
                 # Show chaos stats
                 stats = chaos.get_stats()
                 chaos_active = any([stats['tool_instability'], stats['sloppiness'], stats['rag_chaos'], 
                                    stats['rate_limit_chaos'], stats['data_corruption'], 
-                                   st.session_state.chaos_tools])
+                                   st.session_state.chaos_tools, st.session_state.chaos_llm_hallucination])
                 if chaos_active:
                     st.markdown("**Active Chaos:**")
                     active_chaos = []
@@ -1929,6 +1946,8 @@ def multi_domain_agent_app():
                         active_chaos.append("Data Corruption")
                     if st.session_state.chaos_tools:
                         active_chaos.append("Tools: Confusing Tools (17 chaos + 4 standard = 21 total)")
+                    if st.session_state.chaos_llm_hallucination:
+                        active_chaos.append("LLM Hallucinations (system prompt modified)")
                     
                     for item in active_chaos:
                         st.caption(item)
@@ -1946,7 +1965,8 @@ def multi_domain_agent_app():
                 st.session_state.chaos_rag,
                 st.session_state.chaos_rate_limit,
                 st.session_state.chaos_data_corruption,
-                st.session_state.chaos_tools
+                st.session_state.chaos_tools,
+                st.session_state.chaos_llm_hallucination
             ])
             if active_count > 0:
                 st.caption(f"Chaos: {active_count} chaos mode(s) active")
