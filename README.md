@@ -242,9 +242,15 @@ galileo-golden-demo/
 │       ├── dataset.csv     # Evaluation data
 │       ├── docs/          # RAG documents
 │       └── tools/         # Domain tools
+├── experiments/            # Experiment system (UI + CLI)
+│   ├── experiment_helpers.py  # Shared experiment functions
+│   ├── run_experiment.py      # CLI script to run experiments
+│   ├── create_galileo_dataset.py  # CLI script to create datasets
+│   └── README.md              # Detailed experiments documentation
 ├── helpers/                # Utility scripts
 │   ├── setup_vectordb.py  # Pinecone vector database setup
-│   └── test_vectordb.py   # Vector database testing
+│   ├── test_vectordb.py   # Vector database testing
+│   └── galileo_api_helpers.py  # Galileo API utilities
 ├── tools/                 # Shared tools
 │   └── rag_retrieval.py   # General RAG functionality (not implemented)
 └── PINECONE_SETUP.md      # Detailed Pinecone configuration guide
@@ -262,12 +268,21 @@ The system is designed so that domain customization requires just configuration 
 
 ## Running Experiments
 
-The demo includes scripts to create Galileo datasets and run experiments to evaluate your agents:
+The demo includes a full experiments system to evaluate your agents using Galileo. Experiments can be run from both the **Streamlit UI** and the **command line**.
 
-### Creating Datasets
+### Quick Start
 
-Create a Galileo dataset from a domain's CSV file:
+#### Via UI
+1. Start the Streamlit app: `streamlit run app.py`
+2. Click on the **🧪 Experiments** tab
+3. Follow the 3-step workflow:
+   - Select or create a dataset
+   - Configure experiment settings and metrics
+   - Run the experiment and view results
 
+#### Via CLI
+
+**Step 1: Create a Dataset (one-time setup)**
 ```bash
 # Preview the dataset before creating
 python experiments/create_galileo_dataset.py finance --preview
@@ -278,40 +293,51 @@ python experiments/create_galileo_dataset.py finance
 
 This script:
 - Reads the `domains/{domain}/dataset.csv` file
-- Uses the domain configuration from `domains/{domain}/config.yaml`
-- Creates a Galileo dataset with the naming convention: `"{Domain} Domain Dataset"`
-- Returns the dataset ID for use in experiments
+- Validates it has `input` and `output` columns
+- Creates a Galileo dataset with name: `"{Domain} Domain Dataset"`
+- Returns the dataset ID for reference
 
-### Running Experiments
-
-Run experiments to evaluate your agents using the created dataset:
-
+**Step 2: Run an Experiment**
 ```bash
-# Run experiment with default name
+# Run experiment with default settings
 python experiments/run_experiment.py finance
 
-# Run experiment with custom name
-python experiments/run_experiment.py finance --experiment-name "finance-evaluation-v1"
+# Run with custom experiment name
+python experiments/run_experiment.py finance --experiment-name "my-experiment-v1"
 ```
 
-The experiment script:
-- Loads the dataset created by `create_galileo_dataset.py`
-- Runs each input through the LangGraph agent
-- Evaluates responses metrics defined in code
+This script:
+- Loads the dataset created in Step 1
+- Runs each input through the domain's agent
+- Evaluates responses with selected metrics
 - Logs all traces to Galileo as an experiment
+- Provides link to view results in Galileo Console
 
-### Experiment Workflow
+### Key Features
 
-1. **Create Dataset**: Use `create_galileo_dataset.py` to convert your domain's CSV into a Galileo dataset, if it doesn't exist already
-2. **Run Experiment**: Use `run_experiment.py` to evaluate your agent against the dataset
-3. **Analyze Results**: View experiment results and traces in the Galileo Console
+- **Multiple Dataset Options**: Select existing datasets, create from sample data, or upload CSV files
+- **Custom Naming**: Avoid conflicts with customizable dataset and experiment names
+- **Direct Links**: Click through to view datasets and results in Galileo Console
+- **Flexible Metrics**: Choose which metrics to evaluate for each run
+- **Tab Navigation**: Easy access alongside the Chat interface
+
+### 📖 Full Documentation
+
+For detailed information including:
+- Complete UI workflow guide
+- CLI usage examples
+- Dataset format requirements
+- Architecture and integration details
+- Available metrics
+
+See **[experiments/README.md](experiments/README.md)** for the full documentation.
 
 ## What's Coming Next
 
 - **Live deployment URL** for easy demo access without local setup
-- **Direct links to Galileo sessions/spans** from the UI
 - **Hallucination logging buttons** for interactive evaluation
 - **Galileo Protect integration** for safety and compliance monitoring
+- **Multi-domain UI support** (currently requires manual domain selection in code)
 
 ## Updates and Issues
 
