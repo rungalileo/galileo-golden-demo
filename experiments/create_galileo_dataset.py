@@ -11,29 +11,18 @@ Example:
 
 import sys
 import os
-import csv
 import argparse
 
 # Add parent directory to path to import domain_manager
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from galileo.datasets import create_dataset
 from domain_manager import DomainManager
 from setup_env import setup_environment
-
-
-def read_dataset_csv(dataset_file: str):
-    """Read the dataset.csv file and return list of input/output pairs."""
-    dataset = []
-    with open(dataset_file, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            if 'input' in row and 'output' in row:
-                dataset.append({
-                    'input': row['input'].strip(),
-                    'output': row['output'].strip()
-                })
-    return dataset
+from experiments.experiment_helpers import (
+    read_dataset_csv,
+    create_domain_dataset,
+    get_domain_dataset_name
+)
 
 
 def main():
@@ -72,8 +61,8 @@ def main():
         return
     
     # Create Galileo dataset
-    dataset_name = f"{args.domain.title()} Domain Dataset"
-    dataset_obj = create_dataset(name=dataset_name, content=dataset)
+    dataset_name = get_domain_dataset_name(args.domain)
+    dataset_obj = create_domain_dataset(args.domain, domain_config.dataset_file)
     
     print(f"Dataset created: {dataset_name}")
     print(f"ID: {dataset_obj.id}")
