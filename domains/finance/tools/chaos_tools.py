@@ -28,7 +28,7 @@ import logging
 import random
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
-from galileo import GalileoLogger
+# GalileoLogger import removed - all logging handled by GalileoCallback
 
 
 # =============================================================================
@@ -62,13 +62,13 @@ def _get_base_function(name: str):
     return _base_funcs[name]
 
 # Wrapper functions that lazy-load the base functions
-def _base_get_stock_price(ticker: str, galileo_logger=None) -> str:
+def _base_get_stock_price(ticker: str) -> str:
     """Wrapper for base get_stock_price with lazy import."""
-    return _get_base_function('get_stock_price')(ticker, galileo_logger)
+    return _get_base_function('get_stock_price')(ticker)
 
-def _base_get_market_news(ticker: str, limit: int = 5, galileo_logger=None) -> str:
+def _base_get_market_news(ticker: str, limit: int = 5) -> str:
     """Wrapper for base get_market_news with lazy import."""
-    return _get_base_function('get_market_news')(ticker, limit, galileo_logger)
+    return _get_base_function('get_market_news')(ticker, limit)
 
 def _get_mock_price_db():
     """Get the MOCK_PRICE_DB with lazy import."""
@@ -91,7 +91,7 @@ except ImportError:
 # CHAOS PATTERN 1: Tools without fallback handling
 # =============================================================================
 
-def get_stock_price_fast(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_stock_price_fast(ticker: str, ) -> str:
     """
     Get stock price quickly without overhead.
     
@@ -99,13 +99,12 @@ def get_stock_price_fast(ticker: str, galileo_logger: Optional[GalileoLogger] = 
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string containing minimal stock price data
     """
     logging.info(f"[CHAOS] get_stock_price_fast called (minimal data)")
-    result = json.loads(_base_get_stock_price(ticker, galileo_logger))
+    result = json.loads(_base_get_stock_price(ticker))
     
     # Return only essential fields - loses metadata
     minimal = {
@@ -116,7 +115,7 @@ def get_stock_price_fast(ticker: str, galileo_logger: Optional[GalileoLogger] = 
     return json.dumps(minimal)
 
 
-def fetch_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def fetch_stock_price(ticker: str, ) -> str:
     """
     Fetch the current stock price for a ticker.
     
@@ -124,7 +123,6 @@ def fetch_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = Non
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string containing the stock price
@@ -137,7 +135,7 @@ def fetch_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = Non
     # Only tries live data, no fallback to mock
     if use_live_data and LIVE_DATA_AVAILABLE:
         try:
-            return get_live_stock_price(ticker, galileo_logger)
+            return get_live_stock_price(ticker)
         except Exception as e:
             raise Exception(f"Failed to fetch live data for {ticker}: {e}")
     else:
@@ -151,7 +149,7 @@ def fetch_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = Non
 # CHAOS PATTERN 2: Tools with different return formats
 # =============================================================================
 
-def lookup_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def lookup_stock_price(ticker: str, ) -> str:
     """
     Look up the current price for a stock ticker.
     
@@ -159,17 +157,16 @@ def lookup_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = No
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability
         
     Returns:
         Plain string with just the price (e.g., "178.72")
     """
     logging.info(f"[CHAOS] lookup_stock_price called (returns string only)")
-    data = json.loads(_base_get_stock_price(ticker, galileo_logger))
+    data = json.loads(_base_get_stock_price(ticker))
     return str(data.get('price', 0))  # Just returns price, loses all other data
 
 
-def get_stock_data(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_stock_data(ticker: str, ) -> str:
     """
     Get comprehensive stock market data for a ticker.
     
@@ -177,13 +174,12 @@ def get_stock_data(ticker: str, galileo_logger: Optional[GalileoLogger] = None) 
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string with different field names (camelCase instead of snake_case)
     """
     logging.info(f"[CHAOS] get_stock_data called (different format)")
-    data = json.loads(_base_get_stock_price(ticker, galileo_logger))
+    data = json.loads(_base_get_stock_price(ticker))
     
     # Transform to different format - breaks downstream parsing
     return json.dumps({
@@ -202,7 +198,7 @@ def get_stock_data(ticker: str, galileo_logger: Optional[GalileoLogger] = None) 
 # CHAOS PATTERN 3: Tools with artificial latency
 # =============================================================================
 
-def get_current_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_current_stock_price(ticker: str, ) -> str:
     """
     Get the current stock price with real-time accuracy.
     
@@ -210,17 +206,16 @@ def get_current_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger]
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string containing the stock price
     """
     logging.info(f"[CHAOS] get_current_stock_price called (2s delay)")
     time.sleep(2)  # Unnecessary delay that hurts performance
-    return _base_get_stock_price(ticker, galileo_logger)
+    return _base_get_stock_price(ticker)
 
 
-def get_stock_price_accurate(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_stock_price_accurate(ticker: str, ) -> str:
     """
     Get highly accurate stock price with multiple validation checks.
     
@@ -228,7 +223,6 @@ def get_stock_price_accurate(ticker: str, galileo_logger: Optional[GalileoLogger
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string containing the stock price
@@ -236,14 +230,14 @@ def get_stock_price_accurate(ticker: str, galileo_logger: Optional[GalileoLogger
     delay = random.uniform(1.0, 5.0)
     logging.info(f"[CHAOS] get_stock_price_accurate called ({delay:.1f}s delay)")
     time.sleep(delay)  # Random delay makes performance unpredictable
-    return _base_get_stock_price(ticker, galileo_logger)
+    return _base_get_stock_price(ticker)
 
 
 # =============================================================================
 # CHAOS PATTERN 4: Tools with subtle bugs
 # =============================================================================
 
-def retrieve_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def retrieve_stock_price(ticker: str, ) -> str:
     """
     Retrieve the stock price for a given ticker symbol.
     
@@ -251,7 +245,6 @@ def retrieve_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = 
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string containing the stock price (might be wrong ticker!)
@@ -264,10 +257,10 @@ def retrieve_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = 
         actual_ticker = random.choice(wrong_tickers)
         logging.warning(f"[CHAOS] retrieve_stock_price returning wrong ticker: {actual_ticker} instead of {ticker}")
     
-    return _base_get_stock_price(actual_ticker, galileo_logger)
+    return _base_get_stock_price(actual_ticker)
 
 
-def query_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def query_stock_price(ticker: str, ) -> str:
     """
     Query the stock price from market data sources.
     
@@ -275,12 +268,11 @@ def query_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = Non
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string containing the stock price (might be corrupted!)
     """
-    result = json.loads(_base_get_stock_price(ticker, galileo_logger))
+    result = json.loads(_base_get_stock_price(ticker))
     
     # Subtle data corruption
     if random.random() < 0.05:  # 5% chance
@@ -302,7 +294,7 @@ def query_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = Non
 # CHAOS PATTERN 5: Inefficient but working tools
 # =============================================================================
 
-def get_multiple_stock_prices(tickers: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_multiple_stock_prices(tickers: str, ) -> str:
     """
     Get prices for multiple tickers at once.
     
@@ -311,7 +303,6 @@ def get_multiple_stock_prices(tickers: str, galileo_logger: Optional[GalileoLogg
     
     Args:
         tickers: Comma-separated ticker symbols (e.g., "AAPL,MSFT,GOOGL")
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string with array of stock prices
@@ -323,7 +314,7 @@ def get_multiple_stock_prices(tickers: str, galileo_logger: Optional[GalileoLogg
     for ticker in ticker_list:
         time.sleep(0.5)  # Adds latency per ticker
         try:
-            data = json.loads(_base_get_stock_price(ticker, galileo_logger))
+            data = json.loads(_base_get_stock_price(ticker))
             results.append(data)
         except Exception as e:
             results.append({"ticker": ticker, "error": str(e)})
@@ -331,7 +322,7 @@ def get_multiple_stock_prices(tickers: str, galileo_logger: Optional[GalileoLogg
     return json.dumps({"stocks": results, "count": len(results)})
 
 
-def get_stock_with_news(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_stock_with_news(ticker: str, ) -> str:
     """
     Get stock price along with latest news.
     
@@ -339,7 +330,6 @@ def get_stock_with_news(ticker: str, galileo_logger: Optional[GalileoLogger] = N
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string with both price and news (inefficiently fetched)
@@ -347,9 +337,9 @@ def get_stock_with_news(ticker: str, galileo_logger: Optional[GalileoLogger] = N
     logging.info(f"[CHAOS] get_stock_with_news called (inefficient)")
     
     # Inefficiently makes two separate calls
-    price_data = json.loads(_base_get_stock_price(ticker, galileo_logger))
+    price_data = json.loads(_base_get_stock_price(ticker))
     time.sleep(1)  # Artificial delay between calls
-    news_data = json.loads(_base_get_market_news(ticker, limit=3, galileo_logger=galileo_logger))
+    news_data = json.loads(_base_get_market_news(ticker, limit=3))
     
     return json.dumps({
         "stock": price_data,
@@ -362,7 +352,7 @@ def get_stock_with_news(ticker: str, galileo_logger: Optional[GalileoLogger] = N
 # CHAOS PATTERN 6: API Schema Evolution (realistic API changes)
 # =============================================================================
 
-def get_stock_price_v2(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_stock_price_v2(ticker: str, ) -> str:
     """
     Get stock price using v2 API format.
     
@@ -371,13 +361,12 @@ def get_stock_price_v2(ticker: str, galileo_logger: Optional[GalileoLogger] = No
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string with v2 wrapper structure
     """
     logging.info(f"[CHAOS] get_stock_price_v2 called (wrapped format)")
-    result = json.loads(_base_get_stock_price(ticker, galileo_logger))
+    result = json.loads(_base_get_stock_price(ticker))
     
     # V2 wraps everything in a "data" object with metadata
     v2_response = {
@@ -393,7 +382,7 @@ def get_stock_price_v2(ticker: str, galileo_logger: Optional[GalileoLogger] = No
     return json.dumps(v2_response)
 
 
-def get_stock_price_unstable_schema(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_stock_price_unstable_schema(ticker: str, ) -> str:
     """
     Get stock price from API with unstable schema.
     
@@ -403,13 +392,12 @@ def get_stock_price_unstable_schema(ticker: str, galileo_logger: Optional[Galile
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string in either v1 or v2 format (unpredictable!)
     """
     logging.info(f"[CHAOS] get_stock_price_unstable_schema called")
-    result = json.loads(_base_get_stock_price(ticker, galileo_logger))
+    result = json.loads(_base_get_stock_price(ticker))
     
     if random.random() < 0.3:  # 30% chance of v2 format
         # V2: Nested structure with extra metadata
@@ -438,7 +426,7 @@ def get_stock_price_unstable_schema(ticker: str, galileo_logger: Optional[Galile
         return json.dumps(result)
 
 
-def get_stock_price_evolving(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_stock_price_evolving(ticker: str, ) -> str:
     """
     Get stock price from evolving API.
     
@@ -448,13 +436,12 @@ def get_stock_price_evolving(ticker: str, galileo_logger: Optional[GalileoLogger
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string with occasional surprise fields
     """
     logging.info(f"[CHAOS] get_stock_price_evolving called")
-    result = json.loads(_base_get_stock_price(ticker, galileo_logger))
+    result = json.loads(_base_get_stock_price(ticker))
     
     if random.random() < 0.2:  # 20% chance of new fields
         # Add "beta" fields that weren't in original API
@@ -471,7 +458,7 @@ def get_stock_price_evolving(ticker: str, galileo_logger: Optional[GalileoLogger
     return json.dumps(result)
 
 
-def get_stock_price_deprecated(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_stock_price_deprecated(ticker: str, ) -> str:
     """
     Get stock price from API that's deprecating fields.
     
@@ -481,13 +468,12 @@ def get_stock_price_deprecated(ticker: str, galileo_logger: Optional[GalileoLogg
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string with randomly missing fields
     """
     logging.info(f"[CHAOS] get_stock_price_deprecated called")
-    result = json.loads(_base_get_stock_price(ticker, galileo_logger))
+    result = json.loads(_base_get_stock_price(ticker))
     
     if random.random() < 0.15:  # 15% chance of field removal
         # Remove fields that are "deprecated"
@@ -505,7 +491,7 @@ def get_stock_price_deprecated(ticker: str, galileo_logger: Optional[GalileoLogg
     return json.dumps(result)
 
 
-def get_stock_price_breaking_change(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_stock_price_breaking_change(ticker: str, ) -> str:
     """
     Get stock price from API with breaking changes.
     
@@ -518,13 +504,12 @@ def get_stock_price_breaking_change(ticker: str, galileo_logger: Optional[Galile
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string with type-changed fields
     """
     logging.info(f"[CHAOS] get_stock_price_breaking_change called")
-    result = json.loads(_base_get_stock_price(ticker, galileo_logger))
+    result = json.loads(_base_get_stock_price(ticker))
     
     if random.random() < 0.1:  # 10% chance of type changes
         breaking_change = random.choice(["numbers_to_strings", "truncate_floats", "rename_fields"])
@@ -563,7 +548,7 @@ def get_stock_price_breaking_change(ticker: str, galileo_logger: Optional[Galile
 # CHAOS PATTERN 7: Direct API access (bypasses wrappers)
 # =============================================================================
 
-def get_stock_price_yfinance_direct(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_stock_price_yfinance_direct(ticker: str, ) -> str:
     """
     Get stock price directly from Yahoo Finance.
     
@@ -571,7 +556,6 @@ def get_stock_price_yfinance_direct(ticker: str, galileo_logger: Optional[Galile
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string containing the stock price
@@ -593,7 +577,7 @@ def get_stock_price_yfinance_direct(ticker: str, galileo_logger: Optional[Galile
         raise Exception(f"yfinance API failed: {e}")
 
 
-def get_stock_price_alpha_vantage_direct(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_stock_price_alpha_vantage_direct(ticker: str, ) -> str:
     """
     Get stock price directly from Alpha Vantage.
     
@@ -601,7 +585,6 @@ def get_stock_price_alpha_vantage_direct(ticker: str, galileo_logger: Optional[G
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string containing the stock price

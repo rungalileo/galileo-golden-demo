@@ -16,7 +16,7 @@ import requests
 import logging
 import random
 from typing import Optional
-from galileo import GalileoLogger
+# GalileoLogger import removed - all logging handled by GalileoCallback
 import streamlit as st
 
 
@@ -214,14 +214,13 @@ def _add_success_metadata(result: dict, ticker: str, data_source: str = "mock") 
     }
     return result_with_metadata
 
-def get_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_stock_price(ticker: str) -> str:
     """
     Get the current stock price and other market data for a given ticker symbol.
     Uses live data if USE_LIVE_DATA=true, otherwise uses mock database.
     
     Args:
         ticker: The ticker symbol to look up
-        galileo_logger: Galileo logger for observability (optional)
         
     Returns:
         JSON string containing the stock price and market data
@@ -265,7 +264,7 @@ def get_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None)
     if use_live_data and LIVE_DATA_AVAILABLE:
         try:
             logging.info(f"Fetching live data for {ticker}")
-            result_json = get_live_stock_price(ticker, galileo_logger)
+            result_json = get_live_stock_price(ticker)
             result_dict = json.loads(result_json)
             
             # Chaos: Maybe corrupt the data
@@ -327,41 +326,7 @@ def get_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None)
         return json.dumps(result)
 
 
-def _log_purchase_to_galileo(galileo_logger: GalileoLogger, ticker: str, quantity: int, price: float, order_id: str, start_time: float) -> None:
-    """
-    Helper function to log stock purchase to Galileo.
-    
-    Args:
-        galileo_logger: Galileo logger for observability
-        ticker: The ticker symbol being purchased
-        quantity: Number of shares being purchased
-        price: Price per share
-        order_id: The generated order ID
-        start_time: The start time of the purchase operation
-    """
-    galileo_logger.add_tool_span(
-        input=json.dumps({
-            "ticker": ticker,
-            "quantity": quantity,
-            "price": price
-        }),
-        output=json.dumps({
-            "order_id": order_id,
-            "total_cost": quantity * price,
-            "fees": 10.00
-        }),
-        name="Purchase Stocks",
-        duration_ns=int((time.time() - start_time) * 1000000),
-        metadata={
-            "ticker": ticker,
-            "quantity": str(quantity),
-            "price": str(price),
-            "order_id": order_id
-        },
-        tags=["stocks", "purchase", "trade"]
-    )
-
-def purchase_stocks(ticker: str, quantity: int, price: float, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def purchase_stocks(ticker: str, quantity: int, price: float) -> str:
     """
     Simulate purchasing stocks with a given ticker symbol, quantity, and price.
     
@@ -369,7 +334,6 @@ def purchase_stocks(ticker: str, quantity: int, price: float, galileo_logger: Op
         ticker: The ticker symbol to purchase
         quantity: The number of shares to purchase
         price: The price per share
-        galileo_logger: Galileo logger for observability (optional)
         
     Returns:
         JSON string containing the order confirmation
@@ -410,41 +374,7 @@ def purchase_stocks(ticker: str, quantity: int, price: float, galileo_logger: Op
         raise
 
 
-def _log_sale_to_galileo(galileo_logger: GalileoLogger, ticker: str, quantity: int, price: float, order_id: str, start_time: float) -> None:
-    """
-    Helper function to log stock sale to Galileo.
-    
-    Args:
-        galileo_logger: Galileo logger for observability
-        ticker: The ticker symbol being sold
-        quantity: Number of shares being sold
-        price: Price per share
-        order_id: The generated order ID
-        start_time: The start time of the sale operation
-    """
-    galileo_logger.add_tool_span(
-        input=json.dumps({
-            "ticker": ticker,
-            "quantity": quantity,
-            "price": price
-        }),
-        output=json.dumps({
-            "order_id": order_id,
-            "total_sale": quantity * price,
-            "fees": 14.99
-        }),
-        name="Sell Stocks",
-        duration_ns=int((time.time() - start_time) * 1000000),
-        metadata={
-            "ticker": ticker,
-            "quantity": str(quantity),
-            "sale": str(price),
-            "order_id": order_id
-        },
-        tags=["stocks", "sale", "trade"]
-    )
-
-def sell_stocks(ticker: str, quantity: int, price: float, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def sell_stocks(ticker: str, quantity: int, price: float) -> str:
     """
     Simulate selling stocks with a given ticker symbol, quantity, and price.
     
@@ -452,7 +382,6 @@ def sell_stocks(ticker: str, quantity: int, price: float, galileo_logger: Option
         ticker: The ticker symbol to sell
         quantity: The number of shares to sell
         price: The price per share
-        galileo_logger: Galileo logger for observability (optional)
         
     Returns:
         JSON string containing the order confirmation
@@ -493,7 +422,7 @@ def sell_stocks(ticker: str, quantity: int, price: float, galileo_logger: Option
         raise
 
 
-def get_market_news(ticker: Optional[str] = None, limit: int = 5, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_market_news(ticker: Optional[str] = None, limit: int = 5) -> str:
     """
     Get the latest market news for a specific stock or general market news.
     Uses live news APIs if enabled, otherwise returns a message.
@@ -501,7 +430,6 @@ def get_market_news(ticker: Optional[str] = None, limit: int = 5, galileo_logger
     Args:
         ticker: Optional stock ticker to get news for (e.g., 'AAPL', 'TSLA')
         limit: Number of news articles to return (default: 5)
-        galileo_logger: Galileo logger for observability (optional)
         
     Returns:
         JSON string containing news articles with titles, summaries, and sentiment
@@ -514,7 +442,7 @@ def get_market_news(ticker: Optional[str] = None, limit: int = 5, galileo_logger
     if use_live_data and LIVE_DATA_AVAILABLE:
         try:
             logging.info(f"Fetching live news for {ticker or 'market'}")
-            return get_live_market_news(ticker, limit, galileo_logger)
+            return get_live_market_news(ticker, limit)
         except Exception as e:
             logging.warning(f"Live news failed: {e}")
             # Fall through to mock response
@@ -543,20 +471,15 @@ def get_market_news(ticker: Optional[str] = None, limit: int = 5, galileo_logger
     return json.dumps(result)
 
 
-def get_account_information(galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_account_information() -> str:
     """
     Get brokerage account information and portfolio holdings.
     
     ⚠️ GUARDRAIL TEST: This returns PII that should be caught by guardrails!
     
-    Args:
-        galileo_logger: Galileo logger for observability (optional)
-        
     Returns:
         JSON string containing account information
     """
-    start_time = time.time()
-    
     try:
         # Import fake database
         import sys
@@ -572,34 +495,11 @@ def get_account_information(galileo_logger: Optional[GalileoLogger] = None) -> s
         # Return formatted with PII - this should trigger output guardrails
         result = format_account_info(info, include_pii=True)
         
-        if galileo_logger:
-            galileo_logger.add_tool_span(
-                input="{}",
-                output=result,
-                name="Get Account Information",
-                duration_ns=int((time.time() - start_time) * 1000000),
-                metadata={
-                    "contains_pii": "true",
-                    "warning": "This output should trigger PII guardrails"
-                },
-                tags=["account", "pii", "guardrail_test"]
-            )
-        
         return result
         
     except Exception as e:
         error_msg = f"Error retrieving account information: {str(e)}"
         logging.error(error_msg)
-        
-        if galileo_logger:
-            galileo_logger.add_tool_span(
-                input="{}",
-                output=error_msg,
-                name="Get Account Information",
-                duration_ns=int((time.time() - start_time) * 1000000),
-                metadata={"error": str(e)},
-                tags=["account", "error"]
-            )
         
         return json.dumps({"error": error_msg})
 

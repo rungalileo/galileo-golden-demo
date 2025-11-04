@@ -11,7 +11,7 @@ import json
 import time
 import logging
 from typing import Optional, Dict, Any
-from galileo import GalileoLogger
+# GalileoLogger import removed - all logging handled by GalileoCallback
 
 # Import libraries (will work if installed)
 try:
@@ -244,7 +244,7 @@ def get_market_news_newsapi(api_key: str, query: str = "stock market", limit: in
 # Unified Interface with Fallback
 # =============================================================================
 
-def get_live_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_live_stock_price(ticker: str) -> str:
     """
     Get live stock price with automatic fallback or specific source
     
@@ -256,7 +256,6 @@ def get_live_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = 
     
     Args:
         ticker: Stock ticker symbol
-        galileo_logger: Galileo logger for observability
         
     Returns:
         JSON string with stock data
@@ -274,19 +273,6 @@ def get_live_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = 
         try:
             logging.info(f"Fetching {ticker} from Yahoo Finance...")
             result = get_stock_price_yfinance(ticker)
-            if galileo_logger:
-                galileo_logger.add_tool_span(
-                    input=json.dumps({"ticker": ticker}),
-                    output=json.dumps(result),
-                    name="Get Stock Price (Yahoo Finance)",
-                    duration_ns=int((time.time() - start_time) * 1000000),
-                    metadata={
-                        "ticker": ticker,
-                        "price": str(result["price"]),
-                        "source": "yfinance"
-                    },
-                    tags=["stocks", "price", "live", "yfinance"]
-                )
             return json.dumps(result), None
         except Exception as e:
             return None, f"Yahoo Finance: {str(e)}"
@@ -300,19 +286,6 @@ def get_live_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = 
         try:
             logging.info(f"Fetching {ticker} from Alpha Vantage...")
             result = get_stock_price_alpha_vantage(ticker, alpha_vantage_key)
-            if galileo_logger:
-                galileo_logger.add_tool_span(
-                    input=json.dumps({"ticker": ticker}),
-                    output=json.dumps(result),
-                    name="Get Stock Price (Alpha Vantage)",
-                    duration_ns=int((time.time() - start_time) * 1000000),
-                    metadata={
-                        "ticker": ticker,
-                        "price": str(result["price"]),
-                        "source": "alpha_vantage"
-                    },
-                    tags=["stocks", "price", "live", "alpha_vantage"]
-                )
             return json.dumps(result), None
         except Exception as e:
             return None, f"Alpha Vantage: {str(e)}"
@@ -354,15 +327,13 @@ def get_live_stock_price(ticker: str, galileo_logger: Optional[GalileoLogger] = 
     raise Exception(error_msg)
 
 
-def get_live_market_news(ticker: Optional[str] = None, limit: int = 5, 
-                          galileo_logger: Optional[GalileoLogger] = None) -> str:
+def get_live_market_news(ticker: Optional[str] = None, limit: int = 5) -> str:
     """
     Get live market news with automatic fallback
     
     Args:
         ticker: Optional ticker to get news for
         limit: Number of articles
-        galileo_logger: Galileo logger
         
     Returns:
         JSON string with news articles
@@ -376,15 +347,6 @@ def get_live_market_news(ticker: Optional[str] = None, limit: int = 5,
             logging.info("Fetching news from Alpha Vantage...")
             result = get_market_news_alpha_vantage(alpha_vantage_key, tickers=ticker, limit=limit)
             
-            if galileo_logger:
-                galileo_logger.add_tool_span(
-                    input=json.dumps({"ticker": ticker, "limit": limit}),
-                    output=json.dumps(result),
-                    name="Get Market News",
-                    duration_ns=int((time.time() - start_time) * 1000000),
-                    tags=["news", "market", "alpha_vantage"]
-                )
-            
             return json.dumps(result)
         except Exception as e:
             logging.warning(f"Alpha Vantage News failed: {e}")
@@ -396,15 +358,6 @@ def get_live_market_news(ticker: Optional[str] = None, limit: int = 5,
             query = f"{ticker} stock" if ticker else "stock market"
             logging.info(f"Fetching news from NewsAPI with query: {query}")
             result = get_market_news_newsapi(newsapi_key, query=query, limit=limit)
-            
-            if galileo_logger:
-                galileo_logger.add_tool_span(
-                    input=json.dumps({"query": query, "limit": limit}),
-                    output=json.dumps(result),
-                    name="Get Market News",
-                    duration_ns=int((time.time() - start_time) * 1000000),
-                    tags=["news", "market", "newsapi"]
-                )
             
             return json.dumps(result)
         except Exception as e:
