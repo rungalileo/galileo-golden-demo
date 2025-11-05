@@ -6,7 +6,7 @@ import csv
 from typing import List, Dict, Any, Optional
 from galileo.experiments import run_experiment
 from galileo.datasets import get_dataset, create_dataset, list_datasets
-from galileo.schema.metrics import GalileoScorers
+from galileo_core.schemas.shared.scorers.scorer_name import ScorerName as GalileoScorers
 from galileo import galileo_context
 from galileo.handlers.langchain import GalileoCallback
 
