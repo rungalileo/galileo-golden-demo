@@ -11,6 +11,7 @@ langchain-pinecone
 pinecone
 langchain-text-splitters
 langchain-community
+langchain-classic
 pyyaml
 toml
 unstructured
