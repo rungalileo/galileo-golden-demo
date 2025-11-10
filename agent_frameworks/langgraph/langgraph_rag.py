@@ -6,12 +6,12 @@ Uses Pinecone for vector storage with environment-based configuration.
 import os
 from pathlib import Path
 from typing import Optional
-from langchain import hub
+from langchain_classic import hub
 from langchain_pinecone import PineconeVectorStore
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_core.tools import tool
-from langchain.chains import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_classic.chains import create_retrieval_chain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from pinecone import Pinecone
 from domain_manager import DomainManager
