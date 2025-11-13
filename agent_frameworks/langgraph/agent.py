@@ -5,10 +5,11 @@ import sys
 import os
 import importlib.util
 import json
-from typing import Annotated, TypedDict, List, Dict, Any
+from typing import Annotated, TypedDict, List, Dict, Any, Optional
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
 from langchain_core.tools import StructuredTool
+from langchain_core.runnables import RunnableLambda
 from langchain_openai import ChatOpenAI
 from langgraph.graph import START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -16,10 +17,12 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from base_agent import BaseAgent
 from domain_manager import DomainConfig
 from galileo.handlers.langchain import GalileoCallback
+from galileo.handlers.langchain.tool import ProtectTool, ProtectParser
 
 # Import RAG retrieval function
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from .langgraph_rag import create_domain_rag_tool
+from helpers.protect_helpers import create_rulesets_from_config
 
 
 # Define the state for our graph
@@ -32,9 +35,11 @@ class LangGraphAgent(BaseAgent):
     LangGraph implementation of BaseAgent
     """
     
-    def __init__(self, domain_config: DomainConfig, session_id: str = None):
+    def __init__(self, domain_config: DomainConfig, session_id: str = None, protect_stage_id: Optional[str] = None):
         super().__init__(domain_config, session_id)
         self.graph = None
+        self.protect_stage_id = protect_stage_id
+        self.protect_enabled = False
         self.config = {"configurable": {"thread_id": self.session_id}, "callbacks": [GalileoCallback()]}
     
     def load_tools(self) -> None:
@@ -139,6 +144,12 @@ class LangGraphAgent(BaseAgent):
 
         return graph_builder.compile()
     
+    def set_protect(self, enabled: bool, stage_id: Optional[str] = None):
+        """Enable or disable Protect for this agent"""
+        self.protect_enabled = enabled
+        if stage_id:
+            self.protect_stage_id = stage_id
+    
     def process_query(self, messages: List[Dict[str, str]]) -> str:
         """Process a user query and return a response"""
         try:
@@ -159,15 +170,61 @@ class LangGraphAgent(BaseAgent):
                     from langchain_core.messages import AIMessage
                     langchain_messages.append(AIMessage(content=msg["content"]))
             
-            # Process the query
-            initial_state = {"messages": langchain_messages}
-            result = self.graph.invoke(initial_state, self.config)
+            # Get the user's latest query for Protect check
+            latest_query = messages[-1]["content"] if messages else ""
+            
+            # If Protect is enabled, wrap the graph invocation with ProtectTool
+            if self.protect_enabled and self.protect_stage_id and latest_query:
+                # Create rulesets from domain config
+                rulesets = create_rulesets_from_config(self.domain_config.config)
+                
+                # Create ProtectTool with stage_id and prioritized_rulesets
+                protect_tool = ProtectTool(
+                    stage_id=self.protect_stage_id,
+                    prioritized_rulesets=rulesets if rulesets else None
+                )
+                
+                # Create a wrapper function that invokes the graph
+                # ProtectParser will call this with the text if not triggered
+                def graph_chain_func(text_or_dict):
+                    # The parser calls chain.invoke(text), so text_or_dict is the input text
+                    # We need to process the full conversation with the graph
+                    initial_state = {"messages": langchain_messages}
+                    result = self.graph.invoke(initial_state, self.config)
+                    # Return the AIMessage object (ProtectParser expects a return value)
+                    return result["messages"][-1] if result["messages"] else ""
+                
+                # Wrap the function in a RunnableLambda to make it a proper LangChain Runnable
+                graph_chain = RunnableLambda(graph_chain_func)
+                
+                # Create ProtectParser with the graph chain (now a Runnable)
+                protect_parser = ProtectParser(chain=graph_chain, echo_output=False)
+                
+                # Create protected chain
+                protected_chain = protect_tool | protect_parser.parser
+                
+                # Invoke with Protect
+                response = protected_chain.invoke({"input": latest_query}, config=self.config)
+                
+                # Check response type
+                if isinstance(response, str):
+                    # Protect intervened with override message
+                    return response
+                else:
+                    # LLM chain was executed
+                    return response.content if hasattr(response, 'content') else str(response)
+            else:
+                # No Protect, process normally
+                initial_state = {"messages": langchain_messages}
+                result = self.graph.invoke(initial_state, self.config)
 
-            # Return the last message content
-            if result["messages"]:
-                return result["messages"][-1].content
-            return "No response generated"
+                # Return the last message content
+                if result["messages"]:
+                    return result["messages"][-1].content
+                return "No response generated"
             
         except Exception as e:
             print(f"[ERROR] Error processing query: {e}")
+            import traceback
+            traceback.print_exc()
             return f"Error processing your request: {str(e)}"

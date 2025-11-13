@@ -24,6 +24,7 @@ def setup_environment():
             "GALILEO_API_KEY": secrets.get("galileo_api_key", ""),
             "GALILEO_PROJECT": secrets.get("galileo_project", ""),
             "GALILEO_LOG_STREAM": secrets.get("galileo_log_stream", ""),
+            "GALILEO_STAGE": secrets.get("galileo_stage", "protect-prompt-injection-stage"),
             "GALILEO_CONSOLE_URL": secrets.get("galileo_console_url", "https://app.galileo.ai"),
             "ADMIN_KEY": secrets.get("admin_key", ""),
             "PINECONE_API_KEY_LOCAL": secrets.get("pinecone_api_key_local", ""),

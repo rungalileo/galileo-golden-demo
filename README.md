@@ -332,11 +332,58 @@ For detailed information including:
 
 See **[experiments/README.md](experiments/README.md)** for the full documentation.
 
+## Galileo Protect Integration
+
+The demo includes **Galileo Protect** for runtime protection against harmful content. Protect can be enabled from the sidebar and is fully configurable per domain.
+
+### How It Works
+
+1. **Enable in UI**: Toggle "Enable Prompt Injection Protection" in the sidebar
+2. **Automatic Setup**: The app automatically creates and configures a Protect stage
+3. **Runtime Protection**: Each query is checked against configured rules before processing
+4. **Observability**: All Protect checks are logged to Galileo along with agent traces
+
+### Configuring Protect for Your Domain
+
+Add a `protect` section to your domain's `config.yaml`:
+
+```yaml
+# Protect configuration
+protect:
+  metrics:
+    - name: "prompt_injection"
+      operator: "any"
+      target_values:
+        - "impersonation"
+        - "obfuscation"
+        - "simple_instruction"
+        - "few_shot"
+        - "new_context"
+    - name: "input_toxicity"
+      operator: "gt"
+      threshold: 0.95
+  messages:
+    - "I'm sorry, but I cannot process that request."
+    - "I've detected harmful content. Please rephrase your query."
+```
+
+### Features
+
+- **Domain-Specific Rules**: Each domain can define its own protection rules
+- **Multiple Metrics**: Combine multiple metrics (prompt injection, toxicity, PII, etc.) in a single ruleset
+- **Custom Messages**: Define custom override messages when protection triggers
+- **LangChain Integration**: Uses native LangChain `ProtectTool` for proper trace logging
+- **Automatic Logging**: All Protect checks logged to Galileo with full observability
+
+### Learn More
+
+- **[Protect Overview](https://v2docs.galileo.ai/concepts/protect/overview)** - Complete guide to runtime protection concepts and metrics
+- **[LangChain Integration](https://v2docs.galileo.ai/sdk-api/third-party-integrations/langchain/protect)** - Using Protect with LangChain and LangGraph
+
 ## What's Coming Next
 
 - **Live deployment URL** for easy demo access without local setup
 - **Hallucination logging buttons** for interactive evaluation
-- **Galileo Protect integration** for safety and compliance monitoring
 - **Multi-domain UI support** (currently requires manual domain selection in code)
 
 ## Updates and Issues

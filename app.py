@@ -10,6 +10,7 @@ from setup_env import setup_environment
 from langchain_core.messages import AIMessage, HumanMessage
 from agent_frameworks.langgraph.langgraph_rag import get_domain_rag_system
 from helpers.galileo_api_helpers import get_galileo_app_url, get_galileo_project_id, get_galileo_log_stream_id
+from helpers.protect_helpers import get_or_create_protect_stage
 from experiments.experiment_helpers import (
     get_all_datasets,
     get_dataset_by_name,
@@ -146,6 +147,17 @@ def process_input_for_simple_app(user_input: str | None):
 
         with st.chat_message("assistant"):
             with st.spinner("Processing..."):
+                # Set Protect on the agent if enabled
+                if st.session_state.get("protect_enabled", False):
+                    stage_id = st.session_state.get("protect_stage_id")
+                    if stage_id:
+                        st.session_state.agent.set_protect(True, stage_id)
+                    else:
+                        st.warning("Protect stage not initialized. Processing query normally.")
+                        st.session_state.agent.set_protect(False)
+                else:
+                    st.session_state.agent.set_protect(False)
+                
                 # Convert session state messages to the format expected by the agent
                 conversation_messages = []
                 for msg_data in st.session_state.messages:
@@ -157,7 +169,7 @@ def process_input_for_simple_app(user_input: str | None):
                             conversation_messages.append({"role": "assistant", "content": message.content})
                 
 
-                # Get the actual response from the agent
+                # Get the actual response from the agent (Protect is handled inside)
                 response = st.session_state.agent.process_query(conversation_messages)
 
                 # Create and display AI message
@@ -606,6 +618,13 @@ def multi_domain_agent_app():
         domain_info = factory.get_domain_info(DOMAIN)
         st.session_state.domain_config = domain_info
     
+    # Load full domain config for Protect settings
+    if "full_domain_config" not in st.session_state:
+        from domain_manager import DomainManager
+        dm = DomainManager()
+        full_config = dm.load_domain_config(DOMAIN)
+        st.session_state.full_domain_config = full_config.config
+    
     # Create tabs at the top of the main page
     tab1, tab2 = st.tabs(["💬 Chat", "🧪 Experiments"])
     
@@ -642,6 +661,66 @@ def multi_domain_agent_app():
                     st.error(f"Error: {str(e)}")
             else:
                 st.write("Galileo project/log stream not configured")
+            
+            # Add Galileo Protect toggle
+            st.divider()
+            st.subheader("🛡️ Galileo Protect")
+            
+            # Initialize protect_enabled in session state (default to False)
+            if "protect_enabled" not in st.session_state:
+                st.session_state.protect_enabled = False
+            
+            # Toggle for Protect
+            protect_enabled = st.checkbox(
+                "Enable Prompt Injection Protection",
+                value=st.session_state.protect_enabled,
+                help="Enable Galileo Protect to detect and block prompt injection attempts"
+            )
+            st.session_state.protect_enabled = protect_enabled
+            
+            # Show current Protect configuration from domain config
+            if protect_enabled:
+                protect_config = st.session_state.get("full_domain_config", {}).get("protect", {})
+                if protect_config:
+                    metrics = protect_config.get("metrics", [])
+                    if metrics:
+                        with st.expander("Protect Configuration"):
+                            st.write("**Active Metrics:**")
+                            for metric in metrics:
+                                metric_name = metric.get("name", "Unknown")
+                                operator = metric.get("operator", "")
+                                
+                                # Display based on metric type
+                                if "target_values" in metric:
+                                    target_values = metric["target_values"]
+                                    st.write(f"- **{metric_name}** ({operator}): {', '.join(target_values)}")
+                                elif "threshold" in metric:
+                                    threshold = metric["threshold"]
+                                    st.write(f"- **{metric_name}** ({operator}): {threshold}")
+                                else:
+                                    st.write(f"- **{metric_name}** ({operator})")
+                            
+                            messages = protect_config.get("messages", [])
+                            if messages:
+                                st.write("")
+                                st.write("**Custom Messages:**")
+                                for i, msg in enumerate(messages, 1):
+                                    st.write(f"{i}. {msg}")
+            
+            if protect_enabled:
+                st.info("🛡️ Protect is active. Prompt injection attempts will be blocked.")
+                
+                # Initialize stage if needed
+                if "protect_stage_id" not in st.session_state and project_name:
+                    try:
+                        with st.spinner("Setting up Protect stage..."):
+                            stage_id = get_or_create_protect_stage(project_name)
+                            st.session_state.protect_stage_id = stage_id
+                    except Exception as e:
+                        st.error(f"Failed to setup Protect stage: {str(e)}")
+                        st.session_state.protect_enabled = False
+            else:
+                st.info("Protect is disabled. All queries will be processed normally.")
     
     # Experiments Tab
     with tab2:
