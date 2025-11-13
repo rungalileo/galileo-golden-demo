@@ -204,7 +204,7 @@ class LangGraphAgent(BaseAgent):
                 protected_chain = protect_tool | protect_parser.parser
                 
                 # Invoke with Protect
-                response = protected_chain.invoke({"input": latest_query}, config=self.config)
+                response = protected_chain.invoke(latest_query, config=self.config)
                 
                 # Check response type
                 if isinstance(response, str):
