@@ -76,6 +76,11 @@ def display_chat_history():
             elif isinstance(message_data, AIMessage):
                 with st.chat_message("assistant"):
                     st.write(escape_dollar_signs(message_data.content))
+    
+    # Show loading indicator if currently processing
+    if st.session_state.get("processing", False):
+        with st.chat_message("assistant"):
+            st.write("Thinking...")
 
 
 def show_example_queries(query_1: str, query_2: str):
@@ -141,47 +146,43 @@ def process_input_for_simple_app(user_input: str | None):
         user_message = HumanMessage(content=user_input)
         st.session_state.messages.append({"message": user_message, "agent": "user"})
 
-        # Display the user message immediately
-        with st.chat_message("user"):
-            st.write(escape_dollar_signs(user_input))
+        # Set processing flag and rerun to show the loading state
+        st.session_state.processing = True
+        st.rerun()
+    
+    # Check if we need to process a message
+    if st.session_state.get("processing", False):
+        # Set Protect on the agent if enabled
+        if st.session_state.get("protect_enabled", False):
+            stage_id = st.session_state.get("protect_stage_id")
+            if stage_id:
+                st.session_state.agent.set_protect(True, stage_id)
+            else:
+                st.session_state.agent.set_protect(False)
+        else:
+            st.session_state.agent.set_protect(False)
+        
+        # Convert session state messages to the format expected by the agent
+        conversation_messages = []
+        for msg_data in st.session_state.messages:
+            if isinstance(msg_data, dict) and "message" in msg_data:
+                message = msg_data["message"]
+                if isinstance(message, HumanMessage):
+                    conversation_messages.append({"role": "user", "content": message.content})
+                elif isinstance(message, AIMessage):
+                    conversation_messages.append({"role": "assistant", "content": message.content})
+        
+        # Get the actual response from the agent (Protect is handled inside)
+        response = st.session_state.agent.process_query(conversation_messages)
 
-        with st.chat_message("assistant"):
-            with st.spinner("Processing..."):
-                # Set Protect on the agent if enabled
-                if st.session_state.get("protect_enabled", False):
-                    stage_id = st.session_state.get("protect_stage_id")
-                    if stage_id:
-                        st.session_state.agent.set_protect(True, stage_id)
-                    else:
-                        st.warning("Protect stage not initialized. Processing query normally.")
-                        st.session_state.agent.set_protect(False)
-                else:
-                    st.session_state.agent.set_protect(False)
-                
-                # Convert session state messages to the format expected by the agent
-                conversation_messages = []
-                for msg_data in st.session_state.messages:
-                    if isinstance(msg_data, dict) and "message" in msg_data:
-                        message = msg_data["message"]
-                        if isinstance(message, HumanMessage):
-                            conversation_messages.append({"role": "user", "content": message.content})
-                        elif isinstance(message, AIMessage):
-                            conversation_messages.append({"role": "assistant", "content": message.content})
-                
-
-                # Get the actual response from the agent (Protect is handled inside)
-                response = st.session_state.agent.process_query(conversation_messages)
-
-                # Create and display AI message
-                ai_message = AIMessage(content=response)
-                st.session_state.messages.append(
-                    {"message": ai_message, "agent": "assistant"}
-                )
-
-                # Display response
-                st.write(escape_dollar_signs(response))
-
-        # Rerun to update chat history
+        # Create AI message and add to history
+        ai_message = AIMessage(content=response)
+        st.session_state.messages.append(
+            {"message": ai_message, "agent": "assistant"}
+        )
+        
+        # Clear processing flag and rerun to show the response
+        st.session_state.processing = False
         st.rerun()
 
 
