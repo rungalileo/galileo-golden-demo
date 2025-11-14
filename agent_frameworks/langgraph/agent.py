@@ -190,7 +190,7 @@ class LangGraphAgent(BaseAgent):
                     # The parser calls chain.invoke(text), so text_or_dict is the input text
                     # We need to process the full conversation with the graph
                     initial_state = {"messages": langchain_messages}
-                    result = self.graph.invoke(initial_state, self.config)
+                    result = self.graph.invoke(initial_state)
                     # Return the AIMessage object (ProtectParser expects a return value)
                     return result["messages"][-1] if result["messages"] else ""
                 
@@ -204,6 +204,7 @@ class LangGraphAgent(BaseAgent):
                 protected_chain = protect_tool | protect_parser.parser
                 
                 # Invoke with Protect
+                # do i need to remove config?
                 response = protected_chain.invoke(latest_query, config=self.config)
                 
                 # Check response type
