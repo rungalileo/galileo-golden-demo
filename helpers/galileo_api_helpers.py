@@ -77,7 +77,7 @@ def get_galileo_api_key() -> str:
     return api_key
 
 
-def get_galileo_project_id(project_name: str, starting_token: int = 0, limit: int = 10) -> str:
+def get_galileo_project_id(project_name: str, starting_token: int = 0, limit: int = 100) -> str:
     """
     Fetches the Galileo project ID for a given project name.
 
