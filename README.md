@@ -120,6 +120,15 @@ tools:
 
 vectorstore:
   embedding_model: "text-embedding-3-large"
+
+# Optional: Add Galileo Protect (see Protect section below)
+# protect:
+#   metrics:
+#     - name: "prompt_injection"
+#       operator: "any"
+#       target_values: ["impersonation", "obfuscation"]
+#   messages:
+#     - "I cannot process that request."
 ```
 
 **system_prompt.json** - Define the agent's behavior:
@@ -250,6 +259,7 @@ galileo-golden-demo/
 ├── helpers/                # Utility scripts
 │   ├── setup_vectordb.py  # Pinecone vector database setup
 │   ├── test_vectordb.py   # Vector database testing
+│   ├── protect_helpers.py # Galileo Protect stage setup and rulesets
 │   └── galileo_api_helpers.py  # Galileo API utilities
 ├── tools/                 # Shared tools
 │   └── rag_retrieval.py   # General RAG functionality (not implemented)
@@ -336,7 +346,7 @@ See **[experiments/README.md](experiments/README.md)** for the full documentatio
 
 The demo includes **Galileo Protect** for runtime protection against harmful content. Protect can be enabled from the sidebar and is fully configurable per domain.
 
-### How It Works
+### How to Enable
 
 1. **Enable in UI**: Toggle "Enable Prompt Injection Protection" in the sidebar
 2. **Automatic Setup**: The app automatically creates and configures a Protect stage
@@ -367,13 +377,13 @@ protect:
     - "I've detected harmful content. Please rephrase your query."
 ```
 
-### Features
+### What You Get
 
-- **Domain-Specific Rules**: Each domain can define its own protection rules
-- **Multiple Metrics**: Combine multiple metrics (prompt injection, toxicity, PII, etc.) in a single ruleset
-- **Custom Messages**: Define custom override messages when protection triggers
-- **LangChain Integration**: Uses native LangChain `ProtectTool` for proper trace logging
-- **Automatic Logging**: All Protect checks logged to Galileo with full observability
+- **Domain-Specific Rules**: Configure different protection rules for each domain
+- **Multiple Metrics**: Combine prompt injection, toxicity, PII detection, and more
+- **Custom Messages**: Define what users see when Protect triggers
+- **Full Observability**: All checks logged to Galileo with complete trace visibility
+- **Automatic Routing**: Harmful queries are blocked before reaching your agent
 
 ### Learn More
 

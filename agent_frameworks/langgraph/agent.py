@@ -9,15 +9,17 @@ from typing import Annotated, TypedDict, List, Dict, Any, Optional
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
 from langchain_core.tools import StructuredTool
-from langchain_core.runnables import RunnableLambda
+from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
-from langgraph.graph import START, StateGraph
+from langgraph.graph import START, END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from base_agent import BaseAgent
 from domain_manager import DomainConfig
 from galileo.handlers.langchain import GalileoCallback
-from galileo.handlers.langchain.tool import ProtectTool, ProtectParser
+from galileo.handlers.langchain.tool import ProtectTool
+from galileo_core.schemas.protect.execution_status import ExecutionStatus
+from galileo_core.schemas.protect.response import Response
 
 # Import RAG retrieval function
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -28,6 +30,7 @@ from helpers.protect_helpers import create_rulesets_from_config
 # Define the state for our graph
 class State(TypedDict):
     messages: Annotated[list, add_messages]
+    protect_triggered: bool  # Track if Protect was triggered
 
 
 class LangGraphAgent(BaseAgent):
@@ -120,6 +123,48 @@ class LangGraphAgent(BaseAgent):
             name=f"{self.domain_config.name.title()} Assistant"
         ).bind_tools(self.tools)
 
+        def protect_check_node(state):
+            """Check for harmful content before processing"""
+            # If Protect is not enabled, pass through
+            if not self.protect_enabled or not self.protect_stage_id:
+                return {"protect_triggered": False}
+            
+            # Get the latest user message
+            latest_message = None
+            for msg in reversed(state["messages"]):
+                if isinstance(msg, HumanMessage):
+                    latest_message = msg.content
+                    break
+            
+            if not latest_message:
+                return {"protect_triggered": False}
+            
+            # Create rulesets from domain config
+            rulesets = create_rulesets_from_config(self.domain_config.config)
+            if not rulesets:
+                return {"protect_triggered": False}
+            
+            # Create ProtectTool - this is a LangChain tool so it will be tracked by GalileoCallback
+            protect_tool = ProtectTool(
+                stage_id=self.protect_stage_id,
+                prioritized_rulesets=rulesets
+            )
+            
+            # Invoke the tool with config so it gets tracked by GalileoCallback
+            # ProtectTool returns a JSON string of the Response object
+            response_json = protect_tool.invoke({"input": latest_message}, config=self.config)
+            
+            # Parse the JSON response
+            response = Response.model_validate_json(response_json)
+            
+            # If triggered, add override message and mark to skip processing
+            if response.status == ExecutionStatus.triggered:
+                override_msg = AIMessage(content=response.text)
+                return {"messages": [override_msg], "protect_triggered": True}
+            
+            # Not triggered, continue normally
+            return {"protect_triggered": False}
+
         def invoke_chatbot(state):
             # Add system message if we have one
             if self.system_prompt:
@@ -130,17 +175,32 @@ class LangGraphAgent(BaseAgent):
             
             message = llm_with_tools.invoke(messages)
             return {"messages": [message]}
+        
+        def route_after_protect(state):
+            """Route after protect check - skip to END if triggered"""
+            if state.get("protect_triggered", False):
+                return END
+            return "chatbot"
 
         # Build the graph
         graph_builder = StateGraph(State)
+        
+        # Add protect node as the first node
+        graph_builder.add_node("protect_check", protect_check_node)
         graph_builder.add_node("chatbot", invoke_chatbot)
 
         tool_node = ToolNode(tools=self.tools)
         graph_builder.add_node("tools", tool_node)
 
+        # Route from START to protect_check
+        graph_builder.add_edge(START, "protect_check")
+        
+        # Conditional edge from protect_check - go to END if triggered, chatbot otherwise
+        graph_builder.add_conditional_edges("protect_check", route_after_protect)
+        
+        # Normal flow
         graph_builder.add_conditional_edges("chatbot", tools_condition)
         graph_builder.add_edge("tools", "chatbot")
-        graph_builder.add_edge(START, "chatbot")
 
         return graph_builder.compile()
     
@@ -157,9 +217,9 @@ class LangGraphAgent(BaseAgent):
             if not self.tools:
                 self.load_tools()
             
-            # Build graph if not already built
-            if not self.graph:
-                self.graph = self._build_graph()
+            # Rebuild graph whenever protect settings change
+            # This ensures the protect_check_node has access to current protect_enabled state
+            self.graph = self._build_graph()
             
             # Convert messages to LangChain format
             langchain_messages = []
@@ -167,62 +227,16 @@ class LangGraphAgent(BaseAgent):
                 if msg["role"] == "user":
                     langchain_messages.append(HumanMessage(content=msg["content"]))
                 elif msg["role"] == "assistant":
-                    from langchain_core.messages import AIMessage
                     langchain_messages.append(AIMessage(content=msg["content"]))
             
-            # Get the user's latest query for Protect check
-            latest_query = messages[-1]["content"] if messages else ""
-            
-            # If Protect is enabled, wrap the graph invocation with ProtectTool
-            if self.protect_enabled and self.protect_stage_id and latest_query:
-                # Create rulesets from domain config
-                rulesets = create_rulesets_from_config(self.domain_config.config)
-                
-                # Create ProtectTool with stage_id and prioritized_rulesets
-                protect_tool = ProtectTool(
-                    stage_id=self.protect_stage_id,
-                    prioritized_rulesets=rulesets if rulesets else None
-                )
-                
-                # Create a wrapper function that invokes the graph
-                # ProtectParser will call this with the text if not triggered
-                def graph_chain_func(text_or_dict):
-                    # The parser calls chain.invoke(text), so text_or_dict is the input text
-                    # We need to process the full conversation with the graph
-                    initial_state = {"messages": langchain_messages}
-                    result = self.graph.invoke(initial_state)
-                    # Return the AIMessage object (ProtectParser expects a return value)
-                    return result["messages"][-1] if result["messages"] else ""
-                
-                # Wrap the function in a RunnableLambda to make it a proper LangChain Runnable
-                graph_chain = RunnableLambda(graph_chain_func)
-                
-                # Create ProtectParser with the graph chain (now a Runnable)
-                protect_parser = ProtectParser(chain=graph_chain, echo_output=False)
-                
-                # Create protected chain
-                protected_chain = protect_tool | protect_parser.parser
-                
-                # Invoke with Protect
-                # do i need to remove config?
-                response = protected_chain.invoke(latest_query, config=self.config)
-                
-                # Check response type
-                if isinstance(response, str):
-                    # Protect intervened with override message
-                    return response
-                else:
-                    # LLM chain was executed
-                    return response.content if hasattr(response, 'content') else str(response)
-            else:
-                # No Protect, process normally
-                initial_state = {"messages": langchain_messages}
-                result = self.graph.invoke(initial_state, self.config)
+            # Invoke the graph with protect check built-in
+            initial_state = {"messages": langchain_messages, "protect_triggered": False}
+            result = self.graph.invoke(initial_state, self.config)
 
-                # Return the last message content
-                if result["messages"]:
-                    return result["messages"][-1].content
-                return "No response generated"
+            # Return the last message content
+            if result["messages"]:
+                return result["messages"][-1].content
+            return "No response generated"
             
         except Exception as e:
             print(f"[ERROR] Error processing query: {e}")
