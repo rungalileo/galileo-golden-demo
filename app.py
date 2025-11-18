@@ -1834,9 +1834,8 @@ def multi_domain_agent_app():
             
             # Toggle for Protect
             protect_enabled = st.checkbox(
-                "Enable Prompt Injection Protection",
+                "Enable Galileo Protect",
                 value=st.session_state.protect_enabled,
-                help="Enable Galileo Protect to detect and block prompt injection attempts",
                 key="protect_toggle"
             )
             st.session_state.protect_enabled = protect_enabled

@@ -30,13 +30,14 @@ except ImportError:
     CHAOS_AVAILABLE = False
 
 # Import guardrails
-try:
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    from guardrails_config import get_guardrails_manager
-    GUARDRAILS_AVAILABLE = True
-except ImportError:
-    GUARDRAILS_AVAILABLE = False
-    print("⚠️  Guardrails not available")
+# try:
+#     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+#     from guardrails_config import get_guardrails_manager
+#     GUARDRAILS_AVAILABLE = True
+# except ImportError:
+#     GUARDRAILS_AVAILABLE = False
+#     print("⚠️  Guardrails not available")
+GUARDRAILS_AVAILABLE = False  # Guardrails disabled
 
 # Import RAG retrieval function
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -363,13 +364,13 @@ This corruption testing validates our monitoring systems' detection capabilities
             user_input = messages[-1]["content"] if messages else ""
             
             # GUARDRAIL CHECK 1: Input filtering (PII, Sexism, Toxicity)
-            if GUARDRAILS_AVAILABLE:
-                guardrails = get_guardrails_manager()
-                if guardrails.is_enabled():
-                    input_result = guardrails.check_input(user_input)
-                    if not input_result.passed:
-                        print(f"🛡️  Input blocked by guardrails: {input_result.blocked_by}")
-                        return input_result.message
+            # if GUARDRAILS_AVAILABLE:
+            #     guardrails = get_guardrails_manager()
+            #     if guardrails.is_enabled():
+            #         input_result = guardrails.check_input(user_input)
+            #         if not input_result.passed:
+            #             print(f"🛡️  Input blocked by guardrails: {input_result.blocked_by}")
+            #             return input_result.message
             
             # Convert messages to LangChain format
             langchain_messages = []
@@ -393,35 +394,35 @@ This corruption testing validates our monitoring systems' detection capabilities
                     response = chaos.maybe_transpose_numbers(response)
                 
                 # GUARDRAIL CHECK 2: Determine if this is a trade action
-                is_trade = self._is_trade_action(response, user_input)
-                
-                if is_trade and GUARDRAILS_AVAILABLE:
-                    # Check trade-specific guardrails (context adherence)
-                    guardrails = get_guardrails_manager()
-                    if guardrails.is_enabled():
-                        # Get context from RAG or conversation history
-                        context = self._get_context_for_guardrails(messages)
-                        trade_result = guardrails.check_trade(response, context, user_input)
-                        
-                        if not trade_result.passed:
-                            print(f"🛡️  Trade blocked by guardrails: {trade_result.blocked_by}")
-                            # Return blocked message + note about what was attempted
-                            return f"{trade_result.message}\n\n**Attempted action:** {response}"
-                        else:
-                            # Trade passed, add success message
-                            response = f"✅ **Trade Executed Successfully**\n\n{response}"
-                
-                # GUARDRAIL CHECK 3: Output filtering (PII, Sexism, Toxicity)
-                if GUARDRAILS_AVAILABLE:
-                    guardrails = get_guardrails_manager()
-                    if guardrails.is_enabled():
-                        # Get context for output checking
-                        context = self._get_context_for_guardrails(messages)
-                        output_result = guardrails.check_output(response, context, user_input)
-                        
-                        if not output_result.passed:
-                            print(f"🛡️  Output blocked by guardrails: {output_result.blocked_by}")
-                            return output_result.message
+                # is_trade = self._is_trade_action(response, user_input)
+                # 
+                # if is_trade and GUARDRAILS_AVAILABLE:
+                #     # Check trade-specific guardrails (context adherence)
+                #     guardrails = get_guardrails_manager()
+                #     if guardrails.is_enabled():
+                #         # Get context from RAG or conversation history
+                #         context = self._get_context_for_guardrails(messages)
+                #         trade_result = guardrails.check_trade(response, context, user_input)
+                #         
+                #         if not trade_result.passed:
+                #             print(f"🛡️  Trade blocked by guardrails: {trade_result.blocked_by}")
+                #             # Return blocked message + note about what was attempted
+                #             return f"{trade_result.message}\n\n**Attempted action:** {response}"
+                #         else:
+                #             # Trade passed, add success message
+                #             response = f"✅ **Trade Executed Successfully**\n\n{response}"
+                # 
+                # # GUARDRAIL CHECK 3: Output filtering (PII, Sexism, Toxicity)
+                # if GUARDRAILS_AVAILABLE:
+                #     guardrails = get_guardrails_manager()
+                #     if guardrails.is_enabled():
+                #         # Get context for output checking
+                #         context = self._get_context_for_guardrails(messages)
+                #         output_result = guardrails.check_output(response, context, user_input)
+                #         
+                #         if not output_result.passed:
+                #             print(f"🛡️  Output blocked by guardrails: {output_result.blocked_by}")
+                #             return output_result.message
                 
                 return response
             return "No response generated"
@@ -430,57 +431,58 @@ This corruption testing validates our monitoring systems' detection capabilities
             print(f"[ERROR] Error processing query: {e}")
             return f"Error processing your request: {str(e)}"
     
-    def _is_trade_action(self, response: str, user_input: str) -> bool:
-        """
-        Determine if the response is a trade action
-        
-        Args:
-            response: Agent's response
-            user_input: User's query
-            
-        Returns:
-            True if this is a trade action
-        """
-        # Check for trade keywords in response or input
-        trade_keywords = [
-            "purchased", "bought", "sold", "trade", "order", "executed",
-            "purchase_stocks", "sell_stocks", "shares"
-        ]
-        
-        response_lower = response.lower()
-        input_lower = user_input.lower()
-        
-        for keyword in trade_keywords:
-            if keyword in response_lower or keyword in input_lower:
-                # Also check if it's a confirmation or actual execution
-                confirmation_keywords = ["purchased", "sold", "executed", "order placed"]
-                if any(ck in response_lower for ck in confirmation_keywords):
-                    return True
-        
-        return False
-    
-    def _get_context_for_guardrails(self, messages: List[Dict[str, str]]) -> str:
-        """
-        Get context for guardrail checking
-        
-        This could include:
-        - RAG retrieved documents
-        - Conversation history
-        - Tool call results
-        
-        Args:
-            messages: Conversation messages
-            
-        Returns:
-            Context string
-        """
-        # For now, use recent conversation history as context
-        context_parts = []
-        
-        # Add last few messages as context
-        for msg in messages[-5:]:  # Last 5 messages
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            context_parts.append(f"{role}: {content}")
-        
-        return "\n".join(context_parts)
+    # Guardrails helper methods - commented out since guardrails are disabled
+    # def _is_trade_action(self, response: str, user_input: str) -> bool:
+    #     """
+    #     Determine if the response is a trade action
+    #     
+    #     Args:
+    #         response: Agent's response
+    #         user_input: User's query
+    #         
+    #     Returns:
+    #         True if this is a trade action
+    #     """
+    #     # Check for trade keywords in response or input
+    #     trade_keywords = [
+    #         "purchased", "bought", "sold", "trade", "order", "executed",
+    #         "purchase_stocks", "sell_stocks", "shares"
+    #     ]
+    #     
+    #     response_lower = response.lower()
+    #     input_lower = user_input.lower()
+    #     
+    #     for keyword in trade_keywords:
+    #         if keyword in response_lower or keyword in input_lower:
+    #             # Also check if it's a confirmation or actual execution
+    #             confirmation_keywords = ["purchased", "sold", "executed", "order placed"]
+    #             if any(ck in response_lower for ck in confirmation_keywords):
+    #                 return True
+    #     
+    #     return False
+    # 
+    # def _get_context_for_guardrails(self, messages: List[Dict[str, str]]) -> str:
+    #     """
+    #     Get context for guardrail checking
+    #     
+    #     This could include:
+    #     - RAG retrieved documents
+    #     - Conversation history
+    #     - Tool call results
+    #     
+    #     Args:
+    #         messages: Conversation messages
+    #         
+    #     Returns:
+    #         Context string
+    #     """
+    #     # For now, use recent conversation history as context
+    #     context_parts = []
+    #     
+    #     # Add last few messages as context
+    #     for msg in messages[-5:]:  # Last 5 messages
+    #         role = msg.get("role", "unknown")
+    #         content = msg.get("content", "")
+    #         context_parts.append(f"{role}: {content}")
+    #     
+    #     return "\n".join(context_parts)
