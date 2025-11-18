@@ -60,6 +60,7 @@ import phoenix as px
 from galileo import galileo_context
 from agent_factory import AgentFactory
 from langchain_core.messages import AIMessage, HumanMessage
+from helpers.protect_helpers import get_or_create_protect_stage
 from arize.otel import register as arize_register
 from langfuse import Langfuse
 from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
@@ -286,6 +287,16 @@ def process_input_for_simple_app(user_input: str | None):
 
         with st.chat_message("assistant"):
             with st.spinner("Processing..."):
+                # Set Protect on the agent if enabled
+                if st.session_state.get("protect_enabled", False):
+                    stage_id = st.session_state.get("protect_stage_id")
+                    if stage_id:
+                        st.session_state.agent.set_protect(True, stage_id)
+                    else:
+                        st.session_state.agent.set_protect(False)
+                else:
+                    st.session_state.agent.set_protect(False)
+                
                 # Convert session state messages to the format expected by the agent
                 conversation_messages = []
                 for msg_data in st.session_state.messages:
@@ -297,7 +308,7 @@ def process_input_for_simple_app(user_input: str | None):
                             conversation_messages.append({"role": "assistant", "content": message.content})
                 
 
-                # Get the actual response from the agent
+                # Get the actual response from the agent (Protect is handled inside)
                 response = st.session_state.agent.process_query(conversation_messages)
 
                 # Create and display AI message
@@ -1503,6 +1514,13 @@ def multi_domain_agent_app():
         domain_info = factory.get_domain_info(DOMAIN)
         st.session_state.domain_config = domain_info
     
+    # Load full domain config for Protect settings
+    if "full_domain_config" not in st.session_state:
+        from domain_manager import DomainManager
+        dm = DomainManager()
+        full_config = dm.load_domain_config(DOMAIN)
+        st.session_state.full_domain_config = full_config.config
+    
     # Extract UI configuration from domain config
     ui_config = st.session_state.domain_config.get("ui", {})
     app_title = ui_config.get("app_title", f" {DOMAIN.title()} Assistant")
@@ -1698,107 +1716,176 @@ def multi_domain_agent_app():
         st.markdown("---")
         
         # Galileo Guardrails Settings
-        st.markdown("### Security: Galileo Guardrails")
-        st.caption("Real-time content filtering and safety")
+        # st.markdown("### Security: Galileo Guardrails")
+        # st.caption("Real-time content filtering and safety")
         
-        # Import guardrails
-        try:
-            from guardrails_config import get_guardrails_manager
-            guardrails = get_guardrails_manager()
-            GUARDRAILS_AVAILABLE = True
-        except ImportError:
-            GUARDRAILS_AVAILABLE = False
-            st.warning("Guardrails not available - install galileo-protect")
+        # # Import guardrails
+        # try:
+        #     from guardrails_config import get_guardrails_manager
+        #     guardrails = get_guardrails_manager()
+        #     GUARDRAILS_AVAILABLE = True
+        # except ImportError:
+        #     GUARDRAILS_AVAILABLE = False
+        #     st.warning("Guardrails not available - install galileo-protect")
         
-        if GUARDRAILS_AVAILABLE:
-            # Initialize guardrails settings
-            if "guardrails_enabled" not in st.session_state:
-                st.session_state.guardrails_enabled = guardrails.is_enabled()
+        # if GUARDRAILS_AVAILABLE:
+        #     # Initialize guardrails settings
+        #     if "guardrails_enabled" not in st.session_state:
+        #         st.session_state.guardrails_enabled = guardrails.is_enabled()
             
-            # Main toggle
-            guardrails_enabled = st.toggle(
-                "Enable Guardrails",
-                value=st.session_state.guardrails_enabled,
-                help="Enable Galileo Guardrails for input/output filtering and trade validation",
-                key="guardrails_main_toggle"
-            )
+        #     # Main toggle
+        #     guardrails_enabled = st.toggle(
+        #         "Enable Guardrails",
+        #         value=st.session_state.guardrails_enabled,
+        #         help="Enable Galileo Guardrails for input/output filtering and trade validation",
+        #         key="guardrails_main_toggle"
+        #     )
             
-            if guardrails_enabled != st.session_state.guardrails_enabled:
-                st.session_state.guardrails_enabled = guardrails_enabled
-                if guardrails_enabled:
-                    guardrails.enable()
-                    os.environ["GUARDRAILS_ENABLED"] = "true"
-                else:
-                    guardrails.disable()
-                    os.environ["GUARDRAILS_ENABLED"] = "false"
-                # Force agent reinitialize
-                if "agent" in st.session_state:
-                    del st.session_state.agent
-                st.rerun()
+        #     if guardrails_enabled != st.session_state.guardrails_enabled:
+        #         st.session_state.guardrails_enabled = guardrails_enabled
+        #         if guardrails_enabled:
+        #             guardrails.enable()
+        #             os.environ["GUARDRAILS_ENABLED"] = "true"
+        #         else:
+        #             guardrails.disable()
+        #             os.environ["GUARDRAILS_ENABLED"] = "false"
+        #         # Force agent reinitialize
+        #         if "agent" in st.session_state:
+        #             del st.session_state.agent
+        #         st.rerun()
             
-            if guardrails_enabled:
-                with st.expander("Settings: Guardrails Details", expanded=False):
-                    st.markdown("""
-                    **Active Protections:**
+        #     if guardrails_enabled:
+        #         with st.expander("Settings: Guardrails Details", expanded=False):
+        #             st.markdown("""
+        #             **Active Protections:**
                     
-                    **Input Filtering:**
-                    - 🔒 PII Detection (account numbers, SSN, credit cards)
-                    - 🚫 Sexism Detection
-                    - [!] Toxicity Detection
+        #             **Input Filtering:**
+        #             - 🔒 PII Detection (account numbers, SSN, credit cards)
+        #             - 🚫 Sexism Detection
+        #             - [!] Toxicity Detection
                     
-                    **Output Filtering:**
-                    - 🔒 PII Leakage Prevention
-                    - 🚫 Inappropriate Content Blocking
-                    - [!] Harmful Content Prevention
+        #             **Output Filtering:**
+        #             - 🔒 PII Leakage Prevention
+        #             - 🚫 Inappropriate Content Blocking
+        #             - [!] Harmful Content Prevention
                     
-                    **Trade Protection:**
-                    - .Context Adherence Check (70% threshold)
-                    -  Hallucination Detection
-                    - ⛔ Auto-block suspicious trades
-                    """)
+        #             **Trade Protection:**
+        #             - .Context Adherence Check (70% threshold)
+        #             -  Hallucination Detection
+        #             - ⛔ Auto-block suspicious trades
+        #             """)
                     
-                    st.divider()
+        #             st.divider()
                     
-                    # Show stats
-                    stats = guardrails.get_stats()
-                    col1, col2 = st.columns(2)
+        #             # Show stats
+        #             stats = guardrails.get_stats()
+        #             col1, col2 = st.columns(2)
                     
-                    with col1:
-                        st.metric("Input Checks", stats["input_checks"])
-                        st.metric("Input Blocks", stats["input_blocks"])
+        #             with col1:
+        #                 st.metric("Input Checks", stats["input_checks"])
+        #                 st.metric("Input Blocks", stats["input_blocks"])
                     
-                    with col2:
-                        st.metric("Output Checks", stats["output_checks"])
-                        st.metric("Output Blocks", stats["output_blocks"])
+        #             with col2:
+        #                 st.metric("Output Checks", stats["output_checks"])
+        #                 st.metric("Output Blocks", stats["output_blocks"])
                     
-                    st.metric("Trade Checks", stats["trade_checks"])
-                    st.metric("Trade Blocks", stats["trade_blocks"])
+        #             st.metric("Trade Checks", stats["trade_checks"])
+        #             st.metric("Trade Blocks", stats["trade_blocks"])
                     
-                    if stats["input_checks"] + stats["output_checks"] + stats["trade_checks"] > 0:
-                        block_rate = stats["block_rate"]
-                        st.progress(block_rate / 100, text=f"Block Rate: {block_rate:.1f}%")
+        #             if stats["input_checks"] + stats["output_checks"] + stats["trade_checks"] > 0:
+        #                 block_rate = stats["block_rate"]
+        #                 st.progress(block_rate / 100, text=f"Block Rate: {block_rate:.1f}%")
                     
-                    if st.button("Reset Stats", key="guardrails_reset"):
-                        guardrails.reset_stats()
-                        st.rerun()
+        #             if st.button("Reset Stats", key="guardrails_reset"):
+        #                 guardrails.reset_stats()
+        #                 st.rerun()
                 
-                # Test examples
-                with st.expander("Test Guardrails", expanded=False):
-                    st.markdown("**Try these to trigger guardrails:**")
+        #         # Test examples
+        #         with st.expander("Test Guardrails", expanded=False):
+        #             st.markdown("**Try these to trigger guardrails:**")
                     
-                    test_queries = [
-                        ("PII Output", "Show me my account information"),
-                        ("PII Input", "My SSN is 123-45-6789, can you help?"),
-                        ("Hallucinated Trade", "Buy 1000 shares of XYZ"),
-                    ]
+        #             test_queries = [
+        #                 ("PII Output", "Show me my account information"),
+        #                 ("PII Input", "My SSN is 123-45-6789, can you help?"),
+        #                 ("Hallucinated Trade", "Buy 1000 shares of XYZ"),
+        #             ]
                     
-                    for label, query in test_queries:
-                        if st.button(f"Test: {label}", key=f"test_gr_{label.replace(' ', '_')}"):
-                            st.session_state.example_query_pending = query
-                            st.rerun()
+        #             for label, query in test_queries:
+        #                 if st.button(f"Test: {label}", key=f"test_gr_{label.replace(' ', '_')}"):
+        #                     st.session_state.example_query_pending = query
+        #                     st.rerun()
             
+        #     else:
+        #         st.info("🔓 Guardrails disabled - all content will pass through unchecked")
+        
+        # st.markdown("---")
+        
+        # Galileo Protect Settings
+        st.markdown("### 🛡️ Galileo Protect")
+        st.caption("Runtime protection against harmful content")
+        
+        # Get project name for Protect stage creation
+        project_name = os.environ.get("GALILEO_PROJECT", "")
+        
+        if project_name:
+            # Initialize protect_enabled in session state (default to False)
+            if "protect_enabled" not in st.session_state:
+                st.session_state.protect_enabled = False
+            
+            # Toggle for Protect
+            protect_enabled = st.checkbox(
+                "Enable Prompt Injection Protection",
+                value=st.session_state.protect_enabled,
+                help="Enable Galileo Protect to detect and block prompt injection attempts",
+                key="protect_toggle"
+            )
+            st.session_state.protect_enabled = protect_enabled
+            
+            # Show current Protect configuration from domain config
+            if protect_enabled:
+                protect_config = st.session_state.get("full_domain_config", {}).get("protect", {})
+                if protect_config:
+                    metrics = protect_config.get("metrics", [])
+                    if metrics:
+                        with st.expander("Protect Configuration"):
+                            st.write("**Active Metrics:**")
+                            for metric in metrics:
+                                metric_name = metric.get("name", "Unknown")
+                                operator = metric.get("operator", "")
+                                
+                                # Display based on metric type
+                                if "target_values" in metric:
+                                    target_values = metric["target_values"]
+                                    st.write(f"- **{metric_name}** ({operator}): {', '.join(target_values)}")
+                                elif "threshold" in metric:
+                                    threshold = metric["threshold"]
+                                    st.write(f"- **{metric_name}** ({operator}): {threshold}")
+                                else:
+                                    st.write(f"- **{metric_name}** ({operator})")
+                            
+                            messages = protect_config.get("messages", [])
+                            if messages:
+                                st.write("")
+                                st.write("**Custom Messages:**")
+                                for i, msg in enumerate(messages, 1):
+                                    st.write(f"{i}. {msg}")
+            
+            if protect_enabled:
+                st.info("🛡️ Protect is active. Prompt injection attempts will be blocked.")
+                
+                # Initialize stage if needed
+                if "protect_stage_id" not in st.session_state and project_name:
+                    try:
+                        with st.spinner("Setting up Protect stage..."):
+                            stage_id = get_or_create_protect_stage(project_name)
+                            st.session_state.protect_stage_id = stage_id
+                    except Exception as e:
+                        st.error(f"Failed to setup Protect stage: {str(e)}")
+                        st.session_state.protect_enabled = False
             else:
-                st.info("🔓 Guardrails disabled - all content will pass through unchecked")
+                st.info("Protect is disabled. All queries will be processed normally.")
+        else:
+            st.warning("⚠️ GALILEO_PROJECT not configured. Protect requires a project name.")
         
         st.markdown("---")
         

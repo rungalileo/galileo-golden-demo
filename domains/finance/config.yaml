@@ -33,3 +33,15 @@ tools:
 # Vector store configuration
 vectorstore:
   embedding_model: "text-embedding-3-large"
+
+# Protect configuration
+# Note: Protect is controlled via the UI toggle in the sidebar
+# This config defines which metrics to use and what messages to show when Protect is enabled
+protect:
+  metrics:
+    - name: "input_toxicity"
+      operator: "gt"
+      threshold: 0.5
+  messages:
+    - "I'm sorry, but I cannot process that request as it appears to contain potentially harmful instructions."
+    - "I've detected an attempt to manipulate my instructions. I can only help with legitimate queries about finance and stock trading."
