@@ -53,7 +53,7 @@ def _save_otlp_preference(platform):
 phoenix_endpoint = os.getenv("PHOENIX_ENDPOINT")
 phoenix_api_key = os.getenv("PHOENIX_API_KEY")
 _phoenix_credentials_available = bool(phoenix_endpoint and phoenix_api_key)
-_arize_credentials_available = bool(os.getenv("ARIZE_API_KEY") and os.getenv("ARIZE_SPACE_ID"))
+# _arize_credentials_available = bool(os.getenv("ARIZE_API_KEY") and os.getenv("ARIZE_SPACE_ID"))
 
 # NOW we can import LangChain - Phoenix instrumentation is ready!
 import phoenix as px
@@ -61,7 +61,8 @@ from galileo import galileo_context
 from agent_factory import AgentFactory
 from langchain_core.messages import AIMessage, HumanMessage
 from helpers.protect_helpers import get_or_create_protect_stage
-from arize.otel import register as arize_register
+# from arize.otel import register as arize_register
+# from langfuse import Langfuse
 from langfuse import Langfuse
 from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 from braintrust import init_logger as braintrust_init_logger
@@ -75,21 +76,21 @@ def _initialize_callback_platforms():
     platforms_enabled = []
     
     # ============================================================================
-    # OTLP Platforms (Phoenix/Arize AX) - Already initialized at module load
+    # OTLP Platforms (Phoenix) - Already initialized at module load
     # ============================================================================
     if os.getenv('_PHOENIX_INITIALIZED'):
         platforms_enabled.append("Phoenix")
         print(f"[OK] Phoenix - initialized at module load")
-    elif os.getenv('_ARIZE_AX_INITIALIZED'):
-        platforms_enabled.append("Arize AX")
-        print(f"[OK] Arize AX - initialized at module load")
+    # elif os.getenv('_ARIZE_AX_INITIALIZED'):
+    #     platforms_enabled.append("Arize AX")
+    #     print(f"[OK] Arize AX - initialized at module load")
     else:
         print(f" No OTLP platform enabled")
     
     # ============================================================================
     # LANGSMITH - Uses callbacks (only if enabled in UI)
     # ============================================================================
-    if hasattr(st.session_state, 'logger_langsmith') and st.session_state.logger_langsmith:
+    if False and hasattr(st.session_state, 'logger_langsmith') and st.session_state.logger_langsmith:
         langsmith_api_key = os.getenv("LANGCHAIN_API_KEY")
         langsmith_project = os.getenv("LANGCHAIN_PROJECT")
         
@@ -119,7 +120,8 @@ def _initialize_callback_platforms():
     # ============================================================================
     # LANGFUSE - Callback handler (only if enabled in UI)
     # ============================================================================
-    if hasattr(st.session_state, 'logger_langfuse') and st.session_state.logger_langfuse:
+    # Commented out for demo
+    if False and hasattr(st.session_state, 'logger_langfuse') and st.session_state.logger_langfuse:
         try:
             langfuse_pk = os.getenv("LANGFUSE_API_PK")
             langfuse_sk = os.getenv("LANGFUSE_API_SK")
@@ -1543,12 +1545,14 @@ def multi_domain_agent_app():
     # Initialize logger toggle defaults (must be in app context, not module level)
     if "logger_phoenix" not in st.session_state:
         st.session_state.logger_phoenix = (_otlp_preference == "phoenix")
-    if "logger_arize_ax" not in st.session_state:
-        st.session_state.logger_arize_ax = (_otlp_preference == "arize ax")
-    if "logger_langsmith" not in st.session_state:
+    # if "logger_arize_ax" not in st.session_state:
+    #     st.session_state.logger_arize_ax = (_otlp_preference == "arize ax")
+    # Commented out for demo
+    if False and "logger_langsmith" not in st.session_state:
         langsmith_available = os.getenv("LANGCHAIN_API_KEY")
         st.session_state.logger_langsmith = bool(langsmith_available)
-    if "logger_langfuse" not in st.session_state:
+    # Commented out for demo
+    if False and "logger_langfuse" not in st.session_state:
         langfuse_available = os.getenv("LANGFUSE_API_PK") and os.getenv("LANGFUSE_API_SK")
         st.session_state.logger_langfuse = bool(langfuse_available)
     if "logger_braintrust" not in st.session_state:
@@ -2064,7 +2068,7 @@ def multi_domain_agent_app():
         # Links
         st.markdown("### Links")
         st.markdown("[Galileo Console](https://console.galileo.ai)")
-        st.markdown("[Phoenix Traces](https://app.phoenix.arize.com)")
+        # st.markdown("[Phoenix Traces](https://app.phoenix.arize.com)")
         
         st.markdown("---")
         
@@ -2105,8 +2109,8 @@ def multi_domain_agent_app():
             # Determine current selection
             if st.session_state.logger_phoenix:
                 current_otlp = "Phoenix"
-            elif st.session_state.logger_arize_ax:
-                current_otlp = "Arize AX"
+            # elif st.session_state.logger_arize_ax:
+            #     current_otlp = "Arize AX"
             else:
                 current_otlp = "None"
             
@@ -2114,15 +2118,15 @@ def multi_domain_agent_app():
             otlp_options = ["None"]
             if phoenix_endpoint and phoenix_api_key:
                 otlp_options.append("Phoenix")
-            if os.getenv("ARIZE_API_KEY"):
-                otlp_options.append("Arize AX")
+            # if os.getenv("ARIZE_API_KEY"):
+            #     otlp_options.append("Arize AX")
             
             # Radio button for OTLP platform selection (disabled in production)
             otlp_selection = st.radio(
                 "Select OTLP Platform:",
                 options=otlp_options,
                 index=otlp_options.index(current_otlp) if current_otlp in otlp_options else 0,
-                help="Choose Phoenix or Arize AX for OpenTelemetry tracing (mutually exclusive). Requires hard reset to take effect.",
+                help="Choose Phoenix for OpenTelemetry tracing. Requires hard reset to take effect.",
                 key="otlp_radio",
                 horizontal=True,
                 disabled=not is_localhost
@@ -2135,7 +2139,7 @@ def multi_domain_agent_app():
                 
                 # Update session state
                 st.session_state.logger_phoenix = (otlp_selection == "Phoenix")
-                st.session_state.logger_arize_ax = (otlp_selection == "Arize AX")
+                # st.session_state.logger_arize_ax = (otlp_selection == "Arize AX")
                 
                 # Show hard reset instructions
                 st.info(f"[OK] OTLP platform changed to: **{otlp_selection}**")
@@ -2145,37 +2149,37 @@ def multi_domain_agent_app():
             st.divider()
             st.markdown("**Callback-based Platforms**")
             
-            # LangSmith
-            langsmith_enabled = st.checkbox(
-                "LangSmith",
-                value=st.session_state.logger_langsmith,
-                help="LangChain LangSmith tracing",
-                key="langsmith_checkbox",
-                disabled=not (os.getenv("LANGCHAIN_API_KEY"))
-            )
-            if langsmith_enabled != st.session_state.logger_langsmith:
-                st.session_state.logger_langsmith = langsmith_enabled
-                if "tracing_initialized" in st.session_state:
-                    del st.session_state.tracing_initialized
-                if "agent" in st.session_state:
-                    del st.session_state.agent
-                st.rerun()
+            # # LangSmith
+            # langsmith_enabled = st.checkbox(
+            #     "LangSmith",
+            #     value=st.session_state.logger_langsmith,
+            #     help="LangChain LangSmith tracing",
+            #     key="langsmith_checkbox",
+            #     disabled=not (os.getenv("LANGCHAIN_API_KEY"))
+            # )
+            # if langsmith_enabled != st.session_state.logger_langsmith:
+            #     st.session_state.logger_langsmith = langsmith_enabled
+            #     if "tracing_initialized" in st.session_state:
+            #         del st.session_state.tracing_initialized
+            #     if "agent" in st.session_state:
+            #         del st.session_state.agent
+            #     st.rerun()
             
-            # Langfuse
-            langfuse_enabled = st.checkbox(
-                "Langfuse",
-                value=st.session_state.logger_langfuse,
-                help="Langfuse observability",
-                key="langfuse_checkbox",
-                disabled=not (os.getenv("LANGFUSE_API_PK") and os.getenv("LANGFUSE_API_SK"))
-            )
-            if langfuse_enabled != st.session_state.logger_langfuse:
-                st.session_state.logger_langfuse = langfuse_enabled
-                if "tracing_initialized" in st.session_state:
-                    del st.session_state.tracing_initialized
-                if "agent" in st.session_state:
-                    del st.session_state.agent
-                st.rerun()
+            # # Langfuse
+            # langfuse_enabled = st.checkbox(
+            #     "Langfuse",
+            #     value=st.session_state.logger_langfuse,
+            #     help="Langfuse observability",
+            #     key="langfuse_checkbox",
+            #     disabled=not (os.getenv("LANGFUSE_API_PK") and os.getenv("LANGFUSE_API_SK"))
+            # )
+            # if langfuse_enabled != st.session_state.logger_langfuse:
+            #     st.session_state.logger_langfuse = langfuse_enabled
+            #     if "tracing_initialized" in st.session_state:
+            #         del st.session_state.tracing_initialized
+            #     if "agent" in st.session_state:
+            #         del st.session_state.agent
+            #     st.rerun()
             
             # Braintrust
             braintrust_enabled = st.checkbox(
@@ -2198,11 +2202,11 @@ def multi_domain_agent_app():
             enabled_platforms = ["Galileo (always on)"]
             if st.session_state.logger_phoenix:
                 enabled_platforms.append("Phoenix")
-            if st.session_state.logger_arize_ax:
-                enabled_platforms.append("Arize AX")
-            if st.session_state.logger_langsmith:
+            # if st.session_state.logger_arize_ax:
+            #     enabled_platforms.append("Arize AX")
+            if False and st.session_state.get("logger_langsmith", False):
                 enabled_platforms.append("LangSmith")
-            if st.session_state.logger_langfuse:
+            if False and st.session_state.get("logger_langfuse", False):
                 enabled_platforms.append("Langfuse")
             if st.session_state.logger_braintrust:
                 enabled_platforms.append("Braintrust")
