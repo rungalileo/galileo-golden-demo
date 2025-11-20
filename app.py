@@ -2080,74 +2080,74 @@ def multi_domain_agent_app():
         st.markdown("---")
         
         # Logger Controls (at bottom of sidebar)
-        st.markdown("### Observability Platforms")
-        st.caption("Galileo is always enabled")
+        # st.markdown("### Observability Platforms")
+        # st.caption("Galileo is always enabled")
         
-        # Session state is already initialized at module level (before tracing init)
-        with st.expander("Settings: Configure Loggers", expanded=False):
-            st.markdown("**OpenTelemetry Platform** (select one)")
+        # # Session state is already initialized at module level (before tracing init)
+        # with st.expander("Settings: Configure Loggers", expanded=False):
+        #     st.markdown("**OpenTelemetry Platform** (select one)")
             
-            # Check if running on localhost - simpler approach
-            # Check for common development environment indicators
-            is_localhost = True  # Default to localhost/development mode
+        #     # Check if running on localhost - simpler approach
+        #     # Check for common development environment indicators
+        #     is_localhost = True  # Default to localhost/development mode
             
-            # Check if deployed (common production environment variables)
-            if os.getenv("STREAMLIT_SERVER_PORT") or os.getenv("STREAMLIT_DEPLOYMENT"):
-                is_localhost = False
+        #     # Check if deployed (common production environment variables)
+        #     if os.getenv("STREAMLIT_SERVER_PORT") or os.getenv("STREAMLIT_DEPLOYMENT"):
+        #         is_localhost = False
             
-            # Override: always allow switching if explicitly set
-            if os.getenv("ALLOW_OTLP_SWITCHING") == "true":
-                is_localhost = True
+        #     # Override: always allow switching if explicitly set
+        #     if os.getenv("ALLOW_OTLP_SWITCHING") == "true":
+        #         is_localhost = True
             
-            if not is_localhost:
-                st.warning("[!] OTLP platform switching disabled in production. Change requires app restart with new environment variables.")
-            else:
-                st.caption("**Important:** Changing OTLP platform requires a **hard reset** of the app")
-                st.caption("Use Ctrl+C to stop the server, then restart with `streamlit run app.py`")
-                st.caption("Callback platforms (below) work instantly without restart")
+        #     if not is_localhost:
+        #         st.warning("[!] OTLP platform switching disabled in production. Change requires app restart with new environment variables.")
+        #     else:
+        #         st.caption("**Important:** Changing OTLP platform requires a **hard reset** of the app")
+        #         st.caption("Use Ctrl+C to stop the server, then restart with `streamlit run app.py`")
+        #         st.caption("Callback platforms (below) work instantly without restart")
             
-            # Determine current selection
-            if st.session_state.logger_phoenix:
-                current_otlp = "Phoenix"
-            # elif st.session_state.logger_arize_ax:
-            #     current_otlp = "Arize AX"
-            else:
-                current_otlp = "None"
+        #     # Determine current selection
+        #     if st.session_state.logger_phoenix:
+        #         current_otlp = "Phoenix"
+        #     # elif st.session_state.logger_arize_ax:
+        #     #     current_otlp = "Arize AX"
+        #     else:
+        #         current_otlp = "None"
             
-            # Build options based on available credentials
-            otlp_options = ["None"]
-            if phoenix_endpoint and phoenix_api_key:
-                otlp_options.append("Phoenix")
-            # if os.getenv("ARIZE_API_KEY"):
-            #     otlp_options.append("Arize AX")
+        #     # Build options based on available credentials
+        #     otlp_options = ["None"]
+        #     if phoenix_endpoint and phoenix_api_key:
+        #         otlp_options.append("Phoenix")
+        #     # if os.getenv("ARIZE_API_KEY"):
+        #     #     otlp_options.append("Arize AX")
             
-            # Radio button for OTLP platform selection (disabled in production)
-            otlp_selection = st.radio(
-                "Select OTLP Platform:",
-                options=otlp_options,
-                index=otlp_options.index(current_otlp) if current_otlp in otlp_options else 0,
-                help="Choose Phoenix for OpenTelemetry tracing. Requires hard reset to take effect.",
-                key="otlp_radio",
-                horizontal=True,
-                disabled=not is_localhost
-            )
+        #     # Radio button for OTLP platform selection (disabled in production)
+        #     otlp_selection = st.radio(
+        #         "Select OTLP Platform:",
+        #         options=otlp_options,
+        #         index=otlp_options.index(current_otlp) if current_otlp in otlp_options else 0,
+        #         help="Choose Phoenix for OpenTelemetry tracing. Requires hard reset to take effect.",
+        #         key="otlp_radio",
+        #         horizontal=True,
+        #         disabled=not is_localhost
+        #     )
             
-            # Update session state based on selection
-            if otlp_selection != current_otlp:
-                # Save preference to file for next restart
-                _save_otlp_preference(otlp_selection)
+        #     # Update session state based on selection
+        #     if otlp_selection != current_otlp:
+        #         # Save preference to file for next restart
+        #         _save_otlp_preference(otlp_selection)
                 
-                # Update session state
-                st.session_state.logger_phoenix = (otlp_selection == "Phoenix")
-                # st.session_state.logger_arize_ax = (otlp_selection == "Arize AX")
+        #         # Update session state
+        #         st.session_state.logger_phoenix = (otlp_selection == "Phoenix")
+        #         # st.session_state.logger_arize_ax = (otlp_selection == "Arize AX")
                 
-                # Show hard reset instructions
-                st.info(f"[OK] OTLP platform changed to: **{otlp_selection}**")
-                st.warning("[!] **Hard reset required:** Press Ctrl+C to stop the server, then run `streamlit run app.py` again")
-                st.caption("OpenTelemetry tracer providers cannot be changed at runtime")
+        #         # Show hard reset instructions
+        #         st.info(f"[OK] OTLP platform changed to: **{otlp_selection}**")
+        #         st.warning("[!] **Hard reset required:** Press Ctrl+C to stop the server, then run `streamlit run app.py` again")
+        #         st.caption("OpenTelemetry tracer providers cannot be changed at runtime")
             
-            st.divider()
-            st.markdown("**Callback-based Platforms**")
+        #     st.divider()
+        #     st.markdown("**Callback-based Platforms**")
             
             # # LangSmith
             # langsmith_enabled = st.checkbox(
@@ -2182,36 +2182,36 @@ def multi_domain_agent_app():
             #     st.rerun()
             
             # Braintrust
-            braintrust_enabled = st.checkbox(
-                "Braintrust",
-                value=st.session_state.logger_braintrust,
-                help="Braintrust AI evaluation",
-                key="braintrust_checkbox",
-                disabled=not (os.getenv("BRAINTRUST_API_KEY") and os.getenv("BRAINTRUST_PROJECT"))
-            )
-            if braintrust_enabled != st.session_state.logger_braintrust:
-                st.session_state.logger_braintrust = braintrust_enabled
-                if "tracing_initialized" in st.session_state:
-                    del st.session_state.tracing_initialized
-                if "agent" in st.session_state:
-                    del st.session_state.agent
-                st.rerun()
+            # braintrust_enabled = st.checkbox(
+            #     "Braintrust",
+            #     value=st.session_state.logger_braintrust,
+            #     help="Braintrust AI evaluation",
+            #     key="braintrust_checkbox",
+            #     disabled=not (os.getenv("BRAINTRUST_API_KEY") and os.getenv("BRAINTRUST_PROJECT"))
+            # )
+            # if braintrust_enabled != st.session_state.logger_braintrust:
+            #     st.session_state.logger_braintrust = braintrust_enabled
+            #     if "tracing_initialized" in st.session_state:
+            #         del st.session_state.tracing_initialized
+            #     if "agent" in st.session_state:
+            #         del st.session_state.agent
+            #     st.rerun()
             
-            # Show status
-            st.divider()
-            enabled_platforms = ["Galileo (always on)"]
-            if st.session_state.logger_phoenix:
-                enabled_platforms.append("Phoenix")
-            # if st.session_state.logger_arize_ax:
-            #     enabled_platforms.append("Arize AX")
-            if False and st.session_state.get("logger_langsmith", False):
-                enabled_platforms.append("LangSmith")
-            if False and st.session_state.get("logger_langfuse", False):
-                enabled_platforms.append("Langfuse")
-            if st.session_state.logger_braintrust:
-                enabled_platforms.append("Braintrust")
+            # # Show status
+            # st.divider()
+            # enabled_platforms = ["Galileo (always on)"]
+            # if st.session_state.logger_phoenix:
+            #     enabled_platforms.append("Phoenix")
+            # # if st.session_state.logger_arize_ax:
+            # #     enabled_platforms.append("Arize AX")
+            # if False and st.session_state.get("logger_langsmith", False):
+            #     enabled_platforms.append("LangSmith")
+            # if False and st.session_state.get("logger_langfuse", False):
+            #     enabled_platforms.append("Langfuse")
+            # if st.session_state.logger_braintrust:
+            #     enabled_platforms.append("Braintrust")
             
-            st.success(f"[OK] Active: {', '.join(enabled_platforms)}")
+            # st.success(f"[OK] Active: {', '.join(enabled_platforms)}")
     
     # Main content with tabs
     tab1, tab2, tab3 = st.tabs(["Chat", "Experiments", "Runs"])
