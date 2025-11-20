@@ -16,6 +16,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from base_agent import BaseAgent
 from domain_manager import DomainConfig
 from galileo.handlers.langchain import GalileoCallback
+from galileo import galileo_context
 
 # Import RAG retrieval function
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -35,7 +36,10 @@ class LangGraphAgent(BaseAgent):
     def __init__(self, domain_config: DomainConfig, session_id: str = None):
         super().__init__(domain_config, session_id)
         self.graph = None
-        self.config = {"configurable": {"thread_id": self.session_id}, "callbacks": [GalileoCallback()]}
+        self.config = {
+            "configurable": {"thread_id": self.session_id},
+            "callbacks": [GalileoCallback(start_new_trace=False, flush_on_chain_end=False)],
+        }
     
     def load_tools(self) -> None:
         """Load tools from the domain's tools directory and add RAG if enabled"""
@@ -141,15 +145,45 @@ class LangGraphAgent(BaseAgent):
     
     def process_query(self, messages: List[Dict[str, str]]) -> str:
         """Process a user query and return a response"""
+        galileo_logger = None
+        trace_started = False
+        response_text = ""
+        status_code = 200
+
+        # Attempt to obtain the Galileo logger and start a trace if one is not active.
+        try:
+            galileo_logger = galileo_context.get_logger_instance()
+            if galileo_logger and not galileo_logger.has_active_trace():
+                trace_payload = {"messages": messages, "session_id": self.session_id}
+                try:
+                    trace_input = json.dumps(trace_payload)
+                except (TypeError, ValueError):
+                    trace_input = str(trace_payload)
+
+                metadata = {
+                    "domain": self.domain_config.name,
+                    "session_id": self.session_id,
+                }
+
+                galileo_logger.start_trace(
+                    input=trace_input,
+                    metadata={k: str(v) for k, v in metadata.items()},
+                    tags=[self.domain_config.name, "chat"],
+                    external_id=self.session_id,
+                )
+                trace_started = True
+        except Exception as logger_error:
+            print(f"⚠️  Unable to initialize Galileo trace: {logger_error}")
+
         try:
             # Load tools if not already loaded
             if not self.tools:
                 self.load_tools()
-            
+
             # Build graph if not already built
             if not self.graph:
                 self.graph = self._build_graph()
-            
+
             # Convert messages to LangChain format
             langchain_messages = []
             for msg in messages:
@@ -158,16 +192,35 @@ class LangGraphAgent(BaseAgent):
                 elif msg["role"] == "assistant":
                     from langchain_core.messages import AIMessage
                     langchain_messages.append(AIMessage(content=msg["content"]))
-            
+
             # Process the query
             initial_state = {"messages": langchain_messages}
             result = self.graph.invoke(initial_state, self.config)
 
-            # Return the last message content
+            # Capture the last message content
             if result["messages"]:
-                return result["messages"][-1].content
-            return "No response generated"
-            
+                response_text = result["messages"][-1].content
+            else:
+                response_text = "No response generated"
+
         except Exception as e:
             print(f"[ERROR] Error processing query: {e}")
-            return f"Error processing your request: {str(e)}"
+            status_code = 500
+            response_text = f"Error processing your request: {str(e)}"
+        finally:
+            if trace_started and galileo_logger:
+                try:
+                    galileo_logger.conclude(
+                        output=response_text or "",
+                        status_code=status_code,
+                        conclude_all=True,
+                    )
+                except Exception as conclude_error:
+                    print(f"⚠️  Failed to conclude Galileo trace: {conclude_error}")
+
+                try:
+                    galileo_logger.flush()
+                except Exception as flush_error:
+                    print(f"⚠️  Failed to flush Galileo trace: {flush_error}")
+
+        return response_text or "No response generated"

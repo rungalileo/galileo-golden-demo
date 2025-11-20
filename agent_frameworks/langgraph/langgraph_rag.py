@@ -6,13 +6,83 @@ Uses Pinecone for vector storage with environment-based configuration.
 import os
 from pathlib import Path
 from typing import Optional
-from langchain import hub
+try:
+    from langchainhub import pull as hub_pull
+except ImportError:
+    # Fallback for older versions
+    try:
+        from langchain import hub
+        hub_pull = hub.pull
+    except ImportError:
+        # If all else fails, we'll create a simple prompt template
+        from langchain_core.prompts import ChatPromptTemplate
+        def hub_pull(prompt_name):
+            # Fallback: create a simple prompt template
+            return ChatPromptTemplate.from_messages([
+                ("system", "You are a helpful assistant that answers questions based on retrieved context."),
+                ("human", "{input}\n\nContext:\n{context}")
+            ])
+
 from langchain_pinecone import PineconeVectorStore
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_core.tools import tool
-from langchain.chains import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
+
+# Try to import retrieval chain functions from newer locations
+try:
+    from langchain.chains.retrieval import create_retrieval_chain
+    from langchain.chains.combine_documents import create_stuff_documents_chain
+except ImportError:
+    try:
+        from langchain.chains import create_retrieval_chain, create_stuff_documents_chain
+    except ImportError:
+        # Fallback: create these functions manually using LCEL
+        from langchain_core.runnables import RunnablePassthrough, RunnableParallel
+        from langchain_core.output_parsers import StrOutputParser
+        
+        def create_stuff_documents_chain(llm, prompt):
+            """Create a chain that combines documents using LCEL"""
+            def format_docs(input_dict):
+                docs = input_dict.get("context", [])
+                if not docs:
+                    return ""
+                # Handle both list of strings and list of Document objects
+                if isinstance(docs, list):
+                    if docs and hasattr(docs[0], 'page_content'):
+                        return "\n\n".join(doc.page_content for doc in docs)
+                    else:
+                        return "\n\n".join(str(doc) for doc in docs)
+                return str(docs)
+            
+            chain = (
+                RunnableParallel(
+                    context=format_docs,
+                    input=lambda x: x.get("input", "")
+                )
+                | prompt
+                | llm
+                | StrOutputParser()
+            )
+            return chain
+        
+        def create_retrieval_chain(retriever, combine_docs_chain):
+            """Create a retrieval chain using LCEL"""
+            def invoke_with_input(input_dict):
+                # Get the input query
+                query = input_dict.get("input", "")
+                # Retrieve documents
+                docs = retriever.invoke(query)
+                # Combine with input
+                result = combine_docs_chain.invoke({"context": docs, "input": query})
+                # Return in expected format
+                return {"answer": result}
+            
+            # Create a simple callable that matches the expected interface
+            class RetrievalChainWrapper:
+                def invoke(self, input_dict):
+                    return invoke_with_input(input_dict)
+            
+            return RetrievalChainWrapper()
 from pinecone import Pinecone
 from domain_manager import DomainManager
 from setup_env import setup_environment
@@ -99,7 +169,7 @@ class DomainRAGSystem:
             )
             
             # Create prompt for the chain
-            retrieval_qa_chat_prompt = hub.pull("langchain-ai/retrieval-qa-chat")
+            retrieval_qa_chat_prompt = hub_pull("langchain-ai/retrieval-qa-chat")
             
             # Create the retrieval chain
             combine_docs_chain = create_stuff_documents_chain(llm, retrieval_qa_chat_prompt)

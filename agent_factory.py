@@ -12,8 +12,29 @@ class AgentFactory:
     Factory for creating domain-specific agents with different frameworks.
     """
     
-    def __init__(self):
-        self.domain_manager = DomainManager()
+    def __init__(self, domains_dir: Optional[str] = None):
+        # If domains_dir is provided, use it; otherwise use default
+        if domains_dir:
+            self.domain_manager = DomainManager(domains_dir=domains_dir)
+        else:
+            # Try to find domains directory relative to common locations
+            import os
+            from pathlib import Path
+            
+            # Check if we're in a subdirectory and need to go up
+            current_dir = Path.cwd()
+            if current_dir.name in ["OpenTelemetry_notebooks", "experiments", "helpers"]:
+                # We're in a subdirectory, look for domains in parent
+                domains_path = current_dir.parent / "domains"
+            else:
+                # We're at project root
+                domains_path = current_dir / "domains"
+            
+            if domains_path.exists():
+                self.domain_manager = DomainManager(domains_dir=str(domains_path))
+            else:
+                # Fallback to default
+                self.domain_manager = DomainManager()
     
     def get_available_domains(self) -> list[str]:
         """Get list of available domains"""

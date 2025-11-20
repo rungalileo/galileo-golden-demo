@@ -2,12 +2,15 @@
 Galileo Demo App
 """
 import uuid
+from typing import Optional
 import streamlit as st
 from dotenv import load_dotenv
 from galileo import galileo_context
 from agent_factory import AgentFactory
 from setup_env import setup_environment
+from setup_otel import setup_opentelemetry_from_env
 from langchain_core.messages import AIMessage, HumanMessage
+from opentelemetry import trace
 from agent_frameworks.langgraph.langgraph_rag import get_domain_rag_system
 from helpers.galileo_api_helpers import get_galileo_app_url, get_galileo_project_id, get_galileo_log_stream_id
 from experiments.experiment_helpers import (
@@ -20,6 +23,8 @@ from experiments.experiment_helpers import (
     get_domain_dataset_name,
     AVAILABLE_METRICS
 )
+from create_custom_metric import get_bedrock_judge_model_id
+from galileo.metrics import create_custom_llm_metric, OutputTypeEnum, StepType
 import os
 import io
 
@@ -45,6 +50,56 @@ def initialize_rag_systems():
     except Exception as e:
         print(f"❌ Failed to initialize RAG system: {e}")
         return False
+
+
+def initialize_custom_metric():
+    """Create custom metric using AWS Bedrock at app startup"""
+    try:
+        metric_name = "Custom Metric - Response Quality"
+        
+        # Use the Bedrock model ID directly (not an alias)
+        # This ensures Galileo can properly call Bedrock for metric evaluation
+        judge_model = get_bedrock_judge_model_id()
+        
+        print(f"Using Bedrock model: {judge_model}")
+        print("Note: If the model doesn't appear in the UI, register it as a model alias in Galileo first\n")
+        
+        custom_metric = create_custom_llm_metric(
+            name=metric_name,
+            user_prompt="""
+You are an impartial evaluator, ensuring that LLM responses follow the given instructions.
+
+For this evaluation, check if the LLM response:
+
+1. Addresses the user's request appropriately
+
+2. Follows the instructions provided in the prompt
+
+3. Provides a relevant and helpful response
+
+Task: Determine if the provided LLM output follows the instructions and is helpful.
+
+Return true if the response follows instructions and is helpful
+
+Return false if the response does not follow instructions or is not helpful
+""",
+            node_level=StepType.llm,
+            cot_enabled=True,
+            model_name=judge_model,
+            num_judges=1,
+            description="""
+This metric determines if the LLM response follows the given instructions 
+and provides a helpful, relevant answer to the user's request.
+""",
+            tags=["quality", "instructions", "demo"],
+            output_type=OutputTypeEnum.BOOLEAN,
+        )
+        print(f"✓ Custom metric '{metric_name}' created successfully")
+        return custom_metric
+        
+    except Exception as e:
+        print(f"⚠️  Custom metric creation failed: {e}")
+        return None
 
 
 def escape_dollar_signs(text: str) -> str:
@@ -123,54 +178,63 @@ def orchestrate_streamlit_and_get_user_input(
     return user_input
 
 
-def process_input_for_simple_app(user_input: str | None):
+def process_input_for_simple_app(user_input: Optional[str]):
     """Process user input and generate response - using AgentFactory directly"""
+    tracer = trace.get_tracer(__name__)
+    
     if user_input:
-        # Start Galileo session on first user input
-        if not st.session_state.galileo_session_started:
-            try:
-                galileo_context.start_session(name="Finance Agent Demo", external_id=st.session_state.session_id)
-                st.session_state.galileo_logger = galileo_context
-                st.session_state.galileo_session_started = True
-            except Exception as e:
-                st.error(f"Failed to start Galileo session: {str(e)}")
-                st.stop()
-        
-        # Add user message to chat history
-        user_message = HumanMessage(content=user_input)
-        st.session_state.messages.append({"message": user_message, "agent": "user"})
+        with tracer.start_as_current_span("process_user_query") as span:
+            span.set_attribute("user_input.length", len(user_input))
+            span.set_attribute("user_input.preview", user_input[:100])
+            
+            # Start Galileo session on first user input
+            if not st.session_state.galileo_session_started:
+                try:
+                    galileo_context.start_session(name="Finance Agent Demo", external_id=st.session_state.session_id)
+                    st.session_state.galileo_logger = galileo_context
+                    st.session_state.galileo_session_started = True
+                except Exception as e:
+                    st.error(f"Failed to start Galileo session: {str(e)}")
+                    st.stop()
+            
+            # Add user message to chat history
+            user_message = HumanMessage(content=user_input)
+            st.session_state.messages.append({"message": user_message, "agent": "user"})
 
-        # Display the user message immediately
-        with st.chat_message("user"):
-            st.write(escape_dollar_signs(user_input))
+            # Display the user message immediately
+            with st.chat_message("user"):
+                st.write(escape_dollar_signs(user_input))
 
-        with st.chat_message("assistant"):
-            with st.spinner("Processing..."):
-                # Convert session state messages to the format expected by the agent
-                conversation_messages = []
-                for msg_data in st.session_state.messages:
-                    if isinstance(msg_data, dict) and "message" in msg_data:
-                        message = msg_data["message"]
-                        if isinstance(message, HumanMessage):
-                            conversation_messages.append({"role": "user", "content": message.content})
-                        elif isinstance(message, AIMessage):
-                            conversation_messages.append({"role": "assistant", "content": message.content})
-                
+            with st.chat_message("assistant"):
+                with st.spinner("Processing..."):
+                    # Convert session state messages to the format expected by the agent
+                    conversation_messages = []
+                    for msg_data in st.session_state.messages:
+                        if isinstance(msg_data, dict) and "message" in msg_data:
+                            message = msg_data["message"]
+                            if isinstance(message, HumanMessage):
+                                conversation_messages.append({"role": "user", "content": message.content})
+                            elif isinstance(message, AIMessage):
+                                conversation_messages.append({"role": "assistant", "content": message.content})
+                    
 
-                # Get the actual response from the agent
-                response = st.session_state.agent.process_query(conversation_messages)
+                    # Get the actual response from the agent
+                    with tracer.start_as_current_span("agent.process_query") as span:
+                        span.set_attribute("conversation.messages_count", len(conversation_messages))
+                        response = st.session_state.agent.process_query(conversation_messages)
+                        span.set_attribute("response.length", len(response) if response else 0)
 
-                # Create and display AI message
-                ai_message = AIMessage(content=response)
-                st.session_state.messages.append(
-                    {"message": ai_message, "agent": "assistant"}
-                )
+                    # Create and display AI message
+                    ai_message = AIMessage(content=response)
+                    st.session_state.messages.append(
+                        {"message": ai_message, "agent": "assistant"}
+                    )
 
-                # Display response
-                st.write(escape_dollar_signs(response))
-
-        # Rerun to update chat history
-        st.rerun()
+                    # Display response
+                    st.write(escape_dollar_signs(response))
+            
+            # Rerun to update chat history
+            st.rerun()
 
 
 def render_experiments_page(domain_name: str, domain_config, agent_factory):
@@ -589,6 +653,25 @@ def multi_domain_agent_app():
     if "environment_setup_done" not in st.session_state:
         setup_environment()
         st.session_state.environment_setup_done = True
+    
+    # Setup OpenTelemetry (only once)
+    if "otel_setup_done" not in st.session_state:
+        try:
+            setup_opentelemetry_from_env()
+            st.session_state.otel_setup_done = True
+        except Exception as e:
+            print(f"⚠️  OpenTelemetry setup failed: {e}")
+            st.session_state.otel_setup_done = True  # Mark as done to avoid retrying
+    
+    # Create custom metric (only once)
+    if "custom_metric_created" not in st.session_state:
+        try:
+            custom_metric = initialize_custom_metric()
+            st.session_state.custom_metric = custom_metric
+            st.session_state.custom_metric_created = True
+        except Exception as e:
+            print(f"⚠️  Custom metric creation failed: {e}")
+            st.session_state.custom_metric_created = True  # Mark as done to avoid retrying
     
     # Initialize RAG systems (only once)
     if "rag_systems_initialized" not in st.session_state:

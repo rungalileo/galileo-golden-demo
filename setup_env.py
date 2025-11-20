@@ -28,7 +28,15 @@ def setup_environment():
             "ADMIN_KEY": secrets.get("admin_key", ""),
             "PINECONE_API_KEY_LOCAL": secrets.get("pinecone_api_key_local", ""),
             "PINECONE_API_KEY_HOSTED": secrets.get("pinecone_api_key_hosted", ""),
-            "ENVIRONMENT": secrets.get("environment", "local")
+            "ENVIRONMENT": secrets.get("environment", "local"),
+            # OpenTelemetry configuration
+            "OTEL_SERVICE_NAME": secrets.get("otel_service_name", "galileo-golden-demo"),
+            "OTEL_EXPORTER_OTLP_ENDPOINT": secrets.get("otel_exporter_otlp_endpoint", ""),
+            # Use OTEL_EXPORTER_OTLP_TRACES_HEADERS (Galileo format) or fallback to OTEL_EXPORTER_OTLP_HEADERS
+            "OTEL_EXPORTER_OTLP_TRACES_HEADERS": secrets.get("otel_exporter_otlp_traces_headers", ""),
+            "OTEL_EXPORTER_OTLP_HEADERS": secrets.get("otel_exporter_otlp_headers", ""),  # Fallback format
+            "OTEL_CONSOLE_EXPORTER": secrets.get("otel_console_exporter", "false"),
+            "OTEL_ENABLE_OPENINFERENCE": secrets.get("otel_enable_openinference", "true")
         }
         
         for key, value in env_vars.items():

@@ -6,6 +6,7 @@ python-dotenv
 langchain
 langchain-core
 langchain-openai
+langchainhub
 langgraph
 langchain-pinecone
 pinecone
@@ -20,3 +21,12 @@ arize-phoenix-otel
 arize-phoenix
 openinference-instrumentation-openai
 openinference-instrumentation-langchain
+openinference-instrumentation-langgraph
+langchain-aws
+boto3
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation-openai
+opentelemetry-instrumentation-httpx
+opentelemetry-instrumentation-requests
+opentelemetry-exporter-otlp-proto-http
