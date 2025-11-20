@@ -2,6 +2,13 @@ domain:
   name: "finance"
   description: "Stock market analyst and trading assistant"
 
+# Galileo Configuration
+# Specify the Galileo project name for this domain
+# If not specified, defaults to: "galileo-demo-{domain_name}" (e.g., "galileo-demo-finance")
+galileo:
+  project: "galileo-demo-finance"     # Galileo project name
+  log_stream: "default"               # Log stream name (optional, defaults to "default")
+
 # UI configuration
 ui:
   app_title: "🤖 Finance Assistant"
@@ -11,7 +18,7 @@ ui:
   
 # Model configuration
 model:
-  model_name: "gpt-4.1"
+  model_name: "gpt-5.1"
   temperature: 0.1
 
 # RAG configuration

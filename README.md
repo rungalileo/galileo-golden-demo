@@ -46,16 +46,22 @@ Not a production reference architecture or replacement for customer-specific POC
    
    Edit `.streamlit/secrets.toml` with your actual API keys:
    ```toml
+   # API Keys
    openai_api_key = "your_openai_api_key_here"
    galileo_api_key = "your_galileo_api_key_here"
-   galileo_project = "your_project_name"
-   galileo_log_stream = "your_log_stream_name"
+   
+   # Galileo Configuration
+   galileo_console_url = "https://console.galileo.ai"  # or your custom URL
    
    # Pinecone Configuration
    pinecone_api_key_local = "your_local_project_api_key"
    pinecone_api_key_hosted = "your_hosted_project_api_key"
-   environment = "local"  # or "hosted"
+   
+   # Environment: "local" for development, "hosted" for production
+   environment = "local"
    ```
+   
+   **Note:** Galileo project names are configured per-domain in `domains/{domain}/config.yaml`
 
 5. **Run the Streamlit app**
    ```bash
@@ -64,9 +70,17 @@ Not a production reference architecture or replacement for customer-specific POC
 
 The app will be available at `http://localhost:8501`
 
+## Multi-Domain Support
+
+This demo supports **multiple domains** with automatic routing and separate Galileo projects per domain. The app automatically discovers all domains in the `domains/` directory and creates navigation pages for each.
+
+Each domain automatically gets its own Galileo project using the convention: `galileo-demo-{domain_name}` (e.g., `galileo-demo-finance`). You can optionally override this in the domain's `config.yaml`.
+
+**📖 For detailed multi-domain setup instructions, see [documentation/MULTI_DOMAIN_SETUP.md](documentation/MULTI_DOMAIN_SETUP.md)**
+
 ## How to Add a New Domain
-This demo code is designed to easily be extended to different domains, that way, SE's can spend less time
-writing code and more time focusing on how to display Galileo in the best light. 
+
+This demo code is designed to easily be extended to different domains, that way, SE's can spend less time writing code and more time focusing on how to display Galileo in the best light. 
 
 Adding a new domain is straightforward - simply copy the existing finance domain structure and customize the components:
 
@@ -99,8 +113,15 @@ domain:
   name: "your_domain"
   description: "Your domain description"
 
+# Galileo Configuration (OPTIONAL)
+# If not specified, defaults to: "galileo-demo-{domain_name}"
+# galileo:
+#   project: "custom-project-name"      # Override default project name
+#   log_stream: "custom-stream"         # Override default log stream
+
 ui:
-  app_title: "🤖 Your Domain Assistant"
+  app_title: "Your Domain Assistant"
+  icon: "🤖"  # Icon for navigation (optional, defaults to 🤖)
   example_queries:
     - "Example query 1"
     - "Example query 2"
@@ -196,16 +217,19 @@ python helpers/setup_vectordb.py your_domain_name hosted
 - This processes documents from `domains/your_domain_name/docs/` directory
 - Creates Pinecone indexes that persist in the cloud and don't need to be rebuilt
 
-See [PINECONE_SETUP.md](PINECONE_SETUP.md) for detailed configuration instructions.
+See [documentation/PINECONE_SETUP.md](documentation/PINECONE_SETUP.md) for detailed configuration instructions.
 
-### 5. Update App Configuration (Temporary)
+### 5. Test Your Domain
 
-In `app.py`, change the domain configuration:
-```python
-DOMAIN = "your_domain_name"  # Change this line
+That's it! The app will automatically discover your new domain:
+
+```bash
+streamlit run app.py
 ```
 
-*Note: This step is temporary while we finalize multi-domain support in the UI.*
+Your domain will be available at:
+- Root URL: `http://localhost:8501` (defaults to "finance" domain, or first available domain)
+- Direct URL: `http://localhost:8501/your_domain_name`
 
 ## Underlying Architecture
 
@@ -227,7 +251,7 @@ The app uses **Pinecone** for vector storage with environment-based configuratio
 - **Index Naming**: `{domain}-{environment}-index` (e.g., `finance-local-index`)
 - **Automatic Selection**: When the app executes vectorDB searches, the app automatically uses the correct project based on environment setting
 
-See [PINECONE_SETUP.md](PINECONE_SETUP.md) for detailed configuration instructions.
+See [documentation/PINECONE_SETUP.md](documentation/PINECONE_SETUP.md) for detailed configuration instructions.
 
 ## Code Structure
 
@@ -240,6 +264,9 @@ galileo-golden-demo/
 ├── setup_env.py            # Environment setup utilities
 ├── run_streamlit.py        # Alternative app runner
 ├── requirements.txt         # Python dependencies
+├── documentation/          # Setup guides and documentation
+│   ├── MULTI_DOMAIN_SETUP.md  # Multi-domain configuration guide
+│   └── PINECONE_SETUP.md      # Pinecone setup instructions
 ├── agent_frameworks/        # Agent framework implementations
 │   └── langgraph/
 │       ├── agent.py         # LangGraph agent implementation
@@ -249,7 +276,7 @@ galileo-golden-demo/
 │       ├── config.yaml     # Domain configuration
 │       ├── system_prompt.json
 │       ├── dataset.csv     # Evaluation data
-│       ├── docs/          # RAG documents
+│       ├── docs/          # RAG documents (for vectorDB)
 │       └── tools/         # Domain tools
 ├── experiments/            # Experiment system (UI + CLI)
 │   ├── experiment_helpers.py  # Shared experiment functions
@@ -261,9 +288,8 @@ galileo-golden-demo/
 │   ├── test_vectordb.py   # Vector database testing
 │   ├── protect_helpers.py # Galileo Protect stage setup and rulesets
 │   └── galileo_api_helpers.py  # Galileo API utilities
-├── tools/                 # Shared tools
-│   └── rag_retrieval.py   # General RAG functionality (not implemented)
-└── PINECONE_SETUP.md      # Detailed Pinecone configuration guide
+└── tools/                 # Shared tools
+    └── rag_retrieval.py   # General RAG functionality (not implemented)
 ```
 
 ### For Sales Engineers
@@ -394,7 +420,6 @@ protect:
 
 - **Live deployment URL** for easy demo access without local setup
 - **Hallucination logging buttons** for interactive evaluation
-- **Multi-domain UI support** (currently requires manual domain selection in code)
 
 ## Updates and Issues
 

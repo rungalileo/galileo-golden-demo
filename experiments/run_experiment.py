@@ -28,9 +28,6 @@ from experiments.experiment_helpers import (
 
 
 def main():
-    # Setup environment (load API keys)
-    setup_environment()
-    
     parser = argparse.ArgumentParser(description="Run Galileo experiment for a domain")
     parser.add_argument("domain", help="Domain name (e.g., 'finance')")
     parser.add_argument("--experiment-name", help="Custom experiment name", default=None)
@@ -46,6 +43,9 @@ def main():
         print(f"Error: {e}")
         print("Available domains:", dm.list_domains())
         sys.exit(1)
+    
+    # Setup environment with domain-specific settings
+    setup_environment(args.domain, domain_config.config)
     
     # Create experiment name
     experiment_name = args.experiment_name or f"{args.domain}-experiment"

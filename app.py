@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from galileo import galileo_context
 from agent_factory import AgentFactory
 from setup_env import setup_environment
+from domain_manager import DomainManager
 from langchain_core.messages import AIMessage, HumanMessage
 from agent_frameworks.langgraph.langgraph_rag import get_domain_rag_system
 from helpers.galileo_api_helpers import get_galileo_app_url, get_galileo_project_id, get_galileo_log_stream_id
@@ -28,18 +29,16 @@ import io
 load_dotenv()
 
 
-# Configuration - easily changeable for different domains
-DOMAIN = "finance"  # Could be "healthcare", "legal", etc.
+# Configuration
 FRAMEWORK = "LangGraph"
 
 
-def initialize_rag_systems():
+def initialize_rag_systems(domain_name: str):
     """Initialize RAG systems at app startup for better performance"""
     try:
-        
-        # Initialize RAG system for the current domain
-        print(f"🔧 Initializing RAG system for domain: {DOMAIN}")
-        rag_system = get_domain_rag_system(DOMAIN)
+        # Initialize RAG system for the specified domain
+        print(f"🔧 Initializing RAG system for domain: {domain_name}")
+        rag_system = get_domain_rag_system(domain_name)
         print(f"✅ RAG system initialized successfully")
         
         return True
@@ -102,7 +101,7 @@ def show_example_queries(query_1: str, query_2: str):
 
 
 def orchestrate_streamlit_and_get_user_input(
-    agent_title: str, example_query_1: str, example_query_2: str
+    agent_title: str, example_query_1: str, example_query_2: str, domain_name: str
 ):
     """Set up the Streamlit interface and get user input"""
     # App title and description
@@ -114,6 +113,9 @@ def orchestrate_streamlit_and_get_user_input(
     # Create state variable but don't start Galileo session until we have user input
     if "galileo_session_started" not in st.session_state:
         st.session_state.galileo_session_started = False
+    # Store domain name in session state
+    if "domain_name" not in st.session_state:
+        st.session_state.domain_name = domain_name
 
     # Show example queries
     example_query = show_example_queries(example_query_1, example_query_2)
@@ -135,7 +137,9 @@ def process_input_for_simple_app(user_input: str | None):
         # Start Galileo session on first user input
         if not st.session_state.galileo_session_started:
             try:
-                galileo_context.start_session(name="Finance Agent Demo", external_id=st.session_state.session_id)
+                domain_name = st.session_state.get("domain_name", "default")
+                session_name = f"{domain_name.title()} Agent Demo"
+                galileo_context.start_session(name=session_name, external_id=st.session_state.session_id)
                 st.session_state.galileo_logger = galileo_context
                 st.session_state.galileo_session_started = True
             except Exception as e:
@@ -596,17 +600,29 @@ def run_experiment_ui(domain_name: str, experiment_name: str, metrics: list, age
                 st.code(traceback.format_exc())
 
 
-def multi_domain_agent_app():
+def multi_domain_agent_app(domain_name: str):
     """Main agent app - configuration-driven using domain config"""
-    # Setup environment and secrets (only once)
-    if "environment_setup_done" not in st.session_state:
-        setup_environment()
-        st.session_state.environment_setup_done = True
+    # Load domain configuration first (needed for environment setup)
+    dm = DomainManager()
+    full_config_key = f"full_domain_config_{domain_name}"
+    if full_config_key not in st.session_state:
+        full_config = dm.load_domain_config(domain_name)
+        st.session_state[full_config_key] = full_config.config
     
-    # Initialize RAG systems (only once)
-    if "rag_systems_initialized" not in st.session_state:
-        initialize_rag_systems()
-        st.session_state.rag_systems_initialized = True
+    # Setup environment with domain-specific project (per domain)
+    env_setup_key = f"environment_setup_{domain_name}"
+    if env_setup_key not in st.session_state:
+        setup_environment(
+            domain_name=domain_name,
+            domain_config=st.session_state[full_config_key]
+        )
+        st.session_state[env_setup_key] = True
+    
+    # Initialize RAG systems for this domain (per domain)
+    rag_key = f"rag_initialized_{domain_name}"
+    if rag_key not in st.session_state:
+        initialize_rag_systems(domain_name)
+        st.session_state[rag_key] = True
     
     # Initialize AgentFactory once
     if "factory" not in st.session_state:
@@ -614,24 +630,18 @@ def multi_domain_agent_app():
     
     factory = st.session_state.factory
     
-    # Load domain configuration for UI settings
-    if "domain_config" not in st.session_state:
-        domain_info = factory.get_domain_info(DOMAIN)
-        st.session_state.domain_config = domain_info
-    
-    # Load full domain config for Protect settings
-    if "full_domain_config" not in st.session_state:
-        from domain_manager import DomainManager
-        dm = DomainManager()
-        full_config = dm.load_domain_config(DOMAIN)
-        st.session_state.full_domain_config = full_config.config
+    # Load domain configuration for UI settings (per domain)
+    domain_config_key = f"domain_config_{domain_name}"
+    if domain_config_key not in st.session_state:
+        domain_info = factory.get_domain_info(domain_name)
+        st.session_state[domain_config_key] = domain_info
     
     # Create tabs at the top of the main page
     tab1, tab2 = st.tabs(["💬 Chat", "🧪 Experiments"])
     
     # Chat Tab
     with tab1:
-        render_chat_page(factory)
+        render_chat_page(factory, domain_name)
         
         # Add Galileo Tracing link in sidebar when on Chat tab
         with st.sidebar:
@@ -667,21 +677,22 @@ def multi_domain_agent_app():
             st.divider()
             st.subheader("🛡️ Galileo Protect")
             
-            # Initialize protect_enabled in session state (default to False)
-            if "protect_enabled" not in st.session_state:
-                st.session_state.protect_enabled = False
+            # Initialize protect_enabled in session state (default to False, per domain)
+            protect_key = f"protect_enabled_{domain_name}"
+            if protect_key not in st.session_state:
+                st.session_state[protect_key] = False
             
             # Toggle for Protect
             protect_enabled = st.checkbox(
                 "Enable Prompt Injection Protection",
-                value=st.session_state.protect_enabled,
+                value=st.session_state[protect_key],
                 help="Enable Galileo Protect to detect and block prompt injection attempts"
             )
-            st.session_state.protect_enabled = protect_enabled
+            st.session_state[protect_key] = protect_enabled
             
             # Show current Protect configuration from domain config
             if protect_enabled:
-                protect_config = st.session_state.get("full_domain_config", {}).get("protect", {})
+                protect_config = st.session_state.get(full_config_key, {}).get("protect", {})
                 if protect_config:
                     metrics = protect_config.get("metrics", [])
                     if metrics:
@@ -711,58 +722,161 @@ def multi_domain_agent_app():
             if protect_enabled:
                 st.info("🛡️ Protect is active. Prompt injection attempts will be blocked.")
                 
-                # Initialize stage if needed
-                if "protect_stage_id" not in st.session_state and project_name:
+                # Initialize stage if needed (per domain)
+                stage_key = f"protect_stage_id_{domain_name}"
+                if stage_key not in st.session_state and project_name:
                     try:
                         with st.spinner("Setting up Protect stage..."):
                             stage_id = get_or_create_protect_stage(project_name)
-                            st.session_state.protect_stage_id = stage_id
+                            st.session_state[stage_key] = stage_id
                     except Exception as e:
                         st.error(f"Failed to setup Protect stage: {str(e)}")
-                        st.session_state.protect_enabled = False
+                        st.session_state[protect_key] = False
             else:
                 st.info("Protect is disabled. All queries will be processed normally.")
     
     # Experiments Tab
     with tab2:
         # Load the full domain config for experiments
-        from domain_manager import DomainManager
         dm = DomainManager()
-        full_domain_config = dm.load_domain_config(DOMAIN)
-        render_experiments_page(DOMAIN, full_domain_config, factory)
+        full_domain_config = dm.load_domain_config(domain_name)
+        render_experiments_page(domain_name, full_domain_config, factory)
 
 
-def render_chat_page(factory):
+def render_chat_page(factory, domain_name: str):
     """Render the chat page."""
-    # Extract UI configuration from domain config
-    ui_config = st.session_state.domain_config.get("ui", {})
-    app_title = ui_config.get("app_title", f"🤖 {DOMAIN.title()} Assistant")
+    # Extract UI configuration from domain config (per domain)
+    domain_config_key = f"domain_config_{domain_name}"
+    ui_config = st.session_state[domain_config_key].get("ui", {})
+    app_title = ui_config.get("app_title", f"{domain_name.title()} Assistant")
     example_queries = ui_config.get("example_queries", [
         "Hello, how can you help me?",
         "What can you do?"
     ])
     
-    # Initialize session ID
-    if "session_id" not in st.session_state:
+    # Initialize session ID (per domain)
+    session_id_key = f"session_id_{domain_name}"
+    if session_id_key not in st.session_state:
         session_id = str(uuid.uuid4())[:10]
-        st.session_state.session_id = session_id
+        st.session_state[session_id_key] = session_id
+        st.session_state.session_id = session_id  # Also set the global session_id
+    else:
+        st.session_state.session_id = st.session_state[session_id_key]
     
     user_input = orchestrate_streamlit_and_get_user_input(
         app_title,
         example_queries[0] if len(example_queries) > 0 else "Hello, how can you help me?",
         example_queries[1] if len(example_queries) > 1 else "What can you do?",
+        domain_name
     )
     
     # Create agent dynamically using AgentFactory - works for any domain!
-    if "agent" not in st.session_state:
-        st.session_state.agent = factory.create_agent(
-            domain=DOMAIN, 
+    agent_key = f"agent_{domain_name}"
+    if agent_key not in st.session_state:
+        st.session_state[agent_key] = factory.create_agent(
+            domain=domain_name, 
             framework=FRAMEWORK,
             session_id=st.session_state.session_id
         )
     
+    # Set current agent for processing
+    st.session_state.agent = st.session_state[agent_key]
+    
+    # Update protect_enabled for the current domain
+    protect_key = f"protect_enabled_{domain_name}"
+    st.session_state.protect_enabled = st.session_state.get(protect_key, False)
+    
+    # Update protect_stage_id for the current domain
+    stage_key = f"protect_stage_id_{domain_name}"
+    if stage_key in st.session_state:
+        st.session_state.protect_stage_id = st.session_state[stage_key]
+    
     process_input_for_simple_app(user_input)
 
 
+def create_domain_page(domain_name: str):
+    """Create a page function for a specific domain"""
+    def page_func():
+        multi_domain_agent_app(domain_name)
+    return page_func
+
+
+def main():
+    """Main app with dynamic routing based on discovered domains"""
+    # Initialize domain manager
+    dm = DomainManager()
+    
+    try:
+        # Auto-discover available domains
+        available_domains = dm.list_domains()
+        
+        if not available_domains:
+            st.error("No domains found! Please create a domain in the 'domains/' directory.")
+            st.info("Example: Create 'domains/finance/config.yaml' with your domain configuration.")
+            st.stop()
+        
+        # Create pages dictionary for st.navigation
+        pages = []
+        
+        # Determine default domain (prefer "finance" if it exists, otherwise first domain)
+        default_domain = "finance" if "finance" in available_domains else available_domains[0]
+        
+        for domain in available_domains:
+            try:
+                domain_info = dm.get_domain_info(domain)
+                ui_config = domain_info.get("ui", {})
+                app_title = ui_config.get("app_title", f"{domain.title()} Assistant")
+                app_icon = ui_config.get("icon", "🤖")  # Default to robot emoji
+                
+                # Create page using st.Page
+                is_default = (domain == default_domain)
+                
+                if is_default:
+                    # Default domain gets both root and named path
+                    # Default page (root URL)
+                    default_page = st.Page(
+                        create_domain_page(domain),
+                        title=app_title,
+                        icon=app_icon,
+                        default=True
+                    )
+                    pages.append(default_page)
+                
+                # Named path for all domains
+                page = st.Page(
+                    create_domain_page(domain),
+                    title=app_title,
+                    url_path=f"/{domain}",
+                    icon=app_icon
+                )
+                pages.append(page)
+                
+            except Exception as e:
+                st.error(f"Error loading domain '{domain}': {str(e)}")
+                continue
+        
+        if not pages:
+            st.error("No valid domains found! Please check your domain configurations.")
+            st.stop()
+        
+        # Create navigation with list of pages - hide navigation for clean demo
+        try:
+            # uncomment this to show the navigation with different pages per domain
+            nav = st.navigation(pages, position="hidden")
+            nav.run()
+        except Exception as nav_error:
+            st.error(f"Navigation error: {str(nav_error)}")
+            st.info(f"Available domains: {available_domains}")
+            st.info(f"Number of pages created: {len(pages)}")
+            # Fallback to default domain
+            if available_domains:
+                st.warning("Falling back to direct domain execution...")
+                multi_domain_agent_app(default_domain)
+        
+    except Exception as e:
+        st.error(f"Error initializing app: {str(e)}")
+        st.info("Please check your domain configurations and try again.")
+
+
 if __name__ == "__main__":
-    multi_domain_agent_app()
+    main()

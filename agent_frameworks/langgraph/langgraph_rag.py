@@ -53,8 +53,8 @@ class DomainRAGSystem:
             embedding_model = vectorstore_config.get("embedding_model", "text-embedding-3-large")
             llm_model = model_config.get("model_name", "gpt-4o")
             
-            # Initialize environment
-            setup_environment()
+            # Initialize environment with domain-specific settings
+            setup_environment(self.domain_name, domain_config.config)
             
             # Get environment and API key
             environment = os.environ.get("ENVIRONMENT", "local")
