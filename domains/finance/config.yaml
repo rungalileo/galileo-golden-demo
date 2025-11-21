@@ -11,7 +11,8 @@ galileo:
 
 # UI configuration
 ui:
-  app_title: "🤖 Finance Assistant"
+  app_title: "Finance Assistant"
+  icon: "💰"  # Icon for navigation (optional, defaults to 🤖)
   example_queries:
     - "What's the current price of AAPL?"
     - "Buy 10 shares of TSLA at 180 dollars per share"

@@ -1,0 +1,61 @@
+domain:
+  name: "healthcare"
+  description: "Medical assistant for patient information and appointment management"
+
+# Galileo Configuration
+# Specify the Galileo project name for this domain
+# If not specified, defaults to: "galileo-demo-{domain_name}" (e.g., "galileo-demo-healthcare")
+# galileo:
+#   project: "galileo-demo-healthcare"     # Galileo project name
+#   log_stream: "default"                  # Log stream name (optional, defaults to "default")
+
+# UI configuration
+ui:
+  app_title: "Healthcare Assistant"
+  icon: "🏥"  # Icon for navigation
+  example_queries:
+    - "Get patient information for patient ID 12345"
+    - "Schedule an appointment with Dr. Smith for next Monday at 2pm"
+    - "What are the side effects of Lisinopril?"
+  
+# Model configuration
+model:
+  model_name: "gpt-5.1"
+  temperature: 0.1
+
+# RAG configuration
+rag:
+  enabled: true
+  chunk_size: 1000
+  chunk_overlap: 200
+  top_k: 5
+
+# Available tools for this domain
+tools:
+  - "get_patient_info"
+  - "schedule_appointment"
+  - "get_medication_info"
+  - "check_drug_interactions"
+  - "get_lab_results"
+
+# Vector store configuration
+vectorstore:
+  embedding_model: "text-embedding-3-large"
+
+# Protect configuration
+# Note: Protect is controlled via the UI toggle in the sidebar
+# This config defines which metrics to use and what messages to show when Protect is enabled
+protect:
+  metrics:
+    - name: "input_toxicity"
+      operator: "gt"
+      threshold: 0.5
+    - name: "pii"
+      operator: "any"
+      target_values:
+        - "ssn"
+        - "credit_card"
+  messages:
+    - "I'm sorry, but I cannot process that request as it appears to contain potentially harmful or sensitive information."
+    - "For patient privacy and security, I cannot process requests with personally identifiable information in this format."
+

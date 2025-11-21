@@ -42,7 +42,8 @@ galileo:
   log_stream: "default"                # Log stream (optional)
 
 ui:
-  app_title: "🤖 My Domain Assistant"
+  app_title: "My Domain Assistant"
+  icon: "🤖"  # Icon for navigation (optional, defaults to 🤖)
   example_queries:
     - "Example query 1"
     - "Example query 2"
@@ -108,7 +109,8 @@ galileo:
   project: "healthcare-prod"
 
 ui:
-  app_title: "🏥 Healthcare Assistant"
+  app_title: "Healthcare Assistant"
+  icon: "🏥"  # Icon for navigation
   example_queries:
     - "What are diabetes symptoms?"
     - "Explain this medical report"

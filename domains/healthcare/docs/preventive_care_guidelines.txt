@@ -1,0 +1,422 @@
+# Preventive Care and Screening Guidelines
+
+## Adult Preventive Care Schedule
+
+### Cardiovascular Risk Assessment
+
+**Blood Pressure Screening**
+- **Who:** All adults age 18 and older
+- **Frequency:** 
+  - Normal BP (<120/80): Every 2 years
+  - Elevated BP (120-129/<80): Annually
+  - Stage 1 HTN (130-139/80-89): Confirm within 1 month
+  - Stage 2 HTN (≥140/90): Within 1 week or immediately if symptomatic
+- **Method:** Office BP measurement; consider ambulatory or home BP monitoring
+- **Notes:** Use proper technique (rested 5 minutes, correct cuff size, seated)
+
+**Lipid Screening**
+- **Who:** 
+  - Men age 35+ and women age 45+
+  - Younger if risk factors present (diabetes, smoking, family history)
+- **Frequency:**
+  - Normal lipids, low risk: Every 5 years
+  - Borderline high or risk factors: Every 1-2 years
+  - On treatment: Annually or per treatment protocol
+- **What to test:** Total cholesterol, LDL, HDL, triglycerides
+- **Interpretation:**
+  - LDL <100 mg/dL (optimal)
+  - HDL >40 mg/dL men, >50 mg/dL women
+  - Triglycerides <150 mg/dL
+
+**ASCVD Risk Calculator**
+- **Who:** Adults age 40-75 without known ASCVD
+- **Frequency:** Every 4-6 years
+- **Purpose:** Guide statin therapy decision-making
+- **Action:** Consider statin if 10-year risk ≥7.5%
+
+**Diabetes Screening**
+- **Who:**
+  - All adults age 35-70 with BMI ≥25
+  - Adults with risk factors at any age
+- **Frequency:** Every 3 years if normal
+- **Method:** Fasting glucose, HbA1c, or oral glucose tolerance test
+- **Criteria:**
+  - Prediabetes: FPG 100-125, HbA1c 5.7-6.4%
+  - Diabetes: FPG ≥126, HbA1c ≥6.5%
+
+**Abdominal Aortic Aneurysm Screening**
+- **Who:** Men age 65-75 who have ever smoked
+- **Frequency:** One-time screening
+- **Method:** Abdominal ultrasound
+- **Action:** Monitor or refer vascular surgery if AAA ≥5.5 cm
+
+---
+
+### Cancer Screening
+
+**Colorectal Cancer Screening**
+- **Who:** Average-risk adults age 45-75 (start earlier if family history)
+- **Options and frequency:**
+  - Colonoscopy: Every 10 years (preferred)
+  - FIT (fecal immunochemical test): Annually
+  - FIT-DNA (Cologuard): Every 3 years
+  - CT colonography: Every 5 years
+  - Flexible sigmoidoscopy: Every 5 years
+- **Stop at:** Age 75 if normal screening, age 85 regardless
+- **Notes:** Colonoscopy allows visualization and polypectomy
+
+**Breast Cancer Screening**
+- **Who:** Women age 40-74
+- **Method:** Mammography
+- **Frequency:**
+  - Age 40-49: Shared decision-making (biennial vs annual)
+  - Age 50-74: Every 2 years (USPSTF) or annually (American Cancer Society)
+- **High risk:** Consider earlier screening and/or MRI
+  - BRCA mutation carriers
+  - Strong family history (2+ first-degree relatives)
+  - History of chest radiation age 10-30
+- **Clinical breast exam:** No longer routinely recommended
+- **Self-exam:** Optional, not evidence-based but may promote awareness
+
+**Cervical Cancer Screening**
+- **Who:** Women age 21-65
+- **Method and frequency:**
+  - Age 21-29: Pap smear alone every 3 years
+  - Age 30-65: Pap + HPV co-testing every 5 years (preferred) OR Pap alone every 3 years
+- **Stop screening:** Age 65 if adequate prior screening and not high risk
+- **Post-hysterectomy:** Discontinue if no cervix and no history of CIN2+ or cancer
+- **Notes:** More frequent screening if immunocompromised or history of CIN2+
+
+**Lung Cancer Screening**
+- **Who:** Adults age 50-80 with 20+ pack-year smoking history who currently smoke or quit within past 15 years
+- **Method:** Low-dose CT chest (LDCT)
+- **Frequency:** Annually
+- **Discontinue:** Once quit smoking for 15 years or life expectancy <10 years
+- **Shared decision-making:** Discuss benefits and harms before screening
+
+**Prostate Cancer Screening**
+- **Who:** Men age 55-69 (controversial - shared decision-making required)
+- **Method:** PSA blood test ± digital rectal exam
+- **Frequency:** Every 2-4 years if screening elected
+- **Considerations:**
+  - African American men or family history: Discuss starting at age 45
+  - Benefits: May detect early cancer
+  - Harms: False positives, overdiagnosis, biopsy complications
+- **Do NOT screen:** Men age >70 or life expectancy <10 years
+
+**Skin Cancer Screening**
+- **Who:** No clear guidelines for general population
+- **High-risk patients:** Fair skin, multiple moles, family history, immunosuppression
+- **Method:** Total body skin examination by dermatologist
+- **Self-exam:** Monthly self-examination encouraged
+- **ABCDE warning signs:**
+  - Asymmetry
+  - Border irregularity
+  - Color variation
+  - Diameter >6mm
+  - Evolving/changing
+
+---
+
+### Infectious Disease Screening
+
+**HIV Screening**
+- **Who:** All adults age 15-65 at least once; earlier if sexually active
+- **High risk:** Screen annually
+  - Men who have sex with men
+  - IV drug users
+  - Sex workers
+  - Multiple sexual partners
+  - History of STIs
+- **Pregnancy:** Screen all pregnant women
+- **Method:** HIV antibody/antigen combo test
+
+**Hepatitis C Screening**
+- **Who:** 
+  - All adults age 18-79 (one-time screening)
+  - Anyone with risk factors (IV drug use, HIV+, incarceration)
+  - Pregnant women at first prenatal visit
+- **Method:** HCV antibody, confirm with HCV RNA if positive
+- **Follow-up:** Treat all patients with chronic HCV
+
+**Hepatitis B Screening**
+- **Who:**
+  - Pregnant women
+  - High-risk individuals (IV drug use, dialysis, HIV+, immunosuppressed)
+  - Foreign-born from endemic areas
+- **Method:** HBsAg, anti-HBc, anti-HBs
+- **Vaccination:** Offer to all susceptible adults
+
+**Tuberculosis Screening**
+- **Who:** Not routine for general population
+- **Screen if:**
+  - Close contact with active TB
+  - Immunosuppressed (HIV, transplant, biologics)
+  - Healthcare workers
+  - Homeless or incarcerated
+  - Foreign-born from high-prevalence countries
+- **Method:** Tuberculin skin test (TST) or IGRA blood test
+- **Follow-up:** Chest X-ray if positive test
+
+**Sexually Transmitted Infections**
+- **Chlamydia/Gonorrhea:**
+  - All sexually active women age <25
+  - Older women with risk factors
+  - Men who have sex with men: Annually (test urine, throat, rectum)
+  - Pregnant women at first prenatal visit
+- **Syphilis:**
+  - High-risk populations
+  - All pregnant women
+  - Men who have sex with men: Annually
+
+---
+
+### Osteoporosis Screening
+
+**Who:**
+- All women age ≥65
+- Postmenopausal women age <65 with risk factors
+- Men age ≥70
+- Younger men with risk factors (steroids, hypogonadism)
+
+**Method:** DEXA scan (dual-energy X-ray absorptiometry)
+
+**Interpretation:**
+- T-score ≥-1.0: Normal
+- T-score -1.0 to -2.5: Osteopenia
+- T-score ≤-2.5: Osteoporosis
+
+**Frequency:**
+- Normal bone density: Repeat every 10-15 years
+- Osteopenia: Repeat every 2-5 years
+- Osteoporosis: Monitor based on treatment
+
+**Risk factors:**
+- Low body weight (BMI <21)
+- Smoking
+- Excessive alcohol
+- Glucocorticoid use
+- Rheumatoid arthritis
+- Parental hip fracture
+
+---
+
+### Mental Health Screening
+
+**Depression Screening**
+- **Who:** All adults, including pregnant and postpartum women
+- **Frequency:** Periodically (at least at routine visits)
+- **Tools:** PHQ-2 (initial), PHQ-9 (if positive)
+- **PHQ-2 questions:**
+  1. Little interest or pleasure in doing things?
+  2. Feeling down, depressed, or hopeless?
+- **Score:** ≥3/6 warrants full PHQ-9
+- **Follow-up:** Ensure systems in place for diagnosis, treatment, and follow-up
+
+**Anxiety Screening**
+- **Who:** Adults age 19-64
+- **Frequency:** Opportunistic screening
+- **Tool:** GAD-7 (Generalized Anxiety Disorder-7)
+- **Threshold:** Score ≥10 indicates probable anxiety disorder
+
+**Alcohol Misuse Screening**
+- **Who:** All adults age ≥18
+- **Frequency:** Annually
+- **Tools:** AUDIT-C or single-question screening
+- **AUDIT-C:** Brief 3-question screen
+  - Score ≥3 (women) or ≥4 (men) indicates risky drinking
+- **Intervention:** Brief counseling for those with risky drinking
+
+**Substance Use Screening**
+- **Who:** Adults age ≥18
+- **Frequency:** Opportunistic
+- **Tool:** DAST-10 (Drug Abuse Screening Test)
+- **Topics:** Marijuana, cocaine, opioids, stimulants, prescription misuse
+
+---
+
+### Immunizations (Adults)
+
+**Influenza Vaccine**
+- **Who:** All adults annually
+- **Timing:** September-October (before flu season)
+- **Type:** Age-appropriate vaccine
+  - Age 18-64: Standard or high-dose
+  - Age ≥65: High-dose or adjuvanted preferred
+
+**COVID-19 Vaccine**
+- **Who:** All adults age ≥18
+- **Primary series:** mRNA vaccine (2 doses) or viral vector (1 dose)
+- **Boosters:** As recommended by CDC (currently annually for age ≥65 or high-risk)
+
+**Tdap/Td (Tetanus-Diphtheria-Pertussis)**
+- **Tdap:** Single dose if not received as adult
+- **Td:** Booster every 10 years
+- **Pregnancy:** Tdap each pregnancy (27-36 weeks)
+
+**Shingles (Herpes Zoster) Vaccine**
+- **Who:** All adults age ≥50
+- **Type:** Shingrix (recombinant) - 2 doses, 2-6 months apart
+- **Note:** Give even if prior zoster infection or live vaccine
+
+**Pneumococcal Vaccines**
+- **Age ≥65:** 
+  - PCV20 (one dose) OR
+  - PCV15 followed by PPSV23 in 1 year
+- **Age 19-64 with risk factors:**
+  - Chronic lung/heart disease
+  - Diabetes
+  - Smoking
+  - Alcoholism
+  - Immunocompromised
+
+**HPV (Human Papillomavirus) Vaccine**
+- **Routine:** Age 11-26
+- **Catch-up:** Age 27-45 (shared decision-making)
+- **Series:** 2-3 doses depending on age at first dose
+
+**Hepatitis A Vaccine**
+- **Who:** 
+  - All children age 1-18
+  - Adults with risk factors or travel
+  - Chronic liver disease
+- **Series:** 2 doses, 6 months apart
+
+**Hepatitis B Vaccine**
+- **Who:** 
+  - All adults age 19-59
+  - Age ≥60 with risk factors
+  - All adults with diabetes age <60
+- **Series:** 3 doses (0, 1-2, 4-6 months)
+
+**MMR (Measles-Mumps-Rubella)**
+- **Who:** Adults born 1957 or later without evidence of immunity
+- **Series:** 1-2 doses
+- **Special:** Healthcare workers need 2 doses
+
+**Varicella (Chickenpox)**
+- **Who:** Adults without evidence of immunity
+- **Series:** 2 doses, 4-8 weeks apart
+- **Note:** Live vaccine - avoid in pregnancy and immunocompromised
+
+---
+
+### Lifestyle Counseling
+
+**Tobacco Cessation**
+- **Who:** All tobacco users
+- **Frequency:** Every visit
+- **5 A's:**
+  - Ask about tobacco use
+  - Advise to quit
+  - Assess willingness
+  - Assist with cessation plan
+  - Arrange follow-up
+- **Pharmacotherapy:** Consider nicotine replacement, varenicline, or bupropion
+
+**Healthy Diet Counseling**
+- **Who:** All adults, especially those with risk factors
+- **Topics:**
+  - Increase fruits and vegetables
+  - Choose whole grains
+  - Limit saturated fat and sodium
+  - Consider Mediterranean or DASH diet
+
+**Physical Activity Counseling**
+- **Goal:** 150 minutes moderate aerobic activity per week
+- **Strength training:** 2 or more days per week
+- **Older adults:** Balance exercises to prevent falls
+
+**Weight Management**
+- **Who:** Adults with BMI ≥25
+- **Screening:** Calculate BMI at every visit
+- **Intervention:** Behavioral counseling, diet, exercise
+- **Consider referral:** If BMI ≥30 or BMI ≥27 with comorbidities
+
+**Folic Acid Supplementation**
+- **Who:** All women planning or capable of pregnancy
+- **Dose:** 400-800 mcg daily
+- **Purpose:** Prevent neural tube defects
+
+**Aspirin for ASCVD Prevention**
+- **Consider:** Age 40-59 with ≥10% 10-year ASCVD risk (shared decision-making)
+- **Do NOT use:** Age ≥70 or increased bleeding risk
+- **Dose:** 81 mg daily
+
+**Falls Prevention (Older Adults)**
+- **Who:** Adults age ≥65
+- **Screening:** Ask about falls in past year
+- **Assessment:** 
+  - Gait and balance evaluation
+  - Home safety assessment
+  - Medication review
+  - Vision/hearing check
+- **Interventions:**
+  - Exercise programs (especially balance training)
+  - Vitamin D supplementation
+  - Remove home hazards
+
+---
+
+### Age-Specific Preventive Care Summary
+
+**Ages 18-39 (Young Adults)**
+- Blood pressure: Every 2 years
+- Lipids: Starting age 35 men, 45 women (earlier if risk factors)
+- Diabetes: Age 35+ if overweight
+- Depression/anxiety: Periodically
+- STI screening: If sexually active
+- Tobacco cessation: All users
+- Immunizations: Flu, COVID, Tdap, HPV (through age 26)
+
+**Ages 40-64 (Middle Age)**
+- Blood pressure: Annually
+- Lipids: Every 5 years (more often if on treatment)
+- Diabetes: Every 3 years
+- Colorectal cancer: Starting age 45
+- Breast cancer (women): Starting age 40-50
+- Cervical cancer (women): Every 3-5 years through age 65
+- Lung cancer: If 20+ pack-year smoking history
+- Depression: Periodically
+- ASCVD risk: Calculate every 4-6 years
+- Immunizations: Flu, COVID, Tdap/Td boosters
+
+**Ages 65+ (Older Adults)**
+- Blood pressure: Annually
+- Lipids: Annually if on treatment
+- Diabetes: Annually
+- Colorectal cancer: Through age 75 if not up to date
+- Breast cancer (women): Through age 74
+- Osteoporosis (women): Age 65+
+- Depression: Periodically
+- Falls risk: Annually
+- Cognitive screening: Consider if concern
+- Immunizations: Flu (high-dose), COVID, Td boosters, Shingrix, Pneumococcal
+
+---
+
+### Documentation and Follow-Up
+
+**Preventive care visit should include:**
+- Updated problem list
+- Current medications and allergies
+- Social history (smoking, alcohol, drugs, sexual activity)
+- Family history (cancers, CVD, diabetes)
+- Review of systems
+- Age-appropriate screening tests
+- Immunization status and updates
+- Health maintenance plan
+- Patient education and shared decision-making
+
+**Use tracking systems:**
+- Electronic health record reminders
+- Disease registries
+- Standing orders for preventive services
+- Patient outreach for overdue screenings
+
+**Overcoming barriers:**
+- Cost: Preventive services covered by ACA with no copay
+- Access: Use same-day appointments, walk-in clinics
+- Patient knowledge: Provide clear education on benefits
+- Time: Bundle multiple screenings in one visit when possible
+

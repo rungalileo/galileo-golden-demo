@@ -1,0 +1,22 @@
+input,output
+Get patient information for patient ID 12345,I'll retrieve the patient information for patient ID 12345 using the get_patient_info tool.
+Schedule an appointment with Dr. Smith for patient 12345 on next Monday at 2pm for annual checkup,I'll help you schedule an appointment with Dr. Smith for patient 12345 on next Monday at 2:00 PM for an annual checkup.
+What are the side effects of Lisinopril?,I'll look up the medication information for Lisinopril to provide you with details about its side effects.
+Check for drug interactions between Lisinopril and Aspirin,I'll check for potential drug interactions between Lisinopril and Aspirin to ensure patient safety.
+Get lab results for patient 67890,I'll retrieve the laboratory results for patient 67890 using the get_lab_results tool.
+What information do you have on patient P-00123?,I'll look up the patient information for patient ID P-00123.
+Schedule an appointment with Dr. Johnson for patient 67890 on December 1st at 10am for thyroid follow-up,I'll schedule an appointment with Dr. Johnson for patient 67890 on December 1st at 10:00 AM for a thyroid follow-up.
+What is Metformin used for?,I'll retrieve medication information for Metformin to explain its uses.
+Get the recent metabolic panel results for patient 12345,I'll retrieve the lab results for patient 12345 and look for their metabolic panel test results.
+Can you check if there are any interactions between Atorvastatin and Aspirin?,I'll check for potential drug interactions between Atorvastatin and Aspirin.
+What are the warnings for Levothyroxine?,I'll look up medication information for Levothyroxine to provide you with important warnings.
+Get patient info for patient 67890 and their current medications,I'll retrieve the patient information for patient 67890 which will include their current medications.
+Schedule a consultation with Dr. Chen for patient P-00123 on November 25th at 3:30pm for cardiovascular evaluation,I'll schedule a consultation with Dr. Chen for patient P-00123 on November 25th at 3:30 PM for cardiovascular evaluation.
+What are the common dosages for Atorvastatin?,I'll retrieve medication information for Atorvastatin including common dosages.
+Check drug interactions for Lisinopril and Metformin and Aspirin,I'll check for potential interactions between these three medications: Lisinopril Metformin and Aspirin.
+Get the thyroid panel results for patient 67890,I'll retrieve the lab results for patient 67890 and look specifically for their thyroid panel results.
+What is the drug class for Metformin?,I'll look up Metformin medication information which will include its drug classification.
+Can you get the lab results for patient 12345 showing only lipid panel?,I'll retrieve the lab results for patient 12345 and filter for their lipid panel results.
+What are the serious side effects of Aspirin?,I'll retrieve medication information for Aspirin to show you its serious side effects.
+Get patient information including allergies for patient P-00123,I'll retrieve the patient information for patient P-00123 which includes their allergy information.
+
