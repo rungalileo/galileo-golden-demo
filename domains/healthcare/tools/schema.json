@@ -1,0 +1,96 @@
+[
+  {
+    "name": "get_patient_info",
+    "description": "Retrieve patient information including demographics, medical history, and current conditions",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "patient_id": {
+          "type": "string",
+          "description": "The unique patient identifier (e.g., 12345, P-00123)"
+        }
+      },
+      "required": ["patient_id"]
+    }
+  },
+  {
+    "name": "schedule_appointment",
+    "description": "Schedule a medical appointment for a patient with a healthcare provider",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "patient_id": {
+          "type": "string",
+          "description": "The unique patient identifier"
+        },
+        "provider_name": {
+          "type": "string",
+          "description": "The name of the healthcare provider (e.g., Dr. Smith, Dr. Johnson)"
+        },
+        "appointment_date": {
+          "type": "string",
+          "description": "The date for the appointment (e.g., 2024-01-15, next Monday)"
+        },
+        "appointment_time": {
+          "type": "string",
+          "description": "The time for the appointment (e.g., 2:00 PM, 14:00)"
+        },
+        "reason": {
+          "type": "string",
+          "description": "The reason for the appointment (e.g., annual checkup, follow-up, consultation)"
+        }
+      },
+      "required": ["patient_id", "provider_name", "appointment_date", "appointment_time", "reason"]
+    }
+  },
+  {
+    "name": "get_medication_info",
+    "description": "Get detailed information about a medication including usage, dosage, and side effects",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "medication_name": {
+          "type": "string",
+          "description": "The name of the medication (e.g., Lisinopril, Metformin, Aspirin)"
+        }
+      },
+      "required": ["medication_name"]
+    }
+  },
+  {
+    "name": "check_drug_interactions",
+    "description": "Check for potential interactions between multiple medications",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "medications": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of medication names to check for interactions (e.g., ['Lisinopril', 'Metformin', 'Aspirin'])"
+        }
+      },
+      "required": ["medications"]
+    }
+  },
+  {
+    "name": "get_lab_results",
+    "description": "Retrieve laboratory test results for a patient",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "patient_id": {
+          "type": "string",
+          "description": "The unique patient identifier"
+        },
+        "test_type": {
+          "type": "string",
+          "description": "The type of lab test (e.g., blood work, CBC, metabolic panel, urinalysis). Leave empty to get all recent results."
+        }
+      },
+      "required": ["patient_id"]
+    }
+  }
+]
+

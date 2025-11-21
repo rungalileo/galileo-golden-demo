@@ -1,0 +1,594 @@
+# Clinical Treatment Protocols and Guidelines
+
+## Acute Myocardial Infarction (Heart Attack) - Emergency Protocol
+
+### Initial Assessment and Recognition
+Time is muscle - rapid recognition and treatment is critical.
+
+**Symptoms requiring immediate evaluation:**
+- Chest pain or discomfort (pressure, squeezing, fullness)
+- Pain radiating to jaw, shoulder, arm, or back
+- Shortness of breath
+- Nausea, vomiting, or indigestion-like symptoms
+- Lightheadedness or sudden dizziness
+- Cold sweats
+
+**Risk stratification:**
+- STEMI (ST-Elevation MI): ST elevation on EKG - requires immediate reperfusion
+- NSTEMI (Non-ST-Elevation MI): Troponin elevation without ST elevation
+- Unstable angina: No troponin elevation but concerning symptoms
+
+### Immediate Management (First 10 Minutes)
+1. Call 911 or activate emergency response
+2. Position patient comfortably (usually sitting upright)
+3. Obtain vital signs (BP, HR, RR, O2 sat)
+4. Administer oxygen if O2 saturation <90%
+5. 12-lead EKG within 10 minutes
+6. Establish IV access
+7. Continuous cardiac monitoring
+
+### MONA-B Protocol
+**M** - Morphine: 2-4 mg IV every 5-15 minutes for pain control (use cautiously)
+**O** - Oxygen: 2-4 L/min nasal cannula if SpO2 <90%
+**N** - Nitroglycerin: 0.4 mg sublingual every 5 minutes x3 (if SBP >90)
+**A** - Aspirin: 162-325 mg chewed immediately (unless contraindicated)
+**B** - Beta-blocker: Oral beta-blocker within 24 hours (if no contraindications)
+
+### Antiplatelet Therapy
+- Aspirin 162-325 mg loading dose (chewed for faster absorption)
+- P2Y12 inhibitor loading:
+  * Clopidogrel 600 mg oral (if going to cath lab)
+  * Ticagrelor 180 mg oral (preferred in ACS)
+  * Prasugrel 60 mg oral (if going for PCI, no history of stroke)
+
+### Anticoagulation
+Options include:
+- Unfractionated heparin: 60 units/kg bolus (max 4000), then 12 units/kg/hr
+- Enoxaparin: 1 mg/kg SC twice daily
+- Fondaparinux: 2.5 mg SC daily
+
+### Reperfusion Strategy for STEMI
+**Door-to-balloon time goal: <90 minutes**
+
+Primary PCI (preferred if available):
+- Immediate cardiac catheterization
+- Balloon angioplasty ± stent placement
+- Preferred if symptom onset <12 hours
+
+Fibrinolytic therapy (if PCI not available within 120 minutes):
+- Administer within 30 minutes of hospital arrival
+- Options: Alteplase, reteplase, tenecteplase
+- Transfer to PCI-capable facility after thrombolysis
+
+### Post-MI Management
+- ICU or cardiac care unit admission
+- Continuous telemetry monitoring
+- Serial cardiac enzymes (troponin at 0, 3-6 hours)
+- Echocardiogram to assess LV function
+- Initiate guideline-directed medical therapy
+
+### Secondary Prevention (Discharge Medications)
+**Essential medications (unless contraindicated):**
+- Dual antiplatelet therapy (aspirin + P2Y12 inhibitor) for at least 12 months
+- High-intensity statin (Atorvastatin 80 mg daily)
+- Beta-blocker (Metoprolol succinate or Carvedilol)
+- ACE inhibitor or ARB (especially if EF <40%)
+- Consider aldosterone antagonist if EF <35%
+
+---
+
+## Acute Stroke - Emergency Protocol
+
+### Recognition: BE FAST Assessment
+**B** - Balance: Sudden loss of balance or coordination
+**E** - Eyes: Sudden vision changes
+**F** - Face: Facial droop (ask patient to smile)
+**A** - Arm: Arm weakness (ask patient to raise both arms)
+**S** - Speech: Slurred speech (ask patient to repeat a phrase)
+**T** - Time: Time to call 911 - note time of symptom onset
+
+### Critical Time Windows
+- IV thrombolysis (tPA): Within 4.5 hours of symptom onset
+- Mechanical thrombectomy: Within 24 hours for select patients
+- Every minute counts: 1.9 million neurons die per minute during stroke
+
+### Initial Emergency Department Management
+1. **Immediate assessment (<10 minutes):**
+   - Vital signs
+   - Fingerstick glucose
+   - Brief neurological exam (NIH Stroke Scale)
+   - Exact time of symptom onset (last known well time)
+   - Activate stroke team
+
+2. **Diagnostic workup (<25 minutes):**
+   - Non-contrast head CT or MRI (rule out hemorrhage)
+   - Labs: CBC, metabolic panel, PT/INR, troponin
+   - EKG
+   - Consider CT angiography if large vessel occlusion suspected
+
+### IV Alteplase (tPA) Protocol
+**Inclusion criteria:**
+- Ischemic stroke with measurable neurological deficit
+- Symptom onset <4.5 hours (or wake-up stroke with DWI-FLAIR mismatch)
+- Age ≥18 years
+- CT showing no hemorrhage
+
+**Key exclusion criteria:**
+- Hemorrhage on imaging
+- Recent surgery (<14 days)
+- Recent stroke or head trauma (<3 months)
+- Active internal bleeding
+- Platelets <100,000
+- INR >1.7 or on novel anticoagulants
+- Glucose <50 mg/dL
+- Blood pressure >185/110 (must lower first)
+
+**Dosing:**
+- 0.9 mg/kg (maximum 90 mg)
+- Give 10% as bolus over 1 minute
+- Give remaining 90% as infusion over 60 minutes
+
+### Mechanical Thrombectomy
+For large vessel occlusion (LVO):
+- Can be performed up to 24 hours in selected patients
+- Best outcomes within 6 hours
+- Requires comprehensive stroke center
+- May be used alone or after IV tPA
+
+### Blood Pressure Management in Acute Stroke
+**For thrombolysis candidates:**
+- Target BP <185/110 before tPA
+- Maintain BP <180/105 for 24 hours after tPA
+
+**For non-thrombolysis patients:**
+- Permissive hypertension (allow BP up to 220/120)
+- Only treat if BP >220/120 or evidence of end-organ damage
+
+**Medications for acute BP lowering:**
+- Labetalol 10-20 mg IV push
+- Nicardipine 5 mg/hr IV infusion
+
+### Post-Stroke Care
+- Neurological checks every 15 minutes x2 hours, then hourly x6 hours
+- NPO until swallow evaluation completed
+- DVT prophylaxis with pneumatic compression devices
+- Early mobilization when safe
+- Physical/occupational/speech therapy evaluation
+
+### Secondary Stroke Prevention
+Based on stroke etiology:
+- **Atherosclerotic:** Dual antiplatelet therapy x21 days, then single agent; high-intensity statin
+- **Cardioembolic:** Anticoagulation (warfarin or DOAC) for atrial fibrillation
+- **Small vessel:** Antiplatelet therapy; aggressive BP and glucose control
+- **Cryptogenic:** Consider extended cardiac monitoring; may warrant anticoagulation
+
+---
+
+## Diabetic Ketoacidosis (DKA) - Treatment Protocol
+
+### Diagnosis (requires all three):
+1. Blood glucose >250 mg/dL
+2. pH <7.3 or bicarbonate <18 mEq/L
+3. Ketonemia or ketonuria
+
+### Severity Classification
+- Mild: pH 7.25-7.3, bicarbonate 15-18
+- Moderate: pH 7.0-7.24, bicarbonate 10-14
+- Severe: pH <7.0, bicarbonate <10
+
+### Initial Assessment and Stabilization
+1. **ABCs and vital signs**
+2. **Labs:**
+   - Basic metabolic panel, anion gap
+   - Venous or arterial blood gas
+   - Beta-hydroxybutyrate (preferred over urine ketones)
+   - Complete blood count
+   - Consider blood cultures if infection suspected
+   - Phosphate level
+
+3. **Identify precipitating cause:**
+   - Infection (most common)
+   - Insulin omission
+   - New-onset diabetes
+   - MI, stroke, pancreatitis
+   - Medications (steroids, SGLT2 inhibitors)
+
+### Fluid Resuscitation
+**Phase 1 - Initial bolus:**
+- 1-2 liters normal saline (0.9%) over first 1-2 hours
+- Goal: Restore intravascular volume
+
+**Phase 2 - Maintenance (after initial bolus):**
+- If corrected sodium normal or high: 0.45% saline at 250-500 mL/hr
+- If corrected sodium low: 0.9% saline at 250-500 mL/hr
+- When glucose <200 mg/dL: Add dextrose (D5W with NS)
+
+**Total fluid requirement:**
+- Typically 4-6 liters over first 24 hours
+- Monitor for fluid overload (especially in elderly, renal disease, heart failure)
+
+### Insulin Therapy
+**Continuous IV regular insulin infusion:**
+1. **Do NOT start insulin until potassium >3.3 mEq/L**
+2. **Initial bolus:** 0.1 units/kg IV push (optional, may omit)
+3. **Continuous infusion:** 0.1 units/kg/hour (typically 5-10 units/hour)
+
+**Adjustment:**
+- If glucose not decreasing by 50-75 mg/dL/hour: Increase insulin by 1 unit/hour
+- When glucose reaches 200 mg/dL: Reduce insulin to 0.02-0.05 units/kg/hr AND add dextrose to fluids
+- Goal: Glucose 150-200 mg/dL until DKA resolved
+
+**Transition to subcutaneous insulin:**
+- When anion gap normalized AND bicarbonate >15 AND pH >7.3
+- Give subcutaneous insulin, then continue IV insulin for 1-2 hours overlap
+- Prevents rebound hyperglycemia
+
+### Potassium Replacement (Critical!)
+Insulin drives potassium into cells, causing hypokalemia.
+
+**Initial potassium <3.3 mEq/L:**
+- HOLD insulin
+- Give potassium 20-30 mEq/hr until K >3.3
+
+**Potassium 3.3-5.2 mEq/L:**
+- Add 20-30 mEq potassium to each liter of fluid
+
+**Potassium >5.2 mEq/L:**
+- Hold potassium replacement
+- Check level every 2 hours
+
+### Bicarbonate Therapy (Controversial)
+Generally NOT recommended unless:
+- pH <6.9
+- Severe hyperkalemia
+- Cardiac instability
+
+If given: 100 mEq sodium bicarbonate in 400 mL water over 2 hours
+
+### Phosphate Replacement
+Not routinely given despite low levels.
+Consider if:
+- Serum phosphate <1.0 mg/dL
+- Cardiac dysfunction
+- Respiratory depression
+- Hemolytic anemia
+
+Dose: 20-30 mEq potassium phosphate added to fluids
+
+### Monitoring
+**Hourly:**
+- Blood glucose (fingerstick)
+- Vital signs
+- Urine output
+
+**Every 2-4 hours:**
+- Basic metabolic panel
+- Venous blood gas (pH, bicarbonate)
+- Anion gap calculation
+
+**Resolution criteria (all required):**
+- Glucose <200 mg/dL
+- Anion gap <12
+- Bicarbonate >15 mEq/L
+- Venous pH >7.3
+
+### Common Pitfalls
+1. Starting insulin before potassium is adequate (can cause fatal arrhythmia)
+2. Stopping IV insulin too early (causes rebound DKA)
+3. Inadequate fluid resuscitation
+4. Too-rapid correction (risk of cerebral edema, especially in children)
+5. Missing underlying precipitant (infection, MI)
+
+---
+
+## Anaphylaxis - Emergency Treatment Protocol
+
+### Recognition
+Anaphylaxis is a severe, life-threatening allergic reaction requiring immediate treatment.
+
+**Diagnostic criteria (requires any ONE of the following):**
+
+1. **Acute onset involving skin/mucosa PLUS ONE:**
+   - Respiratory compromise (wheeze, stridor, hypoxia)
+   - Hypotension or end-organ dysfunction
+
+2. **Two or more of these after likely allergen exposure:**
+   - Skin/mucosal involvement
+   - Respiratory compromise
+   - Hypotension or syncope
+   - Persistent GI symptoms
+
+3. **Hypotension after exposure to known allergen:**
+   - Adults: SBP <90 or >30% decrease from baseline
+   - Children: Age-specific low BP or >30% decrease
+
+### Common Triggers
+- Foods (peanuts, tree nuts, shellfish, eggs, milk)
+- Medications (penicillin, NSAIDs, vaccines)
+- Insect stings (bees, wasps, fire ants)
+- Latex
+- Exercise (food-dependent exercise-induced anaphylaxis)
+- Idiopathic (unknown trigger)
+
+### Immediate Management
+
+**Step 1: Epinephrine (First-Line Treatment)**
+- **Intramuscular epinephrine 1:1000 (1 mg/mL)**
+- **Dose:** 0.3-0.5 mg IM adults; 0.01 mg/kg IM children (max 0.3 mg)
+- **Site:** Anterolateral thigh (vastus lateralis muscle)
+- **Can repeat every 5-15 minutes as needed**
+- **No absolute contraindications in anaphylaxis**
+
+**Step 2: Patient positioning**
+- Supine with legs elevated (if hypotensive)
+- Sitting upright (if severe respiratory distress)
+- Do NOT make patient stand or walk
+
+**Step 3: Call for help**
+- Activate emergency response (911)
+- Request advanced airway equipment
+- Prepare for potential cardiovascular collapse
+
+**Step 4: Supplemental oxygen**
+- High-flow oxygen 8-10 L/min via non-rebreather mask
+- Target O2 saturation >95%
+
+**Step 5: IV access and fluids**
+- Establish large-bore IV access (2 lines if possible)
+- Rapid fluid bolus: 1-2 liters normal saline (adults); 20 mL/kg (children)
+- May need multiple liters if distributive shock
+
+### Second-Line Medications
+
+**H1 antihistamine (adjunct, not substitute for epinephrine):**
+- Diphenhydramine 25-50 mg IV/IM/PO
+
+**H2 antihistamine:**
+- Ranitidine 50 mg IV or Famotidine 20 mg IV
+
+**Corticosteroids (may prevent biphasic reaction):**
+- Methylprednisolone 125 mg IV or
+- Prednisone 40-60 mg PO
+- Note: Onset of action 4-6 hours, so NOT helpful acutely
+
+**Bronchodilators (if significant bronchospasm):**
+- Albuterol 2.5-5 mg nebulized
+
+### Refractory Anaphylaxis
+If inadequate response to multiple doses of IM epinephrine:
+
+**IV epinephrine infusion:**
+- Mix 1 mg epinephrine in 1 L NS (1 mcg/mL concentration)
+- Start at 0.1-0.5 mcg/min (6-30 mL/hr)
+- Titrate to effect (max 10 mcg/min)
+- Requires continuous cardiac monitoring
+
+**Vasopressors:**
+- Norepinephrine infusion if profound hypotension
+- Dopamine 5-20 mcg/kg/min
+
+**Glucagon (especially if patient on beta-blockers):**
+- 1-2 mg IV/IM bolus
+- Can repeat or give as infusion 5-15 mcg/min
+
+### Airway Management
+If airway compromise:
+- Early intubation (before complete airway obstruction)
+- Difficult airway anticipated (angioedema may make intubation extremely difficult)
+- Consider cricothyrotomy if cannot intubate
+- Have emergency airway equipment ready
+
+### Observation Period
+**All patients require observation:**
+- Minimum 4-8 hours if good response to initial treatment
+- 12-24 hours if severe reaction, required multiple doses epinephrine, or unknown allergen
+- Risk of biphasic reaction (recurrence 4-12 hours later) in 5-20% of cases
+
+### Discharge Planning
+**Epinephrine auto-injector:**
+- Prescribe 2 epinephrine auto-injectors (EpiPen, Auvi-Q)
+- Train patient on proper use
+- Emphasize carrying at all times
+
+**Allergy action plan:**
+- Written instructions on recognition and treatment
+- When to use epinephrine (at first sign of reaction, don't wait)
+- Call 911 after using epinephrine
+
+**Allergen avoidance:**
+- Identify and avoid trigger if known
+- Medical alert bracelet
+- Referral to allergist for further testing and immunotherapy consideration
+
+**Medications to send home:**
+- Prednisone 40-60 mg daily x3-5 days
+- Antihistamine (cetirizine 10 mg daily x3-5 days)
+- Emphasize: These are NOT substitutes for epinephrine
+
+**Special considerations:**
+- Patients on beta-blockers: Increased risk of refractory anaphylaxis
+- Patients on ACE inhibitors: May have more severe reactions
+- Asthma: Increased risk of severe respiratory compromise
+
+### Prevention
+- Strict avoidance of known allergen
+- Pre-medication before contrast dye (if prior reaction)
+- Drug desensitization protocols (if medication needed and no alternative)
+- Venom immunotherapy (for insect sting allergy)
+
+---
+
+## Sepsis and Septic Shock - Management Protocol
+
+### Definitions (Sepsis-3 Criteria)
+
+**Sepsis:**
+- Life-threatening organ dysfunction due to dysregulated host response to infection
+- Clinically: Suspected infection + qSOFA ≥2 OR SOFA score increase ≥2
+
+**qSOFA (Quick Sequential Organ Failure Assessment):**
+- Respiratory rate ≥22
+- Altered mentation
+- Systolic BP ≤100 mmHg
+
+**Septic Shock:**
+- Sepsis with persistent hypotension requiring vasopressors to maintain MAP ≥65 mmHg
+- AND lactate >2 mmol/L despite adequate fluid resuscitation
+
+### Recognition and Early Warning Signs
+- Fever (>38.3°C) or hypothermia (<36°C)
+- Heart rate >90 bpm
+- Respiratory rate >20 or PaCO2 <32 mmHg
+- WBC >12,000 or <4,000 or >10% bands
+- Altered mental status
+- Hyperglycemia (>140 mg/dL in non-diabetic)
+- Hypotension (SBP <90 mmHg)
+
+### Surviving Sepsis Campaign Bundle (Hour-1 Bundle)
+
+**Within 1 hour of recognition:**
+
+1. **Measure lactate level**
+   - Remeasure if initial lactate >2 mmol/L
+
+2. **Obtain blood cultures BEFORE antibiotics**
+   - Two sets from different sites
+   - Also culture other potential sources (urine, sputum, wound)
+   - Do NOT delay antibiotics >45 minutes for cultures
+
+3. **Administer broad-spectrum antibiotics**
+   - Within 1 hour of recognition
+   - Empiric therapy based on suspected source
+
+4. **Begin rapid fluid resuscitation**
+   - 30 mL/kg crystalloid for hypotension or lactate ≥4 mmol/L
+   - Use balanced crystalloids (lactated Ringer's) or normal saline
+
+5. **Apply vasopressors if hypotensive during or after fluid resuscitation**
+   - Target MAP ≥65 mmHg
+
+### Antibiotic Selection (Empiric)
+
+**Community-acquired pneumonia:**
+- Ceftriaxone 2 g IV daily + Azithromycin 500 mg IV daily
+
+**Hospital-acquired or ventilator-associated pneumonia:**
+- Piperacillin-tazobactam 4.5 g IV q6h OR Meropenem 1 g IV q8h
+- PLUS Vancomycin 15-20 mg/kg IV q8-12h
+
+**Intra-abdominal infection:**
+- Piperacillin-tazobactam 3.375 g IV q6h OR
+- Ceftriaxone 2 g IV daily + Metronidazole 500 mg IV q8h
+
+**Urinary source:**
+- Ceftriaxone 2 g IV daily OR Levofloxacin 750 mg IV daily
+- Consider Vancomycin if concern for enterococcus or MRSA
+
+**Skin/soft tissue:**
+- Vancomycin 15-20 mg/kg IV q8-12h + Piperacillin-tazobactam 3.375 g IV q6h
+
+**Unknown source:**
+- Broad coverage: Vancomycin + Piperacillin-tazobactam OR Meropenem
+
+**De-escalate based on culture results - ALWAYS!**
+
+### Fluid Resuscitation
+
+**Initial bolus:**
+- 30 mL/kg crystalloid within 3 hours
+- 70 kg patient = 2,100 mL (approximately 2 liters)
+
+**Type of fluid:**
+- Balanced crystalloids (lactated Ringer's, Plasma-Lyte) preferred
+- Normal saline acceptable
+- Avoid starches (increased kidney injury, mortality)
+- Albumin: Reserve for patients requiring large volumes
+
+**Dynamic assessment of fluid responsiveness:**
+- Passive leg raise test
+- Pulse pressure variation (if mechanically ventilated)
+- IVC collapsibility on ultrasound
+- Do NOT rely on CVP alone
+
+**Goal-directed therapy endpoints:**
+- MAP ≥65 mmHg
+- Urine output ≥0.5 mL/kg/hr
+- Decreasing lactate
+- Improved mentation
+- Capillary refill <3 seconds
+
+### Vasopressor Therapy
+
+**First-line: Norepinephrine**
+- Start at 0.05 mcg/kg/min (typically 5 mcg/min)
+- Titrate to MAP ≥65 mmHg
+- Usual dose range: 0.1-0.5 mcg/kg/min
+
+**Add vasopressin if inadequate response:**
+- Fixed dose: 0.03-0.04 units/min (do NOT titrate)
+- Vasopressin-sparing effect on norepinephrine
+
+**Add epinephrine if still hypotensive:**
+- Start 0.05 mcg/kg/min, titrate to effect
+
+**Corticosteroids (if refractory shock):**
+- Hydrocortisone 200 mg/day continuous infusion OR 50 mg IV q6h
+- Only if requiring high-dose or multiple vasopressors
+
+### Source Control
+- Critical for successful treatment
+- Remove infected devices (catheters, hardware)
+- Drain abscesses
+- Debride infected tissue
+- Emergency surgery if indicated (perforated viscus, necrotizing fasciitis)
+- **Timing:** Within 6-12 hours ideally
+
+### Supportive Care
+
+**Glucose control:**
+- Target glucose <180 mg/dL
+- Use insulin infusion if needed
+
+**Venous thromboembolism prophylaxis:**
+- Pharmacologic: Enoxaparin 40 mg SC daily OR unfractionated heparin 5000 units SC q8-12h
+- Mechanical: Sequential compression devices if contraindication to anticoagulation
+
+**Stress ulcer prophylaxis:**
+- Only if risk factors (mechanical ventilation, coagulopathy)
+- PPI (omeprazole 40 mg daily) or H2 blocker
+
+**Nutrition:**
+- Early enteral nutrition within 24-48 hours (if tolerating)
+- Preferred over parenteral nutrition
+
+**Blood products:**
+- Transfuse RBC if hemoglobin <7 g/dL
+- Platelets if <10,000 OR <50,000 with active bleeding
+- Fresh frozen plasma only if active bleeding and coagulopathy
+
+### Monitoring
+**Continuous:**
+- Cardiac monitoring
+- Pulse oximetry
+- Blood pressure (arterial line if on vasopressors)
+
+**Frequent assessments:**
+- Lactate (every 2-6 hours until normalized)
+- Blood gases
+- Basic metabolic panel
+- Complete blood count
+- Procalcitonin (can guide antibiotic duration)
+
+### Common Complications
+- Acute respiratory distress syndrome (ARDS)
+- Acute kidney injury (may require renal replacement therapy)
+- Liver dysfunction
+- Coagulopathy/DIC
+- ICU-acquired weakness
+- Delirium
+
+### Prognosis
+- Mortality: ~10-20% for sepsis, 30-40% for septic shock
+- Early recognition and treatment improves outcomes
+- Each hour delay in antibiotics increases mortality 7-8%
+

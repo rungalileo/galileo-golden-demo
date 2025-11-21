@@ -1,18 +1,43 @@
 """
 Galileo API Helper Functions
+
+These helpers load only the API key and console URL from secrets.
+Domain-specific environment setup (like project names) is handled by the main app.
 """
 import requests
 import logging
 import os
-import sys
+import toml
 from pathlib import Path
 
-# Add the parent directory to the path so we can import setup_env
-sys.path.append(str(Path(__file__).parent.parent))
-from setup_env import setup_environment
 
-# Call setup_environment to load secrets into environment variables
-setup_environment()
+def _load_secrets_if_needed():
+    """
+    Load secrets from .streamlit/secrets.toml if environment variables are not set.
+    Only loads API key and console URL (not domain-specific settings).
+    """
+    # Check if already loaded
+    if os.environ.get("GALILEO_API_KEY") and os.environ.get("GALILEO_CONSOLE_URL"):
+        return
+    
+    # Find secrets file
+    secrets_path = Path(__file__).parent.parent / ".streamlit" / "secrets.toml"
+    
+    if not secrets_path.exists():
+        return
+    
+    try:
+        secrets = toml.load(secrets_path)
+        
+        # Set only the non-domain-specific environment variables
+        if "galileo_api_key" in secrets and not os.environ.get("GALILEO_API_KEY"):
+            os.environ["GALILEO_API_KEY"] = secrets["galileo_api_key"]
+        
+        if "galileo_console_url" in secrets and not os.environ.get("GALILEO_CONSOLE_URL"):
+            os.environ["GALILEO_CONSOLE_URL"] = secrets["galileo_console_url"]
+            
+    except Exception as e:
+        logging.warning(f"Could not load secrets: {e}")
 
 
 def get_galileo_app_url() -> str:
@@ -25,6 +50,8 @@ def get_galileo_app_url() -> str:
     Raises:
         ValueError: If GALILEO_CONSOLE_URL is not set
     """
+    _load_secrets_if_needed()
+    
     galileo_url = os.environ.get("GALILEO_CONSOLE_URL")
     if not galileo_url:
         raise ValueError("GALILEO_CONSOLE_URL environment variable is not set")
@@ -71,6 +98,8 @@ def get_galileo_api_key() -> str:
     Raises:
         ValueError: If GALILEO_API_KEY is not set
     """
+    _load_secrets_if_needed()
+    
     api_key = os.environ.get("GALILEO_API_KEY")
     if not api_key:
         raise ValueError("GALILEO_API_KEY environment variable is not set")

@@ -26,9 +26,6 @@ from experiments.experiment_helpers import (
 
 
 def main():
-    # Setup environment (load API keys)
-    setup_environment()
-    
     parser = argparse.ArgumentParser(description="Create Galileo dataset from domain CSV")
     parser.add_argument("domain", help="Domain name (e.g., 'finance')")
     parser.add_argument("--preview", "-p", action="store_true", help="Preview the dataset without creating")
@@ -44,6 +41,9 @@ def main():
         print(f"Error: {e}")
         print("Available domains:", dm.list_domains())
         sys.exit(1)
+    
+    # Setup environment with domain-specific settings
+    setup_environment(args.domain, domain_config.config)
     
     # Read dataset
     dataset = read_dataset_csv(domain_config.dataset_file)

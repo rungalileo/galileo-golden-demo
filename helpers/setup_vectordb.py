@@ -38,8 +38,19 @@ def setup_vectordb_for_domain(domain_name: str, environment: str):
     """
     print(f"Setting up vector database for domain: {domain_name} in {environment} environment")
     
-    # Initialize environment
-    setup_environment()
+    # Load domain configuration first
+    domain_manager = DomainManager()
+    
+    try:
+        domain_config = domain_manager.load_domain_config(domain_name)
+        print(f"✓ Loaded configuration for domain: {domain_config.description}")
+    except ValueError as e:
+        print(f"❌ Error loading domain '{domain_name}': {e}")
+        print(f"Available domains: {', '.join(domain_manager.list_domains())}")
+        return False
+    
+    # Initialize environment with domain-specific settings
+    setup_environment(domain_name, domain_config.config)
     
     # Set up Pinecone project based on environment
     if environment == "local":
@@ -51,17 +62,6 @@ def setup_vectordb_for_domain(domain_name: str, environment: str):
         return False
     
     print(f"Using Pinecone project: {pinecone_project}")
-    
-    # Load domain configuration
-    domain_manager = DomainManager()
-    
-    try:
-        domain_config = domain_manager.load_domain_config(domain_name)
-        print(f"✓ Loaded configuration for domain: {domain_config.description}")
-    except ValueError as e:
-        print(f"❌ Error loading domain '{domain_name}': {e}")
-        print(f"Available domains: {', '.join(domain_manager.list_domains())}")
-        return False
     
     # Get configuration settings
     rag_config = domain_config.config.get("rag", {})

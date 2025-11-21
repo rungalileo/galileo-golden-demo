@@ -1,0 +1,380 @@
+# Common Medical Conditions - Clinical Reference Guide
+
+## Type 2 Diabetes Mellitus
+
+### Overview
+Type 2 diabetes is a chronic metabolic disorder characterized by high blood glucose levels due to insulin resistance and relative insulin deficiency. It affects approximately 10% of the adult population worldwide.
+
+### Symptoms
+- Increased thirst and frequent urination
+- Increased hunger
+- Unintended weight loss
+- Fatigue and weakness
+- Blurred vision
+- Slow-healing sores or frequent infections
+- Darkened skin areas (acanthosis nigricans)
+
+### Risk Factors
+- Obesity (BMI > 30)
+- Physical inactivity
+- Family history of diabetes
+- Age over 45 years
+- History of gestational diabetes
+- Polycystic ovary syndrome (PCOS)
+- High blood pressure (≥140/90 mmHg)
+- Abnormal cholesterol levels
+
+### Diagnosis
+- Fasting plasma glucose ≥126 mg/dL on two occasions
+- HbA1c ≥6.5%
+- Random plasma glucose ≥200 mg/dL with symptoms
+- Oral glucose tolerance test: 2-hour value ≥200 mg/dL
+
+### Treatment Approach
+First-line: Lifestyle modifications (diet, exercise, weight loss)
+Pharmacologic therapy:
+- Metformin: First-line medication (500-2000 mg daily)
+- Add-on therapies: DPP-4 inhibitors, SGLT2 inhibitors, GLP-1 agonists
+- Insulin therapy if oral medications insufficient
+
+### Monitoring
+- HbA1c every 3 months until at goal, then every 6 months
+- Annual comprehensive foot exam
+- Annual dilated eye exam
+- Annual urine albumin-to-creatinine ratio
+- Blood pressure at every visit
+
+### Target Goals
+- HbA1c: <7% for most adults (individualize based on patient factors)
+- Fasting glucose: 80-130 mg/dL
+- Postprandial glucose: <180 mg/dL
+- Blood pressure: <140/90 mmHg
+
+---
+
+## Hypertension (High Blood Pressure)
+
+### Overview
+Hypertension is a chronic condition where blood pressure in the arteries is persistently elevated. It is a major risk factor for cardiovascular disease, stroke, and kidney disease.
+
+### Classification (ACC/AHA 2017 Guidelines)
+- Normal: <120/80 mmHg
+- Elevated: 120-129/<80 mmHg
+- Stage 1: 130-139/80-89 mmHg
+- Stage 2: ≥140/90 mmHg
+- Hypertensive crisis: >180/120 mmHg
+
+### Symptoms
+Most patients are asymptomatic. Severe hypertension may cause:
+- Headache
+- Dizziness
+- Nausea
+- Blurred vision
+- Chest pain
+- Shortness of breath
+
+### Risk Factors
+- Age (risk increases with age)
+- Race (more common in African Americans)
+- Family history
+- Obesity
+- Physical inactivity
+- Tobacco use
+- High sodium diet
+- Low potassium diet
+- Excessive alcohol consumption
+- Stress
+- Chronic kidney disease
+
+### Diagnosis
+- Multiple blood pressure readings on separate occasions
+- Ambulatory blood pressure monitoring may be used
+- Home blood pressure monitoring recommended
+
+### Treatment
+Lifestyle modifications:
+- Weight reduction (goal BMI <25)
+- DASH diet (rich in fruits, vegetables, low-fat dairy)
+- Sodium restriction (<2,400 mg/day, ideally <1,500 mg/day)
+- Regular aerobic exercise (150 min/week moderate intensity)
+- Limit alcohol consumption
+- Smoking cessation
+
+Pharmacologic therapy:
+First-line agents:
+- ACE inhibitors (e.g., Lisinopril 10-40 mg daily)
+- ARBs (e.g., Losartan 25-100 mg daily)
+- Calcium channel blockers (e.g., Amlodipine 2.5-10 mg daily)
+- Thiazide diuretics (e.g., Hydrochlorothiazide 12.5-25 mg daily)
+
+### Monitoring
+- Blood pressure checks at every visit
+- Annual basic metabolic panel and lipid panel
+- Baseline EKG
+- Assess for target organ damage
+
+---
+
+## Hyperlipidemia (High Cholesterol)
+
+### Overview
+Hyperlipidemia is characterized by elevated levels of lipids in the blood, including cholesterol and triglycerides. It is a major modifiable risk factor for atherosclerotic cardiovascular disease (ASCVD).
+
+### Lipid Panel Values
+Normal ranges:
+- Total cholesterol: <200 mg/dL
+- LDL cholesterol: <100 mg/dL (optimal)
+- HDL cholesterol: >40 mg/dL (men), >50 mg/dL (women)
+- Triglycerides: <150 mg/dL
+
+### Risk Stratification
+Very high risk: Known ASCVD, diabetes with target organ damage
+High risk: LDL ≥190 mg/dL, diabetes age 40-75, 10-year ASCVD risk ≥20%
+Moderate risk: 10-year ASCVD risk 7.5-19.9%
+Low risk: 10-year ASCVD risk <5%
+
+### Treatment
+Lifestyle modifications:
+- Heart-healthy diet (Mediterranean or DASH diet)
+- Reduce saturated fat (<7% of total calories)
+- Eliminate trans fats
+- Increase dietary fiber (10-25 g/day soluble fiber)
+- Regular physical activity (150 min/week)
+- Weight management
+- Avoid tobacco
+
+Pharmacologic therapy:
+Statin therapy (intensity based on risk):
+- High-intensity: Atorvastatin 40-80 mg, Rosuvastatin 20-40 mg
+- Moderate-intensity: Atorvastatin 10-20 mg, Simvastatin 20-40 mg
+- Low-intensity: Simvastatin 10 mg, Pravastatin 10-20 mg
+
+Alternative/add-on therapies:
+- Ezetimibe 10 mg daily
+- PCSK9 inhibitors (for very high-risk patients)
+- Fibrates (for high triglycerides)
+- Omega-3 fatty acids
+
+### Monitoring
+- Lipid panel at baseline, 4-12 weeks after initiation, then every 3-12 months
+- Liver function tests at baseline
+- Monitor for statin-associated muscle symptoms
+- Assess adherence and lifestyle modifications
+
+### LDL Goals
+- Very high risk: <70 mg/dL
+- High risk: <100 mg/dL
+- Moderate risk: <130 mg/dL
+
+---
+
+## Hypothyroidism
+
+### Overview
+Hypothyroidism is a condition where the thyroid gland does not produce enough thyroid hormone, leading to a slowed metabolism. It is more common in women and older adults.
+
+### Symptoms
+- Fatigue and weakness
+- Weight gain
+- Cold intolerance
+- Constipation
+- Dry skin and hair
+- Hair loss
+- Depression
+- Muscle aches and stiffness
+- Elevated cholesterol
+- Bradycardia (slow heart rate)
+- Memory problems
+- Menstrual irregularities
+
+### Causes
+- Hashimoto's thyroiditis (autoimmune)
+- Post-thyroidectomy
+- Radioactive iodine treatment
+- Medications (lithium, amiodarone)
+- Iodine deficiency (rare in developed countries)
+- Pituitary or hypothalamic disorders
+
+### Diagnosis
+Laboratory tests:
+- Elevated TSH (>4.5 mIU/L)
+- Low free T4 (<0.8 ng/dL)
+- Thyroid antibodies (TPO antibodies for Hashimoto's)
+
+Subclinical hypothyroidism:
+- Elevated TSH with normal free T4
+- Consider treatment if TSH >10 or symptoms present
+
+### Treatment
+Levothyroxine (synthetic T4):
+- Starting dose: 1.6 mcg/kg/day (typically 50-100 mcg daily)
+- Elderly or cardiac patients: Start low (25-50 mcg) and titrate slowly
+- Take on empty stomach, 30-60 minutes before breakfast
+- Avoid taking with calcium, iron, or antacids (separate by 4 hours)
+
+### Monitoring
+- Check TSH 6-8 weeks after starting therapy or dose change
+- Once stable, check TSH annually
+- Adjust dose by 12.5-25 mcg based on TSH levels
+
+### Target TSH
+- Generally 0.5-2.5 mIU/L
+- Individualize based on age and comorbidities
+- Pregnancy: TSH <2.5 mIU/L in first trimester
+
+---
+
+## Coronary Artery Disease (CAD)
+
+### Overview
+CAD is characterized by atherosclerotic plaque buildup in the coronary arteries, leading to reduced blood flow to the heart muscle. It is the leading cause of death in developed countries.
+
+### Risk Factors
+Non-modifiable:
+- Age (men ≥45, women ≥55)
+- Male gender
+- Family history of premature CAD
+- Personal history of atherosclerotic disease
+
+Modifiable:
+- Smoking
+- Hypertension
+- Diabetes mellitus
+- Hyperlipidemia
+- Obesity (BMI ≥30)
+- Physical inactivity
+- Unhealthy diet
+
+### Clinical Presentation
+Stable angina:
+- Predictable chest discomfort with exertion
+- Relieved by rest or nitroglycerin within 5 minutes
+- Pressure, squeezing, or tightness sensation
+
+Acute coronary syndrome (ACS):
+- Unstable angina: Rest angina or crescendo pattern
+- NSTEMI: Troponin elevation without ST elevation
+- STEMI: ST-segment elevation on EKG
+
+### Diagnosis
+- EKG: May show ST changes, Q waves, or arrhythmias
+- Cardiac biomarkers: Troponin I or T
+- Stress testing: Exercise EKG, nuclear imaging, or stress echo
+- Coronary angiography: Gold standard for diagnosis
+- CT coronary angiography: Non-invasive alternative
+
+### Medical Management
+Antiplatelet therapy:
+- Aspirin 81-325 mg daily
+- P2Y12 inhibitors (Clopidogrel, Ticagrelor) for ACS or post-PCI
+
+Anti-ischemic medications:
+- Beta-blockers (e.g., Metoprolol 25-200 mg twice daily)
+- Calcium channel blockers (if beta-blockers contraindicated)
+- Long-acting nitrates (e.g., Isosorbide mononitrate)
+- Ranolazine for refractory angina
+
+Lipid-lowering:
+- High-intensity statin therapy
+- Goal LDL <70 mg/dL
+
+ACE inhibitors or ARBs:
+- Especially if heart failure, diabetes, or LV dysfunction
+
+### Lifestyle Modifications
+- Smoking cessation (most important)
+- Mediterranean diet
+- Regular exercise (cardiac rehabilitation)
+- Weight management
+- Blood pressure control (<130/80 mmHg)
+- Diabetes management (HbA1c <7%)
+
+### Monitoring
+- Symptoms and functional status at each visit
+- Annual lipid panel
+- Annual stress test or imaging in selected patients
+- EKG as clinically indicated
+
+---
+
+## Chronic Kidney Disease (CKD)
+
+### Overview
+CKD is defined as kidney damage or decreased kidney function (GFR <60 mL/min/1.73m²) for 3 or more months. It affects approximately 15% of adults and is a major risk factor for cardiovascular disease.
+
+### Stages of CKD (based on eGFR)
+- Stage 1: eGFR ≥90 with kidney damage
+- Stage 2: eGFR 60-89 with kidney damage
+- Stage 3a: eGFR 45-59
+- Stage 3b: eGFR 30-44
+- Stage 4: eGFR 15-29
+- Stage 5: eGFR <15 (kidney failure)
+
+### Causes
+- Diabetes mellitus (leading cause)
+- Hypertension
+- Glomerulonephritis
+- Polycystic kidney disease
+- Prolonged obstruction
+- Recurrent kidney infections
+- Medications (NSAIDs, certain antibiotics)
+
+### Symptoms
+Early stages often asymptomatic. Advanced disease may present with:
+- Fatigue
+- Poor appetite
+- Trouble concentrating
+- Muscle cramps
+- Swelling of feet and ankles
+- Puffiness around eyes
+- Dry, itchy skin
+- Frequent urination
+- Nausea and vomiting
+
+### Diagnosis
+- Serum creatinine and eGFR calculation
+- Urine albumin-to-creatinine ratio (UACR)
+- Urinalysis
+- Renal ultrasound
+- Consider kidney biopsy if etiology unclear
+
+### Management
+Blood pressure control:
+- Target <130/80 mmHg
+- ACE inhibitors or ARBs preferred (reduce proteinuria)
+
+Diabetes management:
+- Target HbA1c <7% (individualize)
+- SGLT2 inhibitors have renal protective effects
+
+Lipid management:
+- Statin therapy for ASCVD risk reduction
+
+Dietary modifications:
+- Protein restriction (0.8 g/kg/day in stage 3-5)
+- Sodium restriction (<2 g/day)
+- Potassium restriction if hyperkalemia
+- Phosphorus restriction in advanced disease
+
+Medication adjustments:
+- Dose adjust medications based on eGFR
+- Avoid nephrotoxic drugs (NSAIDs, aminoglycosides)
+
+Complications management:
+- Anemia: Erythropoiesis-stimulating agents, iron supplementation
+- Metabolic bone disease: Vitamin D, phosphate binders
+- Hyperkalemia: Dietary restriction, medications
+- Volume overload: Diuretics, fluid restriction
+
+### Monitoring
+- Stage 1-2: Annual eGFR and UACR
+- Stage 3: Every 6-12 months
+- Stage 4-5: Every 3-6 months
+- Nephrology referral for stage 4-5 or rapidly declining function
+
+### Renal Replacement Therapy
+Consider when eGFR <15 or symptoms of uremia:
+- Hemodialysis
+- Peritoneal dialysis
+- Kidney transplantation
+
