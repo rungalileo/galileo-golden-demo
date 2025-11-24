@@ -231,6 +231,9 @@ Your domain will be available at:
 - Root URL: `http://localhost:8501` (defaults to "finance" domain, or first available domain)
 - Direct URL: `http://localhost:8501/your_domain_name`
 
+### How To Add a Domain with Cursor
+Watch the following video tutorial to see how you can add a new domain using cursor: https://drive.google.com/file/d/1yM0dMa9uNNJay1q9gfPZJ3eTJ4lPB129/view?usp=drive_link
+
 ## Underlying Architecture
 
 ### Data Flow
