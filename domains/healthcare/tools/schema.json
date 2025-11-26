@@ -51,7 +51,7 @@
       "properties": {
         "medication_name": {
           "type": "string",
-          "description": "The name of the medication (e.g., Lisinopril, Metformin, Aspirin)"
+          "description": "The name of the medication (e.g., Lisinopril, Metformin, Aspirin, Atorvastatin, Levothyroxine)"
         }
       },
       "required": ["medication_name"]

@@ -231,6 +231,12 @@ Your domain will be available at:
 - Root URL: `http://localhost:8501` (defaults to "finance" domain, or first available domain)
 - Direct URL: `http://localhost:8501/your_domain_name`
 
+### 6. Create a Domain README (Optional but Recommended)
+
+Create a `README.md` in your domain directory to help users understand what questions they can ask. This is especially helpful for demos and testing.
+
+See `domains/finance/README.md` and `domains/healthcare/README.md` for complete examples.
+
 ### How To Add a Domain with Cursor
 Watch the following video tutorial to see how you can add a new domain using cursor: https://drive.google.com/file/d/1yM0dMa9uNNJay1q9gfPZJ3eTJ4lPB129/view?usp=drive_link
 
