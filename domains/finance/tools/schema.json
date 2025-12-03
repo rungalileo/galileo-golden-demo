@@ -1,13 +1,13 @@
 [
   {
     "name": "get_stock_price",
-    "description": "Get the current stock price and market data for a given ticker symbol",
+    "description": "Get the current stock price and market data for a given ticker symbol. Returns real-time data from Yahoo Finance or Alpha Vantage when available, with automatic fallback to cached data.",
     "parameters": {
       "type": "object",
       "properties": {
         "ticker": {
           "type": "string",
-          "description": "The stock ticker symbol (e.g., AAPL, GOOGL, MSFT)"
+          "description": "The stock ticker symbol (e.g., AAPL, GOOGL, MSFT, TSLA)"
         }
       },
       "required": ["ticker"]

@@ -1,16 +1,35 @@
 # Finance Domain 💰
 
-A stock market analyst and trading assistant with RAG capabilities for financial document analysis.
+A stock market analyst and trading assistant with live market data and RAG capabilities for financial document analysis.
+
+## Live Data Integration
+
+The finance domain supports **real-time stock prices** with automatic fallback:
+
+1. **Yahoo Finance** (primary) - Free, no API key needed
+2. **Alpha Vantage** (backup) - Requires API key in secrets
+3. **Mock Data** (fallback) - Used when live APIs are unavailable
+
+This means you get live market data out of the box with `yfinance`, and the system gracefully falls back to cached mock data if APIs fail—perfect for demos.
+
+Optionally, add your Alpha Vantage API key to `.streamlit/secrets.toml` for a backup data source:
+```toml
+alpha_vantage_api_key = "your_key_here"
+```
 
 ## Available Tools
 
 The finance domain includes 4 tools (3 domain-specific + 1 RAG retrieval tool):
 
 ### 1. `get_stock_price`
-Get current stock price and market data for any ticker symbol.
+Get current stock price and market data for any ticker symbol. Returns live data when available.
 
 **Parameters:**
 - `ticker` (string, required): Stock ticker symbol (e.g., AAPL, GOOGL, MSFT)
+
+**Returns:**
+- `price`, `change`, `change_percent`, `volume`, `high`, `low`, `open`
+- `company_name`, `currency`, `source` (indicates data origin)
 
 **Example queries:**
 - "What's the current price of AAPL?"

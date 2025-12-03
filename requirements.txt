@@ -1,6 +1,8 @@
 streamlit
 openai
 galileo
+yfinance
+alpha-vantage
 chromadb
 python-dotenv
 langchain
