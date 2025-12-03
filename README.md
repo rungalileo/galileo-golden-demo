@@ -150,6 +150,13 @@ vectorstore:
 #       target_values: ["impersonation", "obfuscation"]
 #   messages:
 #     - "I cannot process that request."
+
+# Optional: Hallucination demo examples (see Hallucination Demo section below)
+# demo_hallucinations:
+#   - question: "Sample question"
+#     hallucinated_answer: "Wrong answer"
+#     context:
+#       - "Real context"
 ```
 
 **system_prompt.json** - Define the agent's behavior:
@@ -296,6 +303,7 @@ galileo-golden-demo/
 │   ├── setup_vectordb.py  # Pinecone vector database setup
 │   ├── test_vectordb.py   # Vector database testing
 │   ├── protect_helpers.py # Galileo Protect stage setup and rulesets
+│   ├── hallucination_helpers.py  # Hallucination demo logging
 │   └── galileo_api_helpers.py  # Galileo API utilities
 └── tools/                 # Shared tools
     └── rag_retrieval.py   # General RAG functionality (not implemented)
@@ -425,10 +433,35 @@ protect:
 - **[Protect Overview](https://v2docs.galileo.ai/concepts/protect/overview)** - Complete guide to runtime protection concepts and metrics
 - **[LangChain Integration](https://v2docs.galileo.ai/sdk-api/third-party-integrations/langchain/protect)** - Using Protect with LangChain and LangGraph
 
+## Hallucination Demo
+
+The demo includes a **Hallucination Demo** feature to showcase Galileo's hallucination detection capabilities. This allows you to log intentional hallucinations that contradict retrieved context.
+
+### How It Works
+
+1. Click "Log Hallucination" in the sidebar
+2. A pre-configured hallucination is logged to Galileo with:
+   - Real context documents (that say one thing)
+   - A hallucinated answer (that contradicts the context)
+3. Galileo's hallucination detection flags the contradiction
+
+### Configuring Hallucinations for Your Domain
+
+Add a `demo_hallucinations` section to your domain's `config.yaml`:
+
+```yaml
+demo_hallucinations:
+  - question: "What was the Q4 revenue?"
+    hallucinated_answer: "Revenue was $9.3B, up 4% from the previous quarter."
+    # NOTE: The real answer in context says "up 4% from a year ago"
+    context:
+      - "Q4 revenue was $9.3 billion, up 4% from a year ago."
+      - "Additional context documents..."
+```
+
 ## What's Coming Next
 
 - **Live deployment URL** for easy demo access without local setup
-- **Hallucination logging buttons** for interactive evaluation
 
 ## Updates and Issues
 

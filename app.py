@@ -12,6 +12,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from agent_frameworks.langgraph.langgraph_rag import get_domain_rag_system
 from helpers.galileo_api_helpers import get_galileo_app_url, get_galileo_project_id, get_galileo_log_stream_id
 from helpers.protect_helpers import get_or_create_protect_stage
+from helpers.hallucination_helpers import log_hallucination_for_domain
 from experiments.experiment_helpers import (
     get_all_datasets,
     get_dataset_by_name,
@@ -734,6 +735,25 @@ def multi_domain_agent_app(domain_name: str):
                         st.session_state[protect_key] = False
             else:
                 st.info("Protect is disabled. All queries will be processed normally.")
+            
+            # Add Hallucination Demo section (only if configured)
+            domain_full_config = st.session_state.get(full_config_key, {})
+            has_hallucinations = bool(domain_full_config.get("demo_hallucinations", []))
+            
+            if has_hallucinations:
+                st.divider()
+                st.subheader("Hallucination Demo")
+                st.markdown("Log an intentional hallucination to Galileo.")
+                if st.button("Log Hallucination", key=f"log_hallucination_{domain_name}"):
+                    with st.spinner("Logging hallucination to Galileo..."):
+                        success = log_hallucination_for_domain(
+                            domain_name=domain_name,
+                            domain_config=domain_full_config,
+                        )
+                        if success:
+                            st.success("Hallucination logged! Check Galileo console.")
+                        else:
+                            st.error("Failed to log hallucination. Check logs for details.")
     
     # Experiments Tab
     with tab2:

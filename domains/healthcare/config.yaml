@@ -59,3 +59,14 @@ protect:
     - "I'm sorry, but I cannot process that request as it appears to contain potentially harmful or sensitive information."
     - "For patient privacy and security, I cannot process requests with personally identifiable information in this format."
 
+# Demo hallucinations for Galileo observability demos
+# These are intentionally wrong answers that contradict the retrieved context
+demo_hallucinations:
+  - question: "What is the recommended dosage for Lisinopril and what are its serious side effects?"
+    hallucinated_answer: "Lisinopril is typically prescribed at 50-100 mg twice daily. The most common serious side effect is liver damage, which occurs in about 15% of patients."
+    # NOTE: The real dosage is 10-40 mg once daily. Serious side effects are angioedema, hyperkalemia, acute kidney injury - NOT liver damage.
+    context:
+      - "Lisinopril is an ACE Inhibitor used for Hypertension and Heart Failure. Common dosage is 10-40 mg once daily, taken orally with or without food."
+      - "Serious side effects of Lisinopril include: Angioedema, hyperkalemia, acute kidney injury, and hypotension. Common side effects include dry cough (10-15%), dizziness, headache, and fatigue."
+      - "Lisinopril contraindications: Pregnancy, history of angioedema with ACE inhibitors, bilateral renal artery stenosis. Monitoring requirements: Blood pressure, serum creatinine and potassium at baseline and periodically."
+

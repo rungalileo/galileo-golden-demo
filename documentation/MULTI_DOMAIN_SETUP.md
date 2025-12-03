@@ -61,6 +61,13 @@ rag:
 tools:
   - "my_tool_1"
   - "my_tool_2"
+
+# Optional: Hallucination demo examples
+# demo_hallucinations:
+#   - question: "Sample question"
+#     hallucinated_answer: "Wrong answer that contradicts context"
+#     context:
+#       - "Real context document"
 ```
 
 ### Step 3: Done! 🎉
@@ -136,7 +143,29 @@ protect:
       threshold: 0.7
   messages:
     - "Cannot process harmful queries."
+
+# Hallucination demo examples (optional)
+demo_hallucinations:
+  - question: "What was Q4 revenue?"
+    hallucinated_answer: "Revenue was up 7% from the previous quarter."
+    context:
+      - "Q4 revenue was up 4% from a year ago."
 ```
+
+## Hallucination Demo Configuration
+
+Each domain can define hallucination examples for demonstrating Galileo's detection capabilities:
+
+```yaml
+demo_hallucinations:
+  - question: "Your question here"
+    hallucinated_answer: "An intentionally wrong answer"
+    context:
+      - "Context that contradicts the answer"
+      - "Additional context documents..."
+```
+
+The hallucination is logged when clicking "Log Hallucination" in the sidebar. Galileo detects that the answer contradicts the retrieved context.
 
 ## How It Works
 

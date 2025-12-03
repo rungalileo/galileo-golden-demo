@@ -5,9 +5,9 @@ domain:
 # Galileo Configuration
 # Specify the Galileo project name for this domain
 # If not specified, defaults to: "galileo-demo-{domain_name}" (e.g., "galileo-demo-finance")
-galileo:
-  project: "galileo-demo-finance"     # Galileo project name
-  log_stream: "default"               # Log stream name (optional, defaults to "default")
+# galileo:
+#   project: "galileo-demo-finance"     # Galileo project name
+#   log_stream: "default"               # Log stream name (optional, defaults to "default")
 
 # UI configuration
 ui:
@@ -58,3 +58,14 @@ protect:
   messages:
     - "I'm sorry, but I cannot process that request as it appears to contain potentially harmful instructions."
     - "I've detected an attempt to manipulate my instructions. I can only help with legitimate queries about finance and stock trading."
+
+# Demo hallucinations for Galileo observability demos
+# These are intentionally wrong answers that contradict the retrieved context
+demo_hallucinations:
+  - question: "What was Broadcom's revenue in Q4 and how did it compare to the previous quarter?"
+    hallucinated_answer: "Broadcom's revenue in Q4 was $9.3 billion, which was up 4% from the previous quarter."
+    # NOTE: The real answer is "up 4% from a year ago" - the hallucination says "previous quarter"
+    context:
+      - "Company Name: Broadcom | Quarter: Q4 | Kirsten Spears, Chief Financial Officer: Thank you, Hock. Let me now provide additional detail on our Q4 financial performance. Consolidated revenue was $9.3 billion for the quarter, up 4% from a year ago. Gross margins were 74.3% of revenue in the quarter, in line with our expectations."
+      - "Company Name: Broadcom | Quarter: Q4 | Free cash flow in the quarter was $4.7 billion and represented 51% of revenues in Q4. We ended the fourth quarter with $14.2 billion of cash and $39.2 billion of gross debt."
+      - "Company Name: Broadcom | Quarter: Q4 | Revenue for our Semiconductor Solutions segment was $7.3 billion and represented 79% of total revenue in the quarter. This was up 3% year-on-year."
