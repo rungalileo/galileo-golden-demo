@@ -8,7 +8,7 @@ in their config.yaml under the `demo_hallucinations` key.
 import os
 import uuid
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from galileo import GalileoLogger
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,7 @@ def log_hallucination(
     hallucinated_answer: str,
     model: str = "gpt-4o",
     session_name: str = "Hallucination Demo",
+    existing_logger: Optional[Union[GalileoLogger, Any]] = None,
 ) -> bool:
     """
     Log a hallucination trace to Galileo for demonstration purposes.
@@ -38,6 +39,7 @@ def log_hallucination(
         hallucinated_answer: The intentionally wrong answer that contradicts the context
         model: The model name to log (default: gpt-4o)
         session_name: Name for the Galileo session (default: "Hallucination Demo")
+        existing_logger: Optional existing logger or context to reuse (if session already started)
         
     Returns:
         bool: True if logging succeeded, False otherwise
@@ -45,12 +47,25 @@ def log_hallucination(
     try:
         logger.info(f"Logging hallucination to project: {project_name}, log stream: {log_stream}")
         
-        # Initialize Galileo logger
-        galileo_logger = GalileoLogger(project=project_name, log_stream=log_stream)
-        
-        # Start a named session for easy identification
-        session_id = str(uuid.uuid4())[:10]
-        galileo_logger.start_session(name=session_name, external_id=session_id)
+        # Use existing logger if provided, otherwise create a new one
+        if existing_logger:
+            logger.info("Using existing Galileo session for hallucification demo")
+            # If it's a GalileoDecorator (galileo_context), get the logger instance
+            if hasattr(existing_logger, 'get_logger_instance'):
+                galileo_logger = existing_logger.get_logger_instance()
+                logger.info("Extracted logger instance from GalileoDecorator")
+            else:
+                galileo_logger = existing_logger
+            created_new_session = False
+        else:
+            logger.info("Creating new Galileo session for hallucination demo")
+            # Initialize Galileo logger
+            galileo_logger = GalileoLogger(project=project_name, log_stream=log_stream)
+            
+            # Start a named session for easy identification
+            session_id = str(uuid.uuid4())[:10]
+            galileo_logger.start_session(name=session_name, external_id=session_id)
+            created_new_session = True
         
         # Start a workflow trace
         galileo_logger.start_trace(
@@ -98,7 +113,10 @@ Question: {question}"""
             status_code=200
         )
         
+        # Only flush if we created a new session
+        # if created_new_session:
         galileo_logger.flush()
+        
         logger.info(f"Successfully logged hallucination to project: {project_name}")
         return True
         
@@ -112,6 +130,7 @@ def log_hallucination_for_domain(
     domain_config: Dict[str, Any],
     rag_retriever_func: Optional[callable] = None,
     hallucination_index: int = 0,
+    existing_logger: Optional[Union[GalileoLogger, Any]] = None,
 ) -> bool:
     """
     Log a hallucination for a specific domain using its config.
@@ -125,6 +144,7 @@ def log_hallucination_for_domain(
         domain_config: The domain's configuration dictionary
         rag_retriever_func: Optional function to retrieve real context from RAG
         hallucination_index: Which hallucination example to use (default: 0)
+        existing_logger: Optional existing logger or context to reuse (if session already started)
         
     Returns:
         bool: True if logging succeeded, False otherwise
@@ -175,5 +195,6 @@ def log_hallucination_for_domain(
         context_docs=context_docs,
         hallucinated_answer=hallucinated_answer,
         session_name=session_name,
+        existing_logger=existing_logger,
     )
 

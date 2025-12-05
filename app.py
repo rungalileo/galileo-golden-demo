@@ -746,12 +746,17 @@ def multi_domain_agent_app(domain_name: str):
                 st.markdown("Log an intentional hallucination to Galileo.")
                 if st.button("Log Hallucination", key=f"log_hallucination_{domain_name}"):
                     with st.spinner("Logging hallucination to Galileo..."):
+                        # Use existing logger if a session has been started, otherwise create new
+                        existing_logger = st.session_state.get("galileo_logger") if st.session_state.get("galileo_session_started", False) else None
+                        
                         success = log_hallucination_for_domain(
                             domain_name=domain_name,
                             domain_config=domain_full_config,
+                            existing_logger=existing_logger,
                         )
                         if success:
-                            st.success("Hallucination logged! Check Galileo console.")
+                            session_context = " in current session" if existing_logger else " in new session"
+                            st.success(f"Hallucination logged{session_context}! Check Galileo console.")
                         else:
                             st.error("Failed to log hallucination. Check logs for details.")
     
