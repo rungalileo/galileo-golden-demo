@@ -459,6 +459,90 @@ demo_hallucinations:
       - "Additional context documents..."
 ```
 
+## Chaos Engineering
+
+The demo includes a **Chaos Engineering** system to showcase Galileo's observability and detection capabilities by intentionally injecting failures. Chaos modes can be toggled from the sidebar during demos.
+
+### Understanding Chaos Modes
+
+Each chaos mode tests different aspects of your AI system and demonstrates what Galileo can detect:
+
+#### 1. **Sloppiness** (Data Corruption in Transit)
+
+**What it simulates**: Tool outputs getting corrupted during transmission to the LLM (e.g., numbers changing between tool execution and LLM processing)
+
+**Example**: Tool returns `$178.45` → LLM receives `$423.89`
+
+**What Galileo detects**:
+- ✅ **Span-level metrics**: PASS (tool executed correctly)
+- ❌ **Trace-level metrics**: FAIL (LLM response contains wrong data)
+- ❌ **Session-level metrics**: FAIL (overall conversation quality degraded)
+
+**Observability story**: "The tool worked fine, but something went wrong between the tool and the LLM. Galileo can detect when the LLM is working with corrupted data."
+
+#### 2. **Tool Instability** (API Failures)
+
+**What it simulates**: External API calls failing (network errors, timeouts, 500 errors)
+
+**Example**: `get_stock_price()` returns `{"error": "Service temporarily unavailable", "status_code": 503}`
+
+**What Galileo detects**:
+- ❌ **Span-level metrics**: FAIL (tool execution failed)
+- ❌ **Trace-level metrics**: FAIL (query couldn't be answered)
+- ❌ **Session-level metrics**: FAIL (user experience degraded)
+
+**Observability story**: "External dependencies are unreliable. Galileo tracks when and how often your tools fail."
+
+#### 3. **RAG Disconnects**
+
+**What it simulates**: Vector database or retrieval system becoming unavailable
+
+**Example**: RAG tool returns `{"error": "Vector database connection failed", "status_code": 503}`
+
+**What Galileo detects**:
+- ❌ **Context quality metrics**: FAIL (no context retrieved)
+- ❌ **Trace-level metrics**: FAIL (response lacks grounding)
+- Enables testing how your agent handles knowledge base outages
+
+**Observability story**: "Your RAG system went down. Galileo shows when agents are operating without proper context."
+
+#### 4. **Rate Limiting**
+
+**What it simulates**: Hitting API rate limits on external services
+
+**Example**: Tool calls get delayed or rejected with `429 Too Many Requests`
+
+**What Galileo detects**:
+- ⚠️ **Latency metrics**: Degraded (increased response times)
+- ❌ **Reliability metrics**: FAIL (some requests blocked)
+
+**Observability story**: "You're hitting rate limits. Galileo tracks latency and helps you identify bottlenecks."
+
+#### 5. **Data Corruption** (Future: LLM Hallucination)
+
+**What it simulates**: Currently corrupts tool data. Future: LLM making up information despite correct tool outputs.
+
+**Future observability story**: "The LLM hallucinated despite having correct data. Galileo's hallucination detection catches this."
+
+### How to Use Chaos Modes
+
+1. **Enable in UI**: Toggle chaos modes in the sidebar under "Chaos Engineering"
+2. **Run Queries**: Ask normal questions - chaos is injected automatically based on configured rates
+3. **Check Galileo**: View traces in Galileo Console to see detected issues
+4. **Reset Stats**: Click "Reset Stats" to clear chaos counters between demos
+
+### What Makes This Special
+
+- 🌍 **Domain-Agnostic**: Works automatically across all domains without custom code
+- 🎯 **Targeted Testing**: Each mode tests specific observability capabilities
+- 📊 **Real-time Stats**: See chaos injection rates and counts in the UI
+- 🔧 **Demo-Ready**: Perfect for showing Galileo's detection capabilities in action
+
+### Learn More
+
+- **[Full Chaos Documentation](documentation/CHAOS_ENGINEERING.md)** - Complete technical guide
+- **[Quick Start Guide](documentation/CHAOS_QUICK_START.md)** - Get started in 2 minutes
+
 ## What's Coming Next
 
 - **Live deployment URL** for easy demo access without local setup
