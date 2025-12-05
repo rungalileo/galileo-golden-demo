@@ -5,6 +5,7 @@ import sys
 import os
 import importlib.util
 import json
+import random
 from typing import Annotated, TypedDict, List, Dict, Any, Optional
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
@@ -21,8 +22,9 @@ from galileo.handlers.langchain.tool import ProtectTool
 from galileo_core.schemas.protect.execution_status import ExecutionStatus
 from galileo_core.schemas.protect.response import Response
 
-# Import RAG retrieval function
+# Import chaos engine and RAG retrieval function
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from chaos_engine import get_chaos_engine
 from .langgraph_rag import create_domain_rag_tool
 from helpers.protect_helpers import create_rulesets_from_config
 
@@ -70,6 +72,13 @@ class LangGraphAgent(BaseAgent):
         # e.g., [get_stock_price, purchase_stocks, sell_stocks]
         raw_functions = list(tools_module.TOOLS)
         
+        # 🔥 AUTOMATIC CHAOS WRAPPING: Always wrap tools (chaos checked at runtime)
+        # This happens automatically for ANY domain - SEs don't need to write chaos code!
+        # Tools are always wrapped, but chaos only applies if enabled at runtime
+        from chaos_wrapper import wrap_tools_with_chaos
+        raw_functions = wrap_tools_with_chaos(raw_functions)
+        print(f"🔥 Chaos wrapper added to {len(raw_functions)} tools (checked at runtime)")
+        
         # Convert all functions to LangChain StructuredTools in one loop
         self.tools = []
         for tool_func in raw_functions:
@@ -90,6 +99,8 @@ class LangGraphAgent(BaseAgent):
         # Add RAG retrieval tool if enabled in domain config
         rag_config = self.domain_config.config.get("rag", {})
         if rag_config.get("enabled", False):
+            # Note: RAG chaos is checked per-query in the RAG tool wrapper, not here
+            # This allows for intermittent RAG failures rather than session-level
             print(f"✓ RAG enabled for domain '{self.domain_config.name}' - adding LangChain retrieval chain")
             try:
                 # Get top_k from domain config
@@ -97,6 +108,11 @@ class LangGraphAgent(BaseAgent):
                 
                 # Create LangChain retrieval chain tool (should work with GalileoCallback)
                 rag_tool = create_domain_rag_tool(self.domain_config.name, top_k)
+                
+                # 🔥 CHAOS: Wrap RAG tool to check for disconnection per-query
+                from chaos_wrapper import wrap_rag_tool_with_chaos
+                rag_tool = wrap_rag_tool_with_chaos(rag_tool)
+                
                 self.tools.append(rag_tool)
                 print(f"✓ Added LangChain RAG tool: {rag_tool.name}")
                 
@@ -166,12 +182,35 @@ class LangGraphAgent(BaseAgent):
             return {"protect_triggered": False}
 
         def invoke_chatbot(state):
-            # Add system message if we have one
-            if self.system_prompt:
-                system_message = SystemMessage(content=self.system_prompt)
-                messages = [system_message] + state["messages"]
-            else:
-                messages = state["messages"]
+            messages = list(state["messages"])  # Make a copy to avoid mutating state
+            
+            # 🔥 CHAOS: Corrupt tool messages before LLM sees them (runtime check!)
+            # This simulates the LLM receiving corrupted data from tools
+            # Galileo will detect: tool output ≠ LLM's understanding of tool output
+            chaos = get_chaos_engine()
+            if chaos.sloppiness_enabled and random.random() < chaos.sloppiness_rate:
+                from langchain_core.messages import ToolMessage
+                for i, msg in enumerate(messages):
+                    if isinstance(msg, ToolMessage):
+                        # Corrupt the tool message content before LLM sees it
+                        corrupted_content = chaos.transpose_numbers(msg.content)
+                        messages[i] = ToolMessage(
+                            content=corrupted_content,
+                            tool_call_id=msg.tool_call_id
+                        )
+            
+            # Add system message with potential chaos injection
+            system_prompt = self.system_prompt or ""
+            
+            # 🔥 CHAOS: Data Corruption - Make LLM corrupt/misread correct data
+            # Simulates LLM making calculation errors, misreading numbers, getting confused
+            # Galileo will detect: LLM corrupted correct tool data in its response
+            if chaos.should_corrupt_data():
+                system_prompt += chaos.get_corruption_prompt()
+            
+            if system_prompt:
+                system_message = SystemMessage(content=system_prompt)
+                messages = [system_message] + messages
             
             message = llm_with_tools.invoke(messages)
             return {"messages": [message]}
@@ -235,7 +274,9 @@ class LangGraphAgent(BaseAgent):
 
             # Return the last message content
             if result["messages"]:
-                return result["messages"][-1].content
+                response = result["messages"][-1].content
+                
+                return response
             return "No response generated"
             
         except Exception as e:

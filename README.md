@@ -459,6 +459,46 @@ demo_hallucinations:
       - "Additional context documents..."
 ```
 
+## Chaos Engineering
+
+The demo includes a **Chaos Engineering** system to showcase Galileo's observability and detection capabilities by intentionally injecting failures. Chaos modes can be toggled from the sidebar during demos.
+
+### Available Chaos Modes
+
+The system includes 5 chaos modes that work automatically across all domains:
+
+1. **🔧 Tool Instability** (25%) - Simulate API failures with realistic HTTP errors
+2. **🔢 Sloppiness** (30%) - Corrupt numbers in tool outputs before LLM sees them
+3. **💥 Data Corruption** (20%) - Force LLM to corrupt data it receives correctly
+4. **📚 RAG Disconnects** (20%) - Simulate vector database failures
+5. **⏱️ Rate Limits** (15%) - Inject rate limit errors (429 responses)
+
+Each mode tests different observability capabilities and helps demonstrate how Galileo detects issues at different levels (span, trace, session).
+
+### How to Use
+
+1. **Enable in UI**: Toggle chaos modes in the sidebar under "Chaos Engineering"
+2. **Run Queries**: Ask normal questions - chaos is injected automatically based on configured rates
+3. **Check Galileo**: View traces in Galileo Console to see detected issues
+4. **View Stats**: Real-time counters show how many chaos events occurred
+5. **Reset Stats**: Click "Reset Stats" to clear counters between demos
+
+### What Makes This Special
+
+- 🌍 **Domain-Agnostic**: Works automatically across all domains without custom code
+- 🎯 **Targeted Testing**: Each mode tests specific observability capabilities
+- 📊 **Real-time Stats**: See chaos injection rates and counts in the UI
+- 🔧 **Demo-Ready**: Perfect for showing Galileo's detection capabilities in action
+
+### Learn More
+
+**[📖 Full Chaos Engineering Documentation](documentation/CHAOS_ENGINEERING.md)** - Complete guide including:
+- Detailed explanation of each chaos mode
+- What Galileo detects for each type of failure
+- Technical architecture and how chaos is applied
+- Demo tips and best practices
+- Common questions and troubleshooting
+
 ## What's Coming Next
 
 - **Live deployment URL** for easy demo access without local setup
