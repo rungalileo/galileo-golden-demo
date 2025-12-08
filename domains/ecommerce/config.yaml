@@ -1,0 +1,50 @@
+domain:
+  name: "ecommerce"
+  description: "E-commerce shopping assistant for product discovery, recommendations, and order support"
+
+# UI configuration
+ui:
+  app_title: "E-commerce Assistant"
+  icon: "🛒"
+  example_queries:
+    - "I want to make a cheesecake, what do I need?"
+    - "What is the status of order #12345?"
+
+# Model configuration
+model:
+  model_name: "gpt-4.1"
+  temperature: 0.1
+
+# RAG configuration
+rag:
+  enabled: true
+  chunk_size: 1000
+  chunk_overlap: 200
+  top_k: 5
+
+# Available tools for this domain
+tools:
+  - "search_products"
+  - "create_cart"
+  - "check_order_status"
+
+# Vector store configuration
+vectorstore:
+  embedding_model: "text-embedding-3-large"
+
+# Protect configuration (kept simple for demos)
+protect:
+  metrics:
+    - name: "prompt_injection"
+      operator: "any"
+      target_values:
+        - "impersonation"
+        - "obfuscation"
+        - "simple_instruction"
+        - "few_shot"
+        - "new_context"
+    # - name: "input_toxicity"
+    #   operator: "gt"
+    #   threshold: 0.5
+  messages:
+   - "I've detected an attempt to manipulate my instructions. I can only help with legitimate queries."

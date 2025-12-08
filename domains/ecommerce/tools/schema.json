@@ -1,0 +1,57 @@
+[
+    {
+      "name": "search_products",
+      "description": "Search the product catalog with filters",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query such as a product name or category"
+          },
+          "max_price": {
+            "type": "number",
+            "description": "Maximum price filter (optional)"
+          },
+          "category": {
+            "type": "string",
+            "description": "Product category filter (optional)"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "create_cart",
+      "description": "Create or update a cart with items and quantities",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sku": { "type": "string", "description": "Product SKU" },
+                "quantity": { "type": "integer", "description": "Quantity to add" }
+              },
+              "required": ["sku", "quantity"]
+            },
+            "description": "List of items to add"
+          }
+        },
+        "required": ["items"]
+      }
+    },
+    {
+      "name": "check_order_status",
+      "description": "Check the status of an order by its ID",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "order_id": { "type": "string", "description": "Order identifier" }
+        },
+        "required": ["order_id"]
+      }
+    }
+  ]
