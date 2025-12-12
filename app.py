@@ -736,6 +736,97 @@ def multi_domain_agent_app(domain_name: str):
             else:
                 st.info("Protect is disabled. All queries will be processed normally.")
             
+            # Add Chaos Engineering section
+            st.divider()
+            st.subheader("🔥 Chaos Engineering")
+            st.markdown("Simulate real-world failures to test Galileo's observability.")
+            
+            # Import chaos engine
+            try:
+                from chaos_engine import get_chaos_engine
+                chaos = get_chaos_engine()
+                
+                with st.expander("⚙️ Chaos Controls"):
+                    st.markdown("Enable chaos modes to inject failures:")
+                    
+                    # Tool Instability
+                    tool_instability = st.checkbox(
+                        f"🔌 Tool Instability ({int(chaos.tool_failure_rate * 100)}% API failures)",
+                        value=chaos.tool_instability_enabled,
+                        key=f"chaos_tool_instability_{domain_name}",
+                        help="Randomly fail API calls with 503, timeout, etc."
+                    )
+                    chaos.enable_tool_instability(tool_instability)
+                    
+                    # Sloppiness
+                    sloppiness = st.checkbox(
+                        f"🔢 Sloppiness ({int(chaos.sloppiness_rate * 100)}% number transposition)",
+                        value=chaos.sloppiness_enabled,
+                        key=f"chaos_sloppiness_{domain_name}",
+                        help="Transpose digits in numbers to simulate hallucinations"
+                    )
+                    chaos.enable_sloppiness(sloppiness)
+                    
+                    # Data Corruption (Random LLM Errors)
+                    data_corruption = st.checkbox(
+                        f"💥 Data Corruption ({int(chaos.data_corruption_rate * 100)}% LLM errors)",
+                        value=chaos.data_corruption_enabled,
+                        key=f"chaos_data_corruption_{domain_name}",
+                        help="LLM randomly corrupts/misreads correct tool data (automatic chaos testing)"
+                    )
+                    chaos.enable_data_corruption(data_corruption)
+                    
+                    # RAG Chaos
+                    rag_chaos = st.checkbox(
+                        f"📚 RAG Disconnects ({int(chaos.rag_failure_rate * 100)}% failures)",
+                        value=chaos.rag_chaos_enabled,
+                        key=f"chaos_rag_{domain_name}",
+                        help="Simulate vector database connection failures (per-query)"
+                    )
+                    chaos.enable_rag_chaos(rag_chaos)
+                    
+                    # Rate Limits
+                    rate_limits = st.checkbox(
+                        f"⏱️ Rate Limits ({int(chaos.rate_limit_rate * 100)}% quota errors)",
+                        value=chaos.rate_limit_chaos_enabled,
+                        key=f"chaos_rate_limits_{domain_name}",
+                        help="Simulate API rate limit exceeded (429 errors)"
+                    )
+                    chaos.enable_rate_limit_chaos(rate_limits)
+                    
+                    # Show active chaos count
+                    active_count = sum([
+                        chaos.tool_instability_enabled,
+                        chaos.sloppiness_enabled,
+                        chaos.data_corruption_enabled,
+                        chaos.rag_chaos_enabled,
+                        chaos.rate_limit_chaos_enabled
+                    ])
+                    
+                    if active_count > 0:
+                        st.warning(f"🔥 {active_count} chaos mode(s) active")
+                        
+                        # Show statistics
+                        stats = chaos.get_stats()
+                        with st.expander("📊 Chaos Statistics"):
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.metric("Tool Instability", stats['tool_instability_count'])
+                                st.metric("Sloppiness", stats['sloppiness_count'])
+                                st.metric("RAG Chaos", stats['rag_chaos_count'])
+                            with col2:
+                                st.metric("Rate Limits", stats['rate_limit_chaos_count'])
+                                st.metric("Data Corruption", stats['data_corruption_count'])
+                            
+                            if st.button("Reset Stats", key=f"reset_chaos_stats_{domain_name}"):
+                                chaos.reset_stats()
+                                st.rerun()
+                    else:
+                        st.info("✅ No chaos active - all systems normal")
+            
+            except ImportError:
+                st.info("Chaos engineering not available (chaos_engine.py not found)")
+            
             # Add Hallucination Demo section (only if configured)
             domain_full_config = st.session_state.get(full_config_key, {})
             has_hallucinations = bool(domain_full_config.get("demo_hallucinations", []))
