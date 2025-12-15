@@ -340,13 +340,33 @@ numbers or indicate uncertainty. This validates monitoring system detection capa
         self.data_corruption_count = 0
 
 
-# Global chaos engine instance
+# Fallback global instance for non-Streamlit contexts (tests, scripts)
 _chaos_instance = None
 
 def get_chaos_engine() -> ChaosEngine:
-    """Get global chaos engine instance"""
-    global _chaos_instance
-    if _chaos_instance is None:
-        _chaos_instance = ChaosEngine()
-    return _chaos_instance
+    """
+    Get session-specific chaos engine instance.
+    
+    Uses Streamlit session state to ensure each user session has its own
+    independent chaos engine. This prevents chaos settings from persisting
+    across page refreshes or affecting other users/windows.
+    
+    Returns:
+        ChaosEngine: Session-specific chaos engine instance
+    """
+    try:
+        import streamlit as st
+        
+        # Store chaos engine in session state (unique per user session)
+        if 'chaos_engine' not in st.session_state:
+            st.session_state.chaos_engine = ChaosEngine()
+        
+        return st.session_state.chaos_engine
+    except (ImportError, RuntimeError):
+        # Fallback for non-Streamlit contexts (e.g., tests, scripts)
+        # In this case, use a global instance
+        global _chaos_instance
+        if '_chaos_instance' not in globals() or _chaos_instance is None:
+            _chaos_instance = ChaosEngine()
+        return _chaos_instance
 
