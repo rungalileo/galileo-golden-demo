@@ -467,11 +467,13 @@ The demo includes a **Chaos Engineering** system to showcase Galileo's observabi
 
 The system includes 5 chaos modes that work automatically across all domains:
 
-1. **🔧 Tool Instability** (25%) - Simulate API failures with realistic HTTP errors
-2. **🔢 Sloppiness** (30%) - Corrupt numbers in tool outputs before LLM sees them
-3. **💥 Data Corruption** (20%) - Force LLM to corrupt data it receives correctly
-4. **📚 RAG Disconnects** (20%) - Simulate vector database failures
-5. **⏱️ Rate Limits** (15%) - Inject rate limit errors (429 responses)
+1. **🔧 Tool Instability** - Simulate API failures with realistic HTTP errors
+2. **🔢 Sloppiness** - Corrupt numbers in tool outputs before LLM sees them
+3. **💥 Data Corruption** - Force LLM to corrupt data it receives correctly
+4. **📚 RAG Disconnects** - Simulate vector database failures
+5. **⏱️ Rate Limits** - Inject rate limit errors (429 responses)
+
+All modes operate at **100%** when enabled for predictable, demo-ready behavior.
 
 Each mode tests different observability capabilities and helps demonstrate how Galileo detects issues at different levels (span, trace, session).
 

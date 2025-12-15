@@ -33,12 +33,12 @@ class ChaosEngine:
         self.rate_limit_chaos_enabled = False
         self.data_corruption_enabled = False
         
-        # Chaos parameters (failure rates - defaults)
-        self.tool_failure_rate = .25  # 25% chance of API failure
-        self.sloppiness_rate = .30  # 30% chance of number transposition
-        self.rag_failure_rate = .20  # 20% chance of RAG disconnect
-        self.rate_limit_rate = .15  # 15% chance of rate limit error
-        self.data_corruption_rate = .20  # 20% chance of corrupted data
+        # Chaos parameters (failure rates - all 100% for predictable demos, could remove, but will leave in case we want to go back to configurable threshold)
+        self.tool_failure_rate = 1.0  # 100% - always fails when enabled
+        self.sloppiness_rate = 1.0  # 100% - always corrupts when enabled
+        self.rag_failure_rate = 1.0  # 100% - always fails when enabled
+        self.rate_limit_rate = 1.0  # 100% - always fails when enabled
+        self.data_corruption_rate = 1.0  # 100% - always corrupts when enabled
         
         # Counters for statistics
         self.tool_instability_count = 0

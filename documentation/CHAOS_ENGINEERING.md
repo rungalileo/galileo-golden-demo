@@ -12,7 +12,7 @@ The demo includes a **Chaos Engineering** system to showcase Galileo's observabi
 
 Each chaos mode tests different aspects of your AI system and demonstrates what Galileo can detect. All 5 modes work across **all domains** automatically - no custom code needed.
 
-### 1. 🔧 Tool Instability (25% API failures)
+### 1. 🔧 Tool Instability
 
 **What it simulates**: External API calls failing (network errors, timeouts, 500 errors)
 
@@ -33,7 +33,7 @@ Each chaos mode tests different aspects of your AI system and demonstrates what 
 
 ---
 
-### 2. 🔢 Sloppiness (30% number transposition)
+### 2. 🔢 Sloppiness
 
 **What it simulates**: Tool outputs getting corrupted during transmission to the LLM (e.g., numbers changing between tool execution and LLM processing)
 
@@ -55,7 +55,7 @@ Each chaos mode tests different aspects of your AI system and demonstrates what 
 
 ---
 
-### 3. 💥 Data Corruption (20% LLM errors)
+### 3. 💥 Data Corruption
 
 **What it simulates**: LLM randomly corrupting data it receives - making calculation errors, misreading numbers, or getting confused (e.g., LLM sees `$178.45` but says `$289.73`)
 
@@ -80,7 +80,7 @@ Each chaos mode tests different aspects of your AI system and demonstrates what 
 
 ---
 
-### 4. 📚 RAG Disconnects (20% failures)
+### 4. 📚 RAG Disconnects
 
 **What it simulates**: Vector database or retrieval system becoming unavailable
 
@@ -101,7 +101,7 @@ Each chaos mode tests different aspects of your AI system and demonstrates what 
 
 ---
 
-### 5. ⏱️ Rate Limits (15% quota errors)
+### 5. ⏱️ Rate Limits
 
 **What it simulates**: Hitting API rate limits on external services
 
@@ -184,15 +184,15 @@ return json.dumps({
 
 ### Failure Rates
 
-Default rates are set for realistic testing:
+All chaos modes operate at **100%** when enabled:
 
-- Tool Instability: **25%** (1 in 4 API calls fail)
-- Sloppiness: **30%** (3 in 10 outputs corrupted)
-- Data Corruption: **20%** (1 in 5 LLM responses corrupt data)
-- RAG Disconnects: **20%** (1 in 5 RAG queries fail)
-- Rate Limits: **15%** (occasional quota hits)
+- **Tool Instability**: Every API call fails
+- **Sloppiness**: Every tool output with numbers gets corrupted
+- **Data Corruption**: Every LLM response corrupts data
+- **RAG Disconnects**: Every RAG query fails
+- **Rate Limits**: Every API call hits rate limit
 
-Rates are tuned to show failures frequently enough for demos without breaking the experience.
+This ensures **predictable, demo-ready behavior**. When you check a box, the failure happens every time.
 
 ---
 

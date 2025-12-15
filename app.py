@@ -751,43 +751,43 @@ def multi_domain_agent_app(domain_name: str):
                     
                     # Tool Instability
                     tool_instability = st.checkbox(
-                        f"🔌 Tool Instability ({int(chaos.tool_failure_rate * 100)}% API failures)",
+                        "🔌 Tool Instability",
                         value=chaos.tool_instability_enabled,
                         key=f"chaos_tool_instability_{domain_name}",
-                        help="Randomly fail API calls with 503, timeout, etc."
+                        help="Fail API calls with 503, timeout, etc."
                     )
                     chaos.enable_tool_instability(tool_instability)
                     
                     # Sloppiness
                     sloppiness = st.checkbox(
-                        f"🔢 Sloppiness ({int(chaos.sloppiness_rate * 100)}% number transposition)",
+                        "🔢 Sloppiness",
                         value=chaos.sloppiness_enabled,
                         key=f"chaos_sloppiness_{domain_name}",
-                        help="Transpose digits in numbers to simulate hallucinations"
+                        help="Corrupt numbers in tool outputs before LLM sees them"
                     )
                     chaos.enable_sloppiness(sloppiness)
                     
                     # Data Corruption (Random LLM Errors)
                     data_corruption = st.checkbox(
-                        f"💥 Data Corruption ({int(chaos.data_corruption_rate * 100)}% LLM errors)",
+                        "💥 Data Corruption",
                         value=chaos.data_corruption_enabled,
                         key=f"chaos_data_corruption_{domain_name}",
-                        help="LLM randomly corrupts/misreads correct tool data (automatic chaos testing)"
+                        help="LLM corrupts correct tool data (simulates LLM hallucinations)"
                     )
                     chaos.enable_data_corruption(data_corruption)
                     
                     # RAG Chaos
                     rag_chaos = st.checkbox(
-                        f"📚 RAG Disconnects ({int(chaos.rag_failure_rate * 100)}% failures)",
+                        "📚 RAG Disconnects",
                         value=chaos.rag_chaos_enabled,
                         key=f"chaos_rag_{domain_name}",
-                        help="Simulate vector database connection failures (per-query)"
+                        help="Simulate vector database connection failures"
                     )
                     chaos.enable_rag_chaos(rag_chaos)
                     
                     # Rate Limits
                     rate_limits = st.checkbox(
-                        f"⏱️ Rate Limits ({int(chaos.rate_limit_rate * 100)}% quota errors)",
+                        "⏱️ Rate Limits",
                         value=chaos.rate_limit_chaos_enabled,
                         key=f"chaos_rate_limits_{domain_name}",
                         help="Simulate API rate limit exceeded (429 errors)"
