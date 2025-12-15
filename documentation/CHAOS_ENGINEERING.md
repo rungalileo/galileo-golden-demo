@@ -7,7 +7,6 @@ The demo includes a **Chaos Engineering** system to showcase Galileo's observabi
 1. **Enable in UI**: Toggle chaos modes in the sidebar under "Chaos Engineering"
 2. **Run Queries**: Ask normal questions - chaos is injected automatically based on configured rates
 3. **Check Galileo**: View traces in Galileo Console to see detected issues
-4. **Reset Stats**: Click "Reset Stats" to clear chaos counters between demos
 
 ## Understanding Chaos Modes
 
@@ -183,7 +182,7 @@ return json.dumps({
 })
 ```
 
-### Failure Rates (Configurable)
+### Failure Rates
 
 Default rates are set for realistic testing:
 
