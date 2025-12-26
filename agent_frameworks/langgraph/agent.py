@@ -22,6 +22,16 @@ from galileo.handlers.langchain.tool import ProtectTool
 from galileo_core.schemas.protect.execution_status import ExecutionStatus
 from galileo_core.schemas.protect.response import Response
 
+# Agent Control imports
+try:
+    import agent_control
+    from agent_control import control, ControlViolationError
+    AGENT_CONTROL_AVAILABLE = True
+except ImportError:
+    AGENT_CONTROL_AVAILABLE = False
+    ControlViolationError = Exception
+    print("⚠️  agent-control not installed. Agent Control features will be disabled.")
+
 # Import chaos engine and RAG retrieval function
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from chaos_engine import get_chaos_engine
@@ -46,6 +56,18 @@ class LangGraphAgent(BaseAgent):
         self.protect_stage_id = protect_stage_id
         self.protect_enabled = False
         self.config = {"configurable": {"thread_id": self.session_id}, "callbacks": [GalileoCallback()]}
+        
+        # Initialize Agent Control
+        if AGENT_CONTROL_AVAILABLE:
+            try:
+                # hard code for now
+                agent_control.init(
+                    agent_name="mike-test",
+                    agent_id="be6bbf7b-33ec-49ca-aff2-83d3d93106e5",
+                )
+                print(f"✓ Agent Control initialized for LangGraph Agent")
+            except Exception as e:
+                print(f"⚠️  Failed to initialize Agent Control: {e}")
     
     def load_tools(self) -> None:
         """Load tools from the domain's tools directory and add RAG if enabled"""
@@ -182,6 +204,54 @@ class LangGraphAgent(BaseAgent):
             return {"protect_triggered": False}
 
         def invoke_chatbot(state):
+            # Wrap with Agent Control if available
+            if AGENT_CONTROL_AVAILABLE:
+                @control()  # Applies the agent's assigned policy from the server
+                def protected_invoke_chatbot(state):
+                    messages = list(state["messages"])  # Make a copy to avoid mutating state
+                    
+                    # 🔥 CHAOS: Corrupt tool messages before LLM sees them (runtime check!)
+                    # This simulates the LLM receiving corrupted data from tools
+                    # Galileo will detect: tool output ≠ LLM's understanding of tool output
+                    chaos = get_chaos_engine()
+                    if chaos.sloppiness_enabled and random.random() < chaos.sloppiness_rate:
+                        from langchain_core.messages import ToolMessage
+                        for i, msg in enumerate(messages):
+                            if isinstance(msg, ToolMessage):
+                                # Corrupt the tool message content before LLM sees it
+                                corrupted_content = chaos.transpose_numbers(msg.content)
+                                messages[i] = ToolMessage(
+                                    content=corrupted_content,
+                                    tool_call_id=msg.tool_call_id
+                                )
+                    
+                    # Add system message with potential chaos injection
+                    system_prompt = self.system_prompt or ""
+                    
+                    # 🔥 CHAOS: Data Corruption - Make LLM corrupt/misread correct data
+                    # Simulates LLM making calculation errors, misreading numbers, getting confused
+                    # Galileo will detect: LLM corrupted correct tool data in its response
+                    if chaos.should_corrupt_data():
+                        system_prompt += chaos.get_corruption_prompt()
+                    
+                    if system_prompt:
+                        system_message = SystemMessage(content=system_prompt)
+                        messages = [system_message] + messages
+                    
+                    message = llm_with_tools.invoke(messages)
+                    return {"messages": [message]}
+                
+                try:
+                    return protected_invoke_chatbot(state)
+                except ControlViolationError:
+                    # Agent Control detected harmful inputs or outputs
+                    block_msg = AIMessage(content="AgentControl detected harmful content. I cannot process this request.")
+                    return {"messages": [block_msg]}
+                except Exception as e:
+                    print(f"⚠️  Agent Control error: {e}, falling back to unprotected")
+                    # Fall through to unprotected version
+            
+            # Unprotected path (if Agent Control not available or error occurred)
             messages = list(state["messages"])  # Make a copy to avoid mutating state
             
             # 🔥 CHAOS: Corrupt tool messages before LLM sees them (runtime check!)
@@ -225,17 +295,20 @@ class LangGraphAgent(BaseAgent):
         graph_builder = StateGraph(State)
         
         # Add protect node as the first node
-        graph_builder.add_node("protect_check", protect_check_node)
+        # graph_builder.add_node("protect_check", protect_check_node)
         graph_builder.add_node("chatbot", invoke_chatbot)
 
         tool_node = ToolNode(tools=self.tools)
         graph_builder.add_node("tools", tool_node)
 
         # Route from START to protect_check
-        graph_builder.add_edge(START, "protect_check")
+        # graph_builder.add_edge(START, "protect_check")
+        
+        # Route from START directly to chatbot (protect disabled)
+        graph_builder.add_edge(START, "chatbot")
         
         # Conditional edge from protect_check - go to END if triggered, chatbot otherwise
-        graph_builder.add_conditional_edges("protect_check", route_after_protect)
+        # graph_builder.add_conditional_edges("protect_check", route_after_protect)
         
         # Normal flow
         graph_builder.add_conditional_edges("chatbot", tools_condition)
