@@ -67,13 +67,13 @@ def get_or_create_protect_stage(project_name: str, stage_name: Optional[str] = N
     
     # Get or create stage
     try:
-        stage = Stages().get(project_id=project_id, stage_name=stage_name)
+        stage = Stages().get(project_name=project_name, stage_name=stage_name)
         if stage is None:
             raise Exception("Stage not found")
     except Exception:
         # Stage doesn't exist, create it
         print(f"Creating stage: {stage_name}")
-        stage = Stages().create(name=stage_name, project_id=project_id)
+        stage = Stages().create(name=stage_name, project_name=project_name)
     
     return stage.id
 
