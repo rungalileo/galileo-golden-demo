@@ -3,10 +3,11 @@ Dynamic Vector Database Setup Script
 Supports any domain by reading configuration from domain config files.
 
 Usage:
-    python setup_vectordb.py <domain_name>
+    python setup_vectordb.py <domain_name> <environment>
     
 Example:
-    python setup_vectordb.py finance
+    python setup_vectordb.py finance local
+    python setup_vectordb.py finance hosted
 """
 import argparse
 import sys
@@ -26,6 +27,7 @@ from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone, ServerlessSpec
 import getpass
 import uuid
+import time
 
 
 def setup_vectordb_for_domain(domain_name: str, environment: str):
@@ -141,38 +143,24 @@ def setup_vectordb_for_domain(domain_name: str, environment: str):
     # Create index name based on domain and environment
     index_name = f"{domain_name}-{environment}-index"
     
-    print(f"Creating Pinecone index: {index_name}")
-    
-    # Check if index exists and has correct dimension
+    # Always delete and recreate the index to ensure a clean state
     if pc.has_index(index_name):
-        # Check if existing index has correct dimension
-        index_info = pc.describe_index(index_name)
-        existing_dimension = index_info.dimension
-        expected_dimension = 3072 if embedding_model == "text-embedding-3-large" else 1536
-        
-        if existing_dimension != expected_dimension:
-            print(f"⚠️  Existing index has wrong dimension: {existing_dimension}, expected: {expected_dimension}")
-            print(f"Deleting existing index: {index_name}")
-            pc.delete_index(index_name)
-            # Wait for deletion to complete
-            import time
-            time.sleep(5)
-            print(f"Creating new Pinecone index: {index_name}")
-        else:
-            print(f"Using existing Pinecone index: {index_name}")
-            print(f"Index dimension: {existing_dimension}")
+        print(f"Deleting existing index: {index_name}")
+        pc.delete_index(index_name)
+        # Wait for deletion to complete
+        print("Waiting for index deletion to complete...")
+        time.sleep(5)
     
-    if not pc.has_index(index_name):
-        print(f"Creating new Pinecone index: {index_name}")
-        # Use correct dimension for text-embedding-3-large (3072)
-        dimension = 3072 if embedding_model == "text-embedding-3-large" else 1536
-        print(f"Using dimension: {dimension} for embedding model: {embedding_model}")
-        pc.create_index(
-            name=index_name,
-            dimension=dimension,
-            metric="cosine",
-            spec=ServerlessSpec(cloud="aws", region="us-east-1"),
-        )
+    # Create new index with correct dimension
+    print(f"Creating new Pinecone index: {index_name}")
+    dimension = 3072 if embedding_model == "text-embedding-3-large" else 1536
+    print(f"Using dimension: {dimension} for embedding model: {embedding_model}")
+    pc.create_index(
+        name=index_name,
+        dimension=dimension,
+        metric="cosine",
+        spec=ServerlessSpec(cloud="aws", region="us-east-1"),
+    )
     
     # Get the index
     index = pc.Index(index_name)
