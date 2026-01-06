@@ -48,3 +48,14 @@ protect:
     #   threshold: 0.5
   messages:
    - "I've detected an attempt to manipulate my instructions. I can only help with legitimate queries."
+
+# Demo hallucinations for Galileo observability demos
+# These are intentionally wrong answers that contradict the retrieved context
+demo_hallucinations:
+  - question: "What is the minimum order amount for free shipping and what is the return policy timeframe?"
+    hallucinated_answer: "Free shipping applies to orders over $100. Returns are accepted within 60 days of purchase in unused condition."
+    # NOTE: The real answer is free shipping over $50, and returns within 30 days - the hallucination says $100 and 60 days
+    context:
+      - "Standard shipping delivers in 3-5 business days. Expedited shipping delivers in 1-2 business days. Free shipping applies to orders over $50. Returns accepted within 30 days in unused condition."
+      - "Returns are accepted within 30 days of purchase date. Items must be in unused condition with original packaging and tags attached."
+      - "Free shipping applies to orders over $50. Shipping costs are non-refundable unless item was defective or incorrect."

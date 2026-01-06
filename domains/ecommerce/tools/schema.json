@@ -38,6 +38,10 @@
               "required": ["sku", "quantity"]
             },
             "description": "List of items to add"
+          },
+          "cart_id": {
+            "type": "string",
+            "description": "Optional cart ID to update an existing cart. If not provided, a new cart will be created."
           }
         },
         "required": ["items"]

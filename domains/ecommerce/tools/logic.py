@@ -26,8 +26,9 @@ def search_products(query: str, max_price: float = None, category: str = None) -
         "source": "mock-catalog"
     }
 
-def create_cart(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+def create_cart(items: List[Dict[str, Any]], cart_id: str = None) -> Dict[str, Any]:
     # Simple cart builder that echoes items and computes a mock total
+    # If cart_id is provided, updates existing cart; otherwise creates new cart
     total = 0.0
     cart_items = []
     for item in items:
@@ -35,12 +36,17 @@ def create_cart(items: List[Dict[str, Any]]) -> Dict[str, Any]:
         line_total = round(price * item.get("quantity", 1), 2)
         total += line_total
         cart_items.append({**item, "price": price, "line_total": line_total})
+    
+    # Use provided cart_id or generate new one
+    final_cart_id = cart_id if cart_id else f"CART-{random.randint(1000,9999)}"
+    action = "updated" if cart_id else "created"
+    
     return {
-        "cart_id": f"CART-{random.randint(1000,9999)}",
+        "cart_id": final_cart_id,
         "items": cart_items,
         "currency": "USD",
         "total": round(total, 2),
-        "note": "Mock cart created for demo purposes"
+        "note": f"Mock cart {action} for demo purposes"
     }
 
 def check_order_status(order_id: str) -> Dict[str, Any]:
