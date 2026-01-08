@@ -45,7 +45,23 @@ class LangGraphAgent(BaseAgent):
         self.graph = None
         self.protect_stage_id = protect_stage_id
         self.protect_enabled = False
-        self.config = {"configurable": {"thread_id": self.session_id}, "callbacks": [GalileoCallback()]}
+        
+        # Build callbacks list with Galileo (always enabled)
+        callbacks = [GalileoCallback()]
+        
+        # Add LangSmith tracer if enabled in session state
+        try:
+            import streamlit as st
+            if (hasattr(st, 'session_state') and 
+                hasattr(st.session_state, 'langsmith_tracer') and
+                getattr(st.session_state, 'logger_langsmith', False)):
+                callbacks.append(st.session_state.langsmith_tracer)
+                print("   ✅ LangSmith tracer added to agent callbacks")
+        except Exception as e:
+            # Streamlit not available or tracer not initialized - continue without it
+            pass
+        
+        self.config = {"configurable": {"thread_id": self.session_id}, "callbacks": callbacks}
     
     def load_tools(self) -> None:
         """Load tools from the domain's tools directory and add RAG if enabled"""

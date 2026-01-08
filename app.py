@@ -29,6 +29,15 @@ import io
 # Load environment variables
 load_dotenv()
 
+# LangSmith imports
+try:
+    from langchain_classic.callbacks.tracers import LangChainTracer
+    from langsmith import Client
+    LANGSMITH_AVAILABLE = True
+except ImportError:
+    LANGSMITH_AVAILABLE = False
+    print("⚠️ LangSmith not available - install with: pip install langsmith langchain")
+
 
 # Configuration
 FRAMEWORK = "LangGraph"
@@ -45,6 +54,38 @@ def initialize_rag_systems(domain_name: str):
         return True
     except Exception as e:
         print(f"❌ Failed to initialize RAG system: {e}")
+        return False
+
+
+def initialize_langsmith_tracing():
+    """Initialize LangSmith tracing if enabled and configured"""
+    if not LANGSMITH_AVAILABLE:
+        return False
+    
+    if not hasattr(st.session_state, 'logger_langsmith') or not st.session_state.logger_langsmith:
+        return False
+    
+    langsmith_api_key = os.getenv("LANGCHAIN_API_KEY")
+    langsmith_project = os.getenv("LANGCHAIN_PROJECT", "galileo-demo")
+    
+    if not langsmith_api_key:
+        print("⚠️ LangSmith enabled but LANGCHAIN_API_KEY not found")
+        return False
+    
+    try:
+        # Create LangSmith client and tracer
+        langsmith_client = Client(api_key=langsmith_api_key)
+        langsmith_tracer = LangChainTracer(
+            project_name=langsmith_project,
+            client=langsmith_client
+        )
+        
+        st.session_state.langsmith_tracer = langsmith_tracer
+        print(f"✅ LangSmith tracing initialized")
+        print(f"   Project: {langsmith_project}")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to initialize LangSmith: {e}")
         return False
 
 
@@ -850,6 +891,62 @@ def multi_domain_agent_app(domain_name: str):
                             st.success(f"Hallucination logged{session_context}! Check Galileo console.")
                         else:
                             st.error("Failed to log hallucination. Check logs for details.")
+            
+            # Add Observability Platforms section
+            st.divider()
+            st.subheader("Observability Platforms")
+            st.caption("Galileo is always enabled")
+            
+            with st.expander("Settings: Configure Loggers"):
+                # Initialize LangSmith toggle (per domain)
+                langsmith_key = f"logger_langsmith_{domain_name}"
+                if langsmith_key not in st.session_state:
+                    # Default to disabled
+                    st.session_state[langsmith_key] = False
+                
+                if LANGSMITH_AVAILABLE:
+                    langsmith_enabled = st.checkbox(
+                        "LangSmith",
+                        value=st.session_state.get(langsmith_key, False),
+                        help="LangChain LangSmith tracing",
+                        disabled=not bool(os.getenv("LANGCHAIN_API_KEY")),
+                        key=f"langsmith_toggle_{domain_name}"
+                    )
+                    
+                    # Update session state and reinitialize if changed
+                    if langsmith_enabled != st.session_state.get(langsmith_key, False):
+                        st.session_state[langsmith_key] = langsmith_enabled
+                        st.session_state.logger_langsmith = langsmith_enabled
+                        
+                        # Reinitialize LangSmith tracing
+                        if langsmith_enabled:
+                            if initialize_langsmith_tracing():
+                                st.success("✅ LangSmith tracing enabled!")
+                            else:
+                                st.error("❌ Failed to enable LangSmith")
+                        else:
+                            # Remove tracer from session state
+                            if 'langsmith_tracer' in st.session_state:
+                                del st.session_state.langsmith_tracer
+                            st.info("LangSmith tracing disabled")
+                        
+                        # Force agent to reinitialize with new callbacks
+                        agent_key = f"agent_{domain_name}"
+                        if agent_key in st.session_state:
+                            del st.session_state[agent_key]
+                        st.rerun()
+                    
+                    # Initialize on first load if enabled
+                    if langsmith_enabled and 'langsmith_tracer' not in st.session_state:
+                        st.session_state.logger_langsmith = True
+                        initialize_langsmith_tracing()
+                    
+                    if langsmith_enabled:
+                        langsmith_project = os.getenv("LANGCHAIN_PROJECT", "galileo-demo")
+                        st.caption(f"📊 Project: {langsmith_project}")
+                else:
+                    st.warning("⚠️ LangSmith not installed")
+                    st.caption("Install with: `pip install langsmith`")
     
     # Experiments Tab
     with tab2:
