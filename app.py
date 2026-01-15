@@ -41,7 +41,7 @@ except ImportError:
 # Braintrust imports
 try:
     from braintrust import init_logger as braintrust_init_logger
-    from braintrust_langchain import BraintrustCallbackHandler, set_global_handler as braintrust_set_global_handler
+    from braintrust_langchain import BraintrustCallbackHandler
     BRAINTRUST_AVAILABLE = True
 except ImportError:
     BRAINTRUST_AVAILABLE = False
@@ -151,10 +151,6 @@ def initialize_braintrust_tracing(domain_name: str = None):
             domain_config = st.session_state[full_config_key]
             galileo_config = domain_config.get("galileo", {})
             braintrust_project = galileo_config.get("project")
-        else:
-            print(f"⚠️ Braintrust: domain config not found in session state for {domain_name}")
-    else:
-        print(f"⚠️ Braintrust: domain_name not provided")
     
     # Fall back to default: galileo-demo-{domain_name}
     if not braintrust_project and domain_name:
@@ -164,14 +160,10 @@ def initialize_braintrust_tracing(domain_name: str = None):
     
     try:
         # Initialize Braintrust logger first
-        print(f"🔧 Initializing Braintrust logger with project: {braintrust_project}")
         braintrust_init_logger(project=braintrust_project, api_key=braintrust_api_key)
         
         # Create Braintrust callback handler
         braintrust_handler = BraintrustCallbackHandler()
-        
-        # Set as global handler (recommended by Braintrust)
-        braintrust_set_global_handler(braintrust_handler)
         
         st.session_state.braintrust_handler = braintrust_handler
         st.session_state.braintrust_project = braintrust_project
@@ -180,8 +172,6 @@ def initialize_braintrust_tracing(domain_name: str = None):
         return True
     except Exception as e:
         print(f"❌ Failed to initialize Braintrust: {e}")
-        import traceback
-        traceback.print_exc()
         return False
 
 
