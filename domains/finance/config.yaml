@@ -5,6 +5,7 @@ domain:
 # Galileo Configuration
 # Specify the Galileo project name for this domain
 # If not specified, defaults to: "galileo-demo-{domain_name}" (e.g., "galileo-demo-finance")
+# Note: LangSmith and Braintrust (if enabled) will use the same project name as Galileo
 # galileo:
 #   project: "galileo-demo-finance"     # Galileo project name
 #   log_stream: "default"               # Log stream name (optional, defaults to "default")

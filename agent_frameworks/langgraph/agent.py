@@ -22,6 +22,13 @@ from galileo.handlers.langchain.tool import ProtectTool
 from galileo_core.schemas.protect.execution_status import ExecutionStatus
 from galileo_core.schemas.protect.response import Response
 
+# Streamlit import (optional - for UI integration)
+try:
+    import streamlit as st
+    STREAMLIT_AVAILABLE = True
+except ImportError:
+    STREAMLIT_AVAILABLE = False
+
 # Import chaos engine and RAG retrieval function
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from chaos_engine import get_chaos_engine
@@ -50,16 +57,20 @@ class LangGraphAgent(BaseAgent):
         callbacks = [GalileoCallback()]
         
         # Add LangSmith tracer if enabled in session state
-        try:
-            import streamlit as st
+        if STREAMLIT_AVAILABLE:
             if (hasattr(st, 'session_state') and 
                 hasattr(st.session_state, 'langsmith_tracer') and
                 getattr(st.session_state, 'logger_langsmith', False)):
                 callbacks.append(st.session_state.langsmith_tracer)
                 print("   ✅ LangSmith tracer added to agent callbacks")
-        except Exception as e:
-            # Streamlit not available or tracer not initialized - continue without it
-            pass
+        
+        # Add Braintrust handler if enabled in session state
+        if STREAMLIT_AVAILABLE:
+            if (hasattr(st, 'session_state') and 
+                hasattr(st.session_state, 'braintrust_handler') and
+                getattr(st.session_state, 'logger_braintrust', False)):
+                callbacks.append(st.session_state.braintrust_handler)
+                print("   ✅ Braintrust handler added to agent callbacks")
         
         self.config = {"configurable": {"thread_id": self.session_id}, "callbacks": callbacks}
     

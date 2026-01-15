@@ -38,6 +38,15 @@ except ImportError:
     LANGSMITH_AVAILABLE = False
     print("⚠️ LangSmith not available - install with: pip install langsmith langchain")
 
+# Braintrust imports
+try:
+    from braintrust import init_logger as braintrust_init_logger
+    from braintrust_langchain import BraintrustCallbackHandler
+    BRAINTRUST_AVAILABLE = True
+except ImportError:
+    BRAINTRUST_AVAILABLE = False
+    print("⚠️ Braintrust not available - install with: pip install braintrust braintrust-langchain")
+
 
 # Configuration
 FRAMEWORK = "LangGraph"
@@ -57,8 +66,16 @@ def initialize_rag_systems(domain_name: str):
         return False
 
 
-def initialize_langsmith_tracing():
-    """Initialize LangSmith tracing if enabled and configured"""
+def initialize_langsmith_tracing(domain_name: str = None):
+    """Initialize LangSmith tracing if enabled and configured
+    
+    Uses the same project naming as Galileo:
+    - First checks galileo.project in domain config
+    - Falls back to galileo-demo-{domain_name}
+    
+    Args:
+        domain_name: Name of the domain to get project configuration from
+    """
     if not LANGSMITH_AVAILABLE:
         return False
     
@@ -66,11 +83,25 @@ def initialize_langsmith_tracing():
         return False
     
     langsmith_api_key = os.getenv("LANGCHAIN_API_KEY")
-    langsmith_project = os.getenv("LANGCHAIN_PROJECT", "galileo-demo")
     
     if not langsmith_api_key:
         print("⚠️ LangSmith enabled but LANGCHAIN_API_KEY not found")
         return False
+    
+    # Use the same project name as Galileo
+    langsmith_project = None
+    if domain_name:
+        full_config_key = f"full_domain_config_{domain_name}"
+        if full_config_key in st.session_state:
+            domain_config = st.session_state[full_config_key]
+            galileo_config = domain_config.get("galileo", {})
+            langsmith_project = galileo_config.get("project")
+    
+    # Fall back to default: galileo-demo-{domain_name}
+    if not langsmith_project and domain_name:
+        langsmith_project = f"galileo-demo-{domain_name}"
+    elif not langsmith_project:
+        langsmith_project = "galileo-demo"
     
     try:
         # Create LangSmith client and tracer
@@ -81,11 +112,66 @@ def initialize_langsmith_tracing():
         )
         
         st.session_state.langsmith_tracer = langsmith_tracer
+        st.session_state.langsmith_project = langsmith_project
         print(f"✅ LangSmith tracing initialized")
         print(f"   Project: {langsmith_project}")
         return True
     except Exception as e:
         print(f"❌ Failed to initialize LangSmith: {e}")
+        return False
+
+
+def initialize_braintrust_tracing(domain_name: str = None):
+    """Initialize Braintrust tracing if enabled and configured
+    
+    Uses the same project naming as Galileo:
+    - First checks galileo.project in domain config
+    - Falls back to galileo-demo-{domain_name}
+    
+    Args:
+        domain_name: Name of the domain to get project configuration from
+    """
+    if not BRAINTRUST_AVAILABLE:
+        return False
+    
+    if not hasattr(st.session_state, 'logger_braintrust') or not st.session_state.logger_braintrust:
+        return False
+    
+    braintrust_api_key = os.getenv("BRAINTRUST_API_KEY")
+    
+    if not braintrust_api_key:
+        print("⚠️ Braintrust enabled but BRAINTRUST_API_KEY not found")
+        return False
+    
+    # Use the same project name as Galileo
+    braintrust_project = None
+    if domain_name:
+        full_config_key = f"full_domain_config_{domain_name}"
+        if full_config_key in st.session_state:
+            domain_config = st.session_state[full_config_key]
+            galileo_config = domain_config.get("galileo", {})
+            braintrust_project = galileo_config.get("project")
+    
+    # Fall back to default: galileo-demo-{domain_name}
+    if not braintrust_project and domain_name:
+        braintrust_project = f"galileo-demo-{domain_name}"
+    elif not braintrust_project:
+        braintrust_project = "galileo-demo"
+    
+    try:
+        # Initialize Braintrust logger first
+        braintrust_init_logger(project=braintrust_project, api_key=braintrust_api_key)
+        
+        # Create Braintrust callback handler
+        braintrust_handler = BraintrustCallbackHandler()
+        
+        st.session_state.braintrust_handler = braintrust_handler
+        st.session_state.braintrust_project = braintrust_project
+        print(f"✅ Braintrust tracing initialized")
+        print(f"   Project: {braintrust_project}")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to initialize Braintrust: {e}")
         return False
 
 
@@ -920,7 +1006,7 @@ def multi_domain_agent_app(domain_name: str):
                         
                         # Reinitialize LangSmith tracing
                         if langsmith_enabled:
-                            if initialize_langsmith_tracing():
+                            if initialize_langsmith_tracing(domain_name):
                                 st.success("✅ LangSmith tracing enabled!")
                             else:
                                 st.error("❌ Failed to enable LangSmith")
@@ -928,6 +1014,8 @@ def multi_domain_agent_app(domain_name: str):
                             # Remove tracer from session state
                             if 'langsmith_tracer' in st.session_state:
                                 del st.session_state.langsmith_tracer
+                            if 'langsmith_project' in st.session_state:
+                                del st.session_state.langsmith_project
                             st.info("LangSmith tracing disabled")
                         
                         # Force agent to reinitialize with new callbacks
@@ -939,14 +1027,66 @@ def multi_domain_agent_app(domain_name: str):
                     # Initialize on first load if enabled
                     if langsmith_enabled and 'langsmith_tracer' not in st.session_state:
                         st.session_state.logger_langsmith = True
-                        initialize_langsmith_tracing()
+                        initialize_langsmith_tracing(domain_name)
                     
                     if langsmith_enabled:
-                        langsmith_project = os.getenv("LANGCHAIN_PROJECT", "galileo-demo")
+                        langsmith_project = st.session_state.get('langsmith_project', 'galileo-demo')
                         st.caption(f"📊 Project: {langsmith_project}")
                 else:
                     st.warning("⚠️ LangSmith not installed")
                     st.caption("Install with: `pip install langsmith`")
+                
+                # Initialize Braintrust toggle (per domain)
+                braintrust_key = f"logger_braintrust_{domain_name}"
+                if braintrust_key not in st.session_state:
+                    # Default to disabled
+                    st.session_state[braintrust_key] = False
+                
+                if BRAINTRUST_AVAILABLE:
+                    braintrust_enabled = st.checkbox(
+                        "Braintrust",
+                        value=st.session_state.get(braintrust_key, False),
+                        help="Braintrust AI evaluation and observability",
+                        disabled=not bool(os.getenv("BRAINTRUST_API_KEY")),
+                        key=f"braintrust_toggle_{domain_name}"
+                    )
+                    
+                    # Update session state and reinitialize if changed
+                    if braintrust_enabled != st.session_state.get(braintrust_key, False):
+                        st.session_state[braintrust_key] = braintrust_enabled
+                        st.session_state.logger_braintrust = braintrust_enabled
+                        
+                        # Reinitialize Braintrust tracing
+                        if braintrust_enabled:
+                            if initialize_braintrust_tracing(domain_name):
+                                st.success("✅ Braintrust tracing enabled!")
+                            else:
+                                st.error("❌ Failed to enable Braintrust")
+                        else:
+                            # Remove handler from session state
+                            if 'braintrust_handler' in st.session_state:
+                                del st.session_state.braintrust_handler
+                            if 'braintrust_project' in st.session_state:
+                                del st.session_state.braintrust_project
+                            st.info("Braintrust tracing disabled")
+                        
+                        # Force agent to reinitialize with new callbacks
+                        agent_key = f"agent_{domain_name}"
+                        if agent_key in st.session_state:
+                            del st.session_state[agent_key]
+                        st.rerun()
+                    
+                    # Initialize on first load if enabled
+                    if braintrust_enabled and 'braintrust_handler' not in st.session_state:
+                        st.session_state.logger_braintrust = True
+                        initialize_braintrust_tracing(domain_name)
+                    
+                    if braintrust_enabled:
+                        braintrust_project = st.session_state.get('braintrust_project', 'galileo-demo')
+                        st.caption(f"📊 Project: {braintrust_project}")
+                else:
+                    st.warning("⚠️ Braintrust not installed")
+                    st.caption("Install with: `pip install braintrust braintrust-langchain`")
     
     # Experiments Tab
     with tab2:
