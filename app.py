@@ -1029,11 +1029,10 @@ def multi_domain_agent_app(domain_name: str):
                                 del st.session_state.langsmith_project
                             st.info("LangSmith tracing disabled")
                         
-                        # Force agent to reinitialize with new callbacks
+                        # Force agent to reinitialize with new callbacks (on next message)
                         agent_key = f"agent_{domain_name}"
                         if agent_key in st.session_state:
                             del st.session_state[agent_key]
-                        st.rerun()
                     
                     # Initialize on first load if enabled
                     if langsmith_enabled and 'langsmith_tracer' not in st.session_state:
@@ -1081,11 +1080,10 @@ def multi_domain_agent_app(domain_name: str):
                                 del st.session_state.braintrust_project
                             st.info("Braintrust tracing disabled")
                         
-                        # Force agent to reinitialize with new callbacks
+                        # Force agent to reinitialize with new callbacks (on next message)
                         agent_key = f"agent_{domain_name}"
                         if agent_key in st.session_state:
                             del st.session_state[agent_key]
-                        st.rerun()
                     
                     # Initialize on first load if enabled
                     if braintrust_enabled and 'braintrust_handler' not in st.session_state:
