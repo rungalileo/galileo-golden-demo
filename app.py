@@ -3,10 +3,47 @@ Galileo Demo App
 """
 import uuid
 import streamlit as st
+import os
+import io
+
+# ============================================================================
+# CRITICAL: Load environment variables BEFORE any LangChain imports!
+# ============================================================================
 from dotenv import load_dotenv
+from setup_env import setup_environment
+
+# Load environment variables
+load_dotenv()
+
+# Set up environment from secrets.toml
+if not os.getenv('_GALILEO_ENV_LOADED'):
+    setup_environment()
+    os.environ['_GALILEO_ENV_LOADED'] = 'true'
+
+# ============================================================================
+# CRITICAL: Initialize OTLP tracing BEFORE importing LangChain!
+# OpenTelemetry instrumentation must be set up before LangChain modules are loaded
+# 
+# The tracing infrastructure is initialized ONCE with a "switchable" processor.
+# Platform can be changed at runtime via switch_otlp_platform() - NO restart needed!
+# ============================================================================
+from tracing_setup import (
+    initialize_otlp_tracing,
+    switch_otlp_platform,
+    get_active_platform,
+    is_phoenix_available,
+    is_arize_available,
+)
+
+# Initialize OTLP tracing infrastructure (happens once at module load)
+# This sets up OpenTelemetry with a switchable processor - platforms can be changed at runtime
+initialize_otlp_tracing()
+
+# ============================================================================
+# NOW we can import LangChain - OTLP instrumentation is ready!
+# ============================================================================
 from galileo import galileo_context
 from agent_factory import AgentFactory
-from setup_env import setup_environment
 from domain_manager import DomainManager
 from langchain_core.messages import AIMessage, HumanMessage
 from agent_frameworks.langgraph.langgraph_rag import get_domain_rag_system
@@ -23,11 +60,6 @@ from experiments.experiment_helpers import (
     get_domain_dataset_name,
     AVAILABLE_METRICS
 )
-import os
-import io
-
-# Load environment variables
-load_dotenv()
 
 # LangSmith imports
 try:
@@ -757,6 +789,12 @@ def multi_domain_agent_app(domain_name: str):
         )
         st.session_state[env_setup_key] = True
     
+    # If OTLP platform is active, recreate processor for new domain's project
+    # (GALILEO_PROJECT env var was just updated by setup_environment above)
+    current_platform = get_active_platform()
+    if current_platform != "none":
+        switch_otlp_platform(current_platform)  # Recreates with current GALILEO_PROJECT
+    
     # Initialize RAG systems for this domain (per domain)
     rag_key = f"rag_initialized_{domain_name}"
     if rag_key not in st.session_state:
@@ -995,6 +1033,67 @@ def multi_domain_agent_app(domain_name: str):
             st.caption("Galileo is always enabled")
             
             with st.expander("Settings: Configure Loggers"):
+                # ============================================================================
+                # OTLP Platform Selection (Phoenix / Arize AX)
+                # ============================================================================
+                st.markdown("### OpenTelemetry Platforms")
+                st.caption("Click to switch instantly - no restart needed")
+                
+                current_platform = get_active_platform()
+                phoenix_available = is_phoenix_available()
+                arize_available = is_arize_available()
+                project_name = os.environ.get("GALILEO_PROJECT", "galileo-demo")
+                
+                # None button
+                if current_platform == "none":
+                    st.button("✓ None", disabled=True, use_container_width=True)
+                else:
+                    if st.button("None", use_container_width=True, key=f"otlp_none_{domain_name}"):
+                        switch_otlp_platform("none")
+                        st.rerun()
+                
+                # Phoenix button
+                if phoenix_available:
+                    if current_platform == "phoenix":
+                        st.button("✓ Phoenix", disabled=True, use_container_width=True)
+                    else:
+                        if st.button("Phoenix", use_container_width=True, key=f"otlp_phoenix_{domain_name}"):
+                            switch_otlp_platform("phoenix")
+                            st.rerun()
+                else:
+                    st.button("Phoenix (no credentials)", disabled=True, use_container_width=True)
+                
+                # Arize AX button
+                if arize_available:
+                    if current_platform == "arize":
+                        st.button("✓ Arize AX", disabled=True, use_container_width=True)
+                    else:
+                        if st.button("Arize AX", use_container_width=True, key=f"otlp_arize_{domain_name}"):
+                            switch_otlp_platform("arize")
+                            st.rerun()
+                else:
+                    st.button("Arize AX (no credentials)", disabled=True, use_container_width=True)
+                
+                # Show active platform details
+                if current_platform == "phoenix":
+                    st.success(f"✅ **Phoenix** is active")
+                    st.caption(f"📊 Project: {project_name} | [View Traces →](https://app.phoenix.arize.com)")
+                elif current_platform == "arize":
+                    st.success(f"✅ **Arize AX** is active")
+                    st.caption(f"📊 Model ID: {project_name} | [View Traces →](https://app.arize.com)")
+                else:
+                    st.info("ℹ️ No OpenTelemetry platform active")
+                
+                # Brief help
+                if not phoenix_available and not arize_available:
+                    st.caption("⚠️ Configure credentials in `.streamlit/secrets.toml` first")
+                
+                st.caption("📚 [Full documentation](documentation/observability_platforms/)")
+                
+                st.divider()
+                st.markdown("### Callback-based Platforms")
+                st.caption("Toggle instantly - no refresh required")
+                
                 # Initialize LangSmith toggle (per domain)
                 langsmith_key = f"logger_langsmith_{domain_name}"
                 if langsmith_key not in st.session_state:

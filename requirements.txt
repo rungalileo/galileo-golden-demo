@@ -26,3 +26,6 @@ arize-phoenix-otel
 arize-phoenix
 openinference-instrumentation-openai
 openinference-instrumentation-langchain
+arize-otel
+opentelemetry-sdk
+opentelemetry-exporter-otlp
