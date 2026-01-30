@@ -10,6 +10,10 @@ domain:
 #   project: "galileo-demo-finance"     # Galileo project name
 #   log_stream: "default"               # Log stream name (optional, defaults to "default")
 
+galileo:
+  project: "Joyal's Test"
+  log_stream: "Test Log 1"
+  
 # UI configuration
 ui:
   app_title: "Finance Assistant"

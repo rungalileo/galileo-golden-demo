@@ -2,6 +2,10 @@ domain:
   name: "ecommerce"
   description: "E-commerce shopping assistant for product discovery, recommendations, and order support"
 
+galileo:
+  project: "Joyal's Test"
+  log_stream: "Test Log Ecommerce"
+
 # UI configuration
 ui:
   app_title: "E-commerce Assistant"

@@ -8,6 +8,9 @@ domain:
 # galileo:
 #   project: "galileo-demo-healthcare"     # Galileo project name
 #   log_stream: "default"                  # Log stream name (optional, defaults to "default")
+galileo:
+  project: "Joyal's Test"
+  log_stream: "Test Log Healthcare"
 
 # UI configuration
 ui:
