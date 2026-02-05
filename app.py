@@ -428,11 +428,14 @@ def render_experiments_page(domain_name: str, domain_config, agent_factory):
         
         st.markdown("---")
         
-        # Experiment name
-        default_exp_name = f"{domain_name}-experiment-{uuid.uuid4().hex[:6]}"
+        # Experiment name (default once per session so user input isn't overwritten on rerun)
+        exp_name_key = f"experiment_name_{domain_name}"
+        if exp_name_key not in st.session_state:
+            st.session_state[exp_name_key] = f"{domain_name}-experiment-{uuid.uuid4().hex[:6]}"
         experiment_name = st.text_input(
             "Experiment Name",
-            value=default_exp_name,
+            value=st.session_state[exp_name_key],
+            key=exp_name_key,
             help="A unique name for this experiment run"
         )
         
