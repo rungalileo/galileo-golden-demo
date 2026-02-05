@@ -112,7 +112,7 @@ def get_all_datasets() -> List[Any]:
     return list_datasets()
 
 
-def create_experiment_function(domain_name: str, agent_factory):
+def create_experiment_function(domain_name: str, agent_factory, model_name: Optional[str] = None):
     """
     Create a function that can be used in experiments.
     This function will use the existing agent from AgentFactory.
@@ -120,6 +120,7 @@ def create_experiment_function(domain_name: str, agent_factory):
     Args:
         domain_name: Name of the domain
         agent_factory: AgentFactory instance
+        model_name: Optional model override (e.g. from UI selector); uses domain default if None
         
     Returns:
         Function that can be called for each experiment row
@@ -133,8 +134,8 @@ def create_experiment_function(domain_name: str, agent_factory):
         galileo_logger = galileo_context.get_logger_instance()
         is_in_experiment = galileo_logger.current_parent() is not None
         
-        # Create the agent using the existing factory
-        agent = agent_factory.create_agent(domain_name, "LangGraph")
+        # Create the agent using the existing factory (with optional model override)
+        agent = agent_factory.create_agent(domain_name, "LangGraph", model_name=model_name)
         
         # Override the agent's config to use the proper callback for experiments
         if is_in_experiment:
@@ -172,7 +173,8 @@ def run_domain_experiment(
     dataset: Any,
     agent_factory,
     metrics: Optional[List] = None,
-    project: Optional[str] = None
+    project: Optional[str] = None,
+    model_name: Optional[str] = None,
 ) -> Any:
     """
     Run an experiment for a domain.
@@ -184,6 +186,7 @@ def run_domain_experiment(
         agent_factory: AgentFactory instance
         metrics: List of metrics to evaluate (defaults to DEFAULT_METRICS)
         project: Galileo project name (defaults to GALILEO_PROJECT env var)
+        model_name: Optional model override (e.g. from UI); uses domain default if None
         
     Returns:
         Experiment results
@@ -194,8 +197,8 @@ def run_domain_experiment(
     if project is None:
         project = os.environ.get("GALILEO_PROJECT", "default")
     
-    # Create the experiment function
-    experiment_function = create_experiment_function(domain_name, agent_factory)
+    # Create the experiment function (with optional model override)
+    experiment_function = create_experiment_function(domain_name, agent_factory, model_name=model_name)
     
     # Run the experiment
     results = run_experiment(

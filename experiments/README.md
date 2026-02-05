@@ -66,7 +66,7 @@ python experiments/run_experiment.py finance --experiment-name "my-custom-experi
 
 **What this does:**
 1. Loads the dataset created in Step 1 (by name: "{Domain} Domain Dataset")
-2. Creates a LangGraph agent for the specified domain
+2. Creates a LangGraph agent for the specified domain (uses the domain's **default model** from `config.yaml`)
 3. For each row in the dataset:
    - Sends the `input` to the agent
    - Collects the agent's response
@@ -125,6 +125,7 @@ Once a dataset is loaded:
 1. **View Dataset Info**
    - See the selected dataset name
    - Access direct link to view dataset in Galileo Console
+   - **Model**: The experiment uses the **same model as the sidebar** (Model → LLM). Change the model in the sidebar before running; the config shows which model will be used.
 
 2. **Set Experiment Name**
    - Auto-generates a unique name with random suffix
@@ -198,6 +199,7 @@ input,output
 ## Key Features
 
 - **Tab Navigation**: Experiments accessible via top-level tabs alongside Chat
+- **Model Selection (UI)**: Experiments run with the model selected in the sidebar (Model → LLM). Change it before clicking "Run Experiment". CLI runs use the domain's default model from `config.yaml`.
 - **Dataset Management**: Create, select, and view datasets with direct links to Galileo Console
 - **Custom Naming**: Name your datasets to avoid conflicts and organize better
 - **Direct Links**: Click through to view datasets and experiment results in Galileo Console

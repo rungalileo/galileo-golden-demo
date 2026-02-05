@@ -18,10 +18,17 @@ ui:
     - "Schedule an appointment with Dr. Smith for next Monday at 2pm"
     - "What are the side effects of Lisinopril?"
   
-# Model configuration
+# Model configuration (OpenAI family)
 model:
-  model_name: "gpt-4.1"
+  default_model: "gpt-4.1"
   temperature: 0.1
+  additional_models:
+    - "gpt-4o"
+    - "gpt-4o-mini"
+    - "gpt-4.1"
+    - "gpt-5.2"
+    - "gpt-5.1"
+    - "gpt-5-mini"
 
 # RAG configuration
 rag:

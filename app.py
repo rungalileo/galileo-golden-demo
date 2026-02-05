@@ -422,6 +422,10 @@ def render_experiments_page(domain_name: str, domain_config, agent_factory):
         except Exception:
             pass  # Silently fail if we can't get the URL
         
+        # Model used for this experiment (same as sidebar selection)
+        experiment_model = st.session_state.get(f"selected_model_{domain_name}") or st.session_state.get(f"domain_config_{domain_name}", {}).get("default_model")
+        st.caption(f"Model: **{experiment_model or 'default'}** (change in sidebar)")
+        
         st.markdown("---")
         
         # Experiment name
@@ -467,7 +471,8 @@ def render_experiments_page(domain_name: str, domain_config, agent_factory):
                     domain_name=domain_name,
                     experiment_name=experiment_name,
                     metrics=metrics_to_run,
-                    agent_factory=agent_factory
+                    agent_factory=agent_factory,
+                    model_name=experiment_model,  # from sidebar; set above in this block
                 )
     else:
         st.info("👆 Please select or create a dataset to continue.")
@@ -695,7 +700,13 @@ def render_upload_csv(domain_name: str):
             st.error(f"❌ Error processing uploaded file: {str(e)}")
 
 
-def run_experiment_ui(domain_name: str, experiment_name: str, metrics: list, agent_factory):
+def run_experiment_ui(
+    domain_name: str,
+    experiment_name: str,
+    metrics: list,
+    agent_factory,
+    model_name: str = None,
+):
     """Run the experiment and display results."""
     st.session_state.experiment_running = True
     
@@ -706,7 +717,8 @@ def run_experiment_ui(domain_name: str, experiment_name: str, metrics: list, age
                 experiment_name=experiment_name,
                 dataset=st.session_state.selected_dataset,
                 agent_factory=agent_factory,
-                metrics=metrics
+                metrics=metrics,
+                model_name=model_name,
             )
             
             st.session_state.experiment_running = False
@@ -849,6 +861,31 @@ def multi_domain_agent_app(domain_name: str):
                     st.error(f"Error: {str(e)}")
             else:
                 st.write("Galileo project/log stream not configured")
+            
+            # Model selection (used for both Chat and Experiments)
+            st.divider()
+            st.subheader("Model")
+            domain_info = st.session_state.get(domain_config_key, {})
+            available_models = domain_info.get("available_models") or [domain_info.get("model", "gpt-4.1")]
+            default_model = domain_info.get("default_model") or domain_info.get("model") or available_models[0]
+            selected_model_key = f"selected_model_{domain_name}"
+            if selected_model_key not in st.session_state:
+                st.session_state[selected_model_key] = default_model
+            prev_model = st.session_state[selected_model_key]
+            model_index = available_models.index(prev_model) if prev_model in available_models else 0
+            selected_model = st.selectbox(
+                "Select Model",
+                options=available_models,
+                index=model_index,
+                key=f"model_select_{domain_name}",
+                help="OpenAI model used for chat and experiments"
+            )
+            if selected_model != prev_model:
+                st.session_state[selected_model_key] = selected_model
+                agent_key = f"agent_{domain_name}"
+                if agent_key in st.session_state:
+                    del st.session_state[agent_key]
+                st.rerun()
             
             # Add Galileo Protect toggle
             st.divider()
@@ -1233,11 +1270,13 @@ def render_chat_page(factory, domain_name: str):
     
     # Create agent dynamically using AgentFactory - works for any domain!
     agent_key = f"agent_{domain_name}"
+    selected_model = st.session_state.get(f"selected_model_{domain_name}")
     if agent_key not in st.session_state:
         st.session_state[agent_key] = factory.create_agent(
-            domain=domain_name, 
+            domain=domain_name,
             framework=FRAMEWORK,
-            session_id=st.session_state.session_id
+            session_id=st.session_state.session_id,
+            model_name=selected_model,
         )
     
     # Set current agent for processing

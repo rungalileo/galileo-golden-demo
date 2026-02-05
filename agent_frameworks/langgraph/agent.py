@@ -47,11 +47,18 @@ class LangGraphAgent(BaseAgent):
     LangGraph implementation of BaseAgent
     """
     
-    def __init__(self, domain_config: DomainConfig, session_id: str = None, protect_stage_id: Optional[str] = None):
+    def __init__(
+        self,
+        domain_config: DomainConfig,
+        session_id: str = None,
+        protect_stage_id: Optional[str] = None,
+        model_override: Optional[str] = None,
+    ):
         super().__init__(domain_config, session_id)
         self.graph = None
         self.protect_stage_id = protect_stage_id
         self.protect_enabled = False
+        self.model_override = model_override
         
         # Build callbacks list with Galileo (always enabled)
         callbacks = [GalileoCallback()]
@@ -158,11 +165,18 @@ class LangGraphAgent(BaseAgent):
         
         # Get model configuration from domain config
         model_config = self.domain_config.config["model"]
+        # Support default_model and legacy model_name; allow runtime override
+        effective_model = (
+            self.model_override
+            or model_config.get("default_model")
+            or model_config.get("model_name")
+        )
+        temperature = model_config.get("temperature", 0.1)
         
         # Create the LLM with domain tools
         llm_with_tools = ChatOpenAI(
-            model=model_config["model_name"],
-            temperature=model_config["temperature"],
+            model=effective_model,
+            temperature=temperature,
             name=f"{self.domain_config.name.title()} Assistant"
         ).bind_tools(self.tools)
 

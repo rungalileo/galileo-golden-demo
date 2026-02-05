@@ -48,9 +48,13 @@ ui:
     - "Example query 1"
     - "Example query 2"
 
+# Model (OpenAI family): default_model + additional_models appear in the sidebar selector
 model:
-  model_name: "gpt-4o"
+  default_model: "gpt-4o"
   temperature: 0.7
+  additional_models:
+    - "gpt-4o-mini"
+    - "gpt-4.1"
 
 rag:
   enabled: true
@@ -123,8 +127,11 @@ ui:
     - "Explain this medical report"
 
 model:
-  model_name: "gpt-4o"
+  default_model: "gpt-4o"
   temperature: 0.3
+  additional_models:
+    - "gpt-4o-mini"
+    - "gpt-4.1"
 
 rag:
   enabled: true
@@ -177,6 +184,15 @@ The hallucination is logged when clicking "Log Hallucination" in the sidebar. Ga
    - Otherwise defaults to `galileo-demo-{domain_name}`
 5. **Environment Setup**: Sets `GALILEO_PROJECT` per domain
 6. **Navigation**: Creates pages at `/{domain_name}`
+
+## Model Configuration
+
+Each domain's `config.yaml` can define:
+
+- **`default_model`**: The LLM used by default (e.g. `gpt-4.1`). Legacy **`model_name`** is also supported.
+- **`additional_models`**: Optional list of models shown in the sidebar selector (e.g. `gpt-4o`, `gpt-4o-mini`). Users can switch models mid-session for both Chat and Experiments.
+
+If you omit `additional_models`, only the default model is used. All models are from the OpenAI family.
 
 ## FAQ
 

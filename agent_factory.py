@@ -23,7 +23,13 @@ class AgentFactory:
         """Get list of available frameworks"""
         return ["LangGraph"]  # Add more frameworks as we implement them
     
-    def create_agent(self, domain: str, framework: str, session_id: Optional[str] = None) -> BaseAgent:
+    def create_agent(
+        self,
+        domain: str,
+        framework: str,
+        session_id: Optional[str] = None,
+        model_name: Optional[str] = None,
+    ) -> BaseAgent:
         """
         Create an agent for the specified domain and framework.
         
@@ -31,6 +37,7 @@ class AgentFactory:
             domain: The domain name (e.g., "finance", "healthcare")
             framework: The framework name (e.g., "LangGraph", "CrewAI")
             session_id: Optional session ID for conversation tracking
+            model_name: Optional model override (e.g. "gpt-4o"); uses domain default if not set
             
         Returns:
             Configured agent instance
@@ -53,7 +60,7 @@ class AgentFactory:
         
         # Create the appropriate agent based on framework
         if framework == "LangGraph":
-            return LangGraphAgent(domain_config, session_id)
+            return LangGraphAgent(domain_config, session_id, model_override=model_name)
         # elif framework == "CrewAI":
         #     return CrewAIAgent(domain_config, session_id)
         # elif framework == "AutoGen":

@@ -70,6 +70,10 @@ Not a production reference architecture or replacement for customer-specific POC
 
 The app will be available at `http://localhost:8501`
 
+## Model Selection
+
+You can change the LLM used for chat and experiments from the **sidebar** (Model → LLM dropdown). Each domain's `config.yaml` defines a **default model** and **additional models** (OpenAI family). The selected model applies to both the Chat tab and the Experiments tab, and you can change it mid-session without losing conversation history.
+
 ## Multi-Domain Support
 
 This demo supports **multiple domains** with automatic routing and separate Galileo projects per domain. The app automatically discovers all domains in the `domains/` directory and creates navigation pages for each.
@@ -126,9 +130,15 @@ ui:
     - "Example query 1"
     - "Example query 2"
 
+# Model configuration (OpenAI family)
+# default_model: used by default; additional_models: list shown in the sidebar selector
 model:
-  model_name: "gpt-4.1"
+  default_model: "gpt-4.1"
   temperature: 0.1
+  additional_models:
+    - "gpt-4o"
+    - "gpt-4o-mini"
+    - "gpt-4.1"
 
 rag:
   enabled: true
@@ -369,6 +379,7 @@ This script:
 ### Key Features
 
 - **Multiple Dataset Options**: Select existing datasets, create from sample data, or upload CSV files
+- **Model Selection**: Experiments use the same model as the sidebar (Model → LLM). Change it in the sidebar before running; the experiment config shows which model will be used.
 - **Custom Naming**: Avoid conflicts with customizable dataset and experiment names
 - **Direct Links**: Click through to view datasets and results in Galileo Console
 - **Flexible Metrics**: Choose which metrics to evaluate for each run

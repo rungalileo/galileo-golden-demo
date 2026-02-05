@@ -101,15 +101,23 @@ class DomainManager:
             raise ValueError(f"Domain '{domain_name}' missing 'rag' in config.yaml")
         if "model" not in domain_config.config:
             raise ValueError(f"Domain '{domain_name}' missing 'model' in config.yaml")
-        if "model_name" not in domain_config.config["model"]:
-            raise ValueError(f"Domain '{domain_name}' missing 'model_name' in model config")
+        model_cfg = domain_config.config["model"]
+        # Support both default_model and legacy model_name
+        default_model = model_cfg.get("default_model") or model_cfg.get("model_name")
+        if not default_model:
+            raise ValueError(f"Domain '{domain_name}' missing 'default_model' or 'model_name' in model config")
+        additional = model_cfg.get("additional_models") or []
+        # Available models: default first, then rest, deduped
+        available_models = [default_model] + [m for m in additional if m != default_model]
         
         return {
             "name": domain_config.name,
             "description": domain_config.description,
             "tools": domain_config.config["tools"],
             "rag_enabled": domain_config.config["rag"]["enabled"],
-            "model": domain_config.config["model"]["model_name"],
+            "model": default_model,
+            "default_model": default_model,
+            "available_models": available_models,
             "ui": domain_config.config.get("ui", {})  # Include UI configuration
         }
     
