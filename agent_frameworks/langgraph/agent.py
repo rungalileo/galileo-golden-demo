@@ -139,9 +139,17 @@ class LangGraphAgent(BaseAgent):
             try:
                 # Get top_k from domain config
                 top_k = rag_config.get("top_k", 5)
-                
+                # Use same model as main agent so RAG assistant appears with selected model in traces
+                model_config = self.domain_config.config.get("model", {})
+                effective_model = (
+                    self.model_override
+                    or model_config.get("default_model")
+                    or model_config.get("model_name")
+                )
                 # Create LangChain retrieval chain tool (should work with GalileoCallback)
-                rag_tool = create_domain_rag_tool(self.domain_config.name, top_k)
+                rag_tool = create_domain_rag_tool(
+                    self.domain_config.name, top_k, model_name=effective_model
+                )
                 
                 # 🔥 CHAOS: Wrap RAG tool to check for disconnection per-query
                 from chaos_wrapper import wrap_rag_tool_with_chaos

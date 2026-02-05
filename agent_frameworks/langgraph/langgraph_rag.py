@@ -25,9 +25,10 @@ _rag_cache = {}
 class DomainRAGSystem:
     """RAG system for a specific domain with eager initialization"""
     
-    def __init__(self, domain_name: str, top_k: int = 5):
+    def __init__(self, domain_name: str, top_k: int = 5, model_name: Optional[str] = None):
         self.domain_name = domain_name
         self.top_k = top_k
+        self.model_name = model_name  # Use same model as main agent when provided
         self.retrieval_chain = None
         self._initialized = False
         self._pinecone_client = None
@@ -51,7 +52,12 @@ class DomainRAGSystem:
             model_config = domain_config.config.get("model", {})
             
             embedding_model = vectorstore_config.get("embedding_model", "text-embedding-3-large")
-            llm_model = model_config.get("model_name", "gpt-4o")
+            # Use passed model (from main agent selection) or domain default so RAG matches main assistant
+            llm_model = (
+                self.model_name
+                or model_config.get("default_model")
+                or model_config.get("model_name", "gpt-4o")
+            )
             
             # Initialize environment with domain-specific settings
             setup_environment(self.domain_name, domain_config.config)
@@ -106,7 +112,7 @@ class DomainRAGSystem:
             self.retrieval_chain = create_retrieval_chain(retriever, combine_docs_chain)
             
             self._initialized = True
-            print(f"✅ RAG system initialized for domain '{self.domain_name}'")
+            print(f"✅ RAG system initialized for domain '{self.domain_name}' (model: {llm_model})")
             
         except Exception as e:
             print(f"❌ Error initializing RAG system for domain '{self.domain_name}': {e}")
@@ -127,8 +133,12 @@ class DomainRAGSystem:
             return f"❌ Error during RAG search for domain '{self.domain_name}': {str(e)}"
 
 
-def get_domain_rag_system(domain_name: str, top_k: int = None) -> DomainRAGSystem:
-    """Get or create a RAG system instance with caching"""
+def get_domain_rag_system(
+    domain_name: str,
+    top_k: int = None,
+    model_name: Optional[str] = None,
+) -> DomainRAGSystem:
+    """Get or create a RAG system instance with caching (per domain, top_k, and model)."""
     # Get top_k from domain config if not specified
     if top_k is None:
         try:
@@ -136,31 +146,35 @@ def get_domain_rag_system(domain_name: str, top_k: int = None) -> DomainRAGSyste
             domain_config = domain_manager.load_domain_config(domain_name)
             rag_config = domain_config.config.get("rag", {})
             top_k = rag_config.get("top_k", 5)
-        except:
+        except Exception:
             top_k = 5
-    
-    cache_key = f"{domain_name}_{top_k}"
+
+    cache_key = f"{domain_name}_{top_k}_{model_name or 'default'}"
     if cache_key not in _rag_cache:
-        _rag_cache[cache_key] = DomainRAGSystem(domain_name, top_k)
+        _rag_cache[cache_key] = DomainRAGSystem(domain_name, top_k, model_name=model_name)
     return _rag_cache[cache_key]
 
 
-def create_domain_rag_tool(domain_name: str, top_k: int = None):
+def create_domain_rag_tool(
+    domain_name: str,
+    top_k: int = None,
+    model_name: Optional[str] = None,
+):
     """
     Create a LangChain retrieval chain tool that works with GalileoCallback automatically.
-    
-    This uses LangChain's built-in retrieval chain with lazy initialization and caching,
-    which should automatically work with the GalileoCallback for logging retrieval steps.
-    
+    Uses the same LLM as the main agent when model_name is provided so nested RAG steps
+    show the selected model in traces.
+
     Args:
         domain_name: Name of the domain
         top_k: Default number of documents to retrieve
-        
+        model_name: Optional model override (e.g. from sidebar); must match main agent for consistent traces.
+
     Returns:
         LangChain tool that uses retrieval chain
     """
-    # Get the RAG system instance (cached and lazy-loaded)
-    rag_system = get_domain_rag_system(domain_name, top_k)
+    # Get the RAG system instance (cached per domain, top_k, and model)
+    rag_system = get_domain_rag_system(domain_name, top_k, model_name=model_name)
     
     # Create the tool using LangChain's @tool decorator
     @tool
