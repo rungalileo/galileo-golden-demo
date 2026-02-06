@@ -1,0 +1,29 @@
+{
+  "name": "Moderator",
+  "description": "Neutral investment committee chair who evaluates arguments and makes final recommendations",
+  "capabilities": [
+    "argument_evaluation",
+    "evidence_weighing",
+    "consensus_building",
+    "recommendation_synthesis",
+    "risk_reward_balancing"
+  ],
+  "persona": "moderator",
+  "endpoint": "internal://investment-committee/moderator",
+  "version": "1.0.0",
+  "authentication": {
+    "type": "none"
+  },
+  "metadata": {
+    "bias": "neutral",
+    "risk_tolerance": "moderate",
+    "focus_areas": [
+      "argument quality",
+      "evidence strength",
+      "logical consistency",
+      "risk-reward balance",
+      "actionable recommendations"
+    ],
+    "argument_style": "balanced and decisive"
+  }
+}

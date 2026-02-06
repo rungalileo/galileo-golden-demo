@@ -327,38 +327,187 @@ def process_input_for_simple_app(user_input: str | None):
     
     # Check if we need to process a message
     if st.session_state.get("processing", False):
-        # Set Protect on the agent if enabled
-        if st.session_state.get("protect_enabled", False):
-            stage_id = st.session_state.get("protect_stage_id")
-            if stage_id:
-                st.session_state.agent.set_protect(True, stage_id)
-            else:
-                st.session_state.agent.set_protect(False)
+        domain_name = st.session_state.get("domain_name", "default")
+        committee_key = f"committee_mode_{domain_name}"
+        is_committee_mode = st.session_state.get(committee_key, False)
+        
+        if is_committee_mode and domain_name == "finance":
+            # Process using Investment Committee (multi-agent debate)
+            process_committee_debate()
+        else:
+            # Process using single agent (standard mode)
+            process_single_agent()
+
+
+def process_single_agent():
+    """Process input using single agent mode (standard)"""
+    # Set Protect on the agent if enabled
+    if st.session_state.get("protect_enabled", False):
+        stage_id = st.session_state.get("protect_stage_id")
+        if stage_id:
+            st.session_state.agent.set_protect(True, stage_id)
         else:
             st.session_state.agent.set_protect(False)
-        
-        # Convert session state messages to the format expected by the agent
-        conversation_messages = []
-        for msg_data in st.session_state.messages:
-            if isinstance(msg_data, dict) and "message" in msg_data:
-                message = msg_data["message"]
-                if isinstance(message, HumanMessage):
-                    conversation_messages.append({"role": "user", "content": message.content})
-                elif isinstance(message, AIMessage):
-                    conversation_messages.append({"role": "assistant", "content": message.content})
-        
-        # Get the actual response from the agent (Protect is handled inside)
-        response = st.session_state.agent.process_query(conversation_messages)
+    else:
+        st.session_state.agent.set_protect(False)
+    
+    # Convert session state messages to the format expected by the agent
+    conversation_messages = []
+    for msg_data in st.session_state.messages:
+        if isinstance(msg_data, dict) and "message" in msg_data:
+            message = msg_data["message"]
+            if isinstance(message, HumanMessage):
+                conversation_messages.append({"role": "user", "content": message.content})
+            elif isinstance(message, AIMessage):
+                conversation_messages.append({"role": "assistant", "content": message.content})
+    
+    # Get the actual response from the agent (Protect is handled inside)
+    response = st.session_state.agent.process_query(conversation_messages)
 
+    # Create AI message and add to history
+    ai_message = AIMessage(content=response)
+    st.session_state.messages.append(
+        {"message": ai_message, "agent": "assistant"}
+    )
+    
+    # Clear processing flag and rerun to show the response
+    st.session_state.processing = False
+    st.rerun()
+
+
+def process_committee_debate():
+    """Process input using Investment Committee (multi-agent debate)"""
+    from agent_frameworks.langgraph.multi_agent import DebateOrchestrator
+    from galileo.handlers.langchain import GalileoCallback
+    
+    domain_name = st.session_state.get("domain_name", "finance")
+    max_rounds_key = f"committee_max_rounds_{domain_name}"
+    max_rounds = st.session_state.get(max_rounds_key, 2)
+    
+    # Get the last user message as the debate topic
+    last_user_message = None
+    for msg_data in reversed(st.session_state.messages):
+        if isinstance(msg_data, dict) and "message" in msg_data:
+            message = msg_data["message"]
+            if isinstance(message, HumanMessage):
+                last_user_message = message.content
+                break
+    
+    if not last_user_message:
+        st.session_state.processing = False
+        st.rerun()
+        return
+    
+    try:
+        # Get or create debate orchestrator
+        orchestrator_key = f"debate_orchestrator_{domain_name}"
+        if orchestrator_key not in st.session_state:
+            from domain_manager import DomainManager
+            import os
+            
+            dm = DomainManager()
+            domain_config = dm.load_domain_config(domain_name)
+            committee_path = os.path.join(
+                os.path.dirname(domain_config.docs_dir),
+                "investment_committee"
+            )
+            
+            # Build callbacks
+            callbacks = [GalileoCallback()]
+            
+            # Add LangSmith if enabled
+            if (hasattr(st.session_state, 'langsmith_tracer') and
+                getattr(st.session_state, 'logger_langsmith', False)):
+                callbacks.append(st.session_state.langsmith_tracer)
+            
+            # Add Braintrust if enabled
+            if (hasattr(st.session_state, 'braintrust_handler') and
+                getattr(st.session_state, 'logger_braintrust', False)):
+                callbacks.append(st.session_state.braintrust_handler)
+            
+            st.session_state[orchestrator_key] = DebateOrchestrator(
+                domain_config=domain_config,
+                committee_path=committee_path,
+                callbacks=callbacks
+            )
+        
+        orchestrator = st.session_state[orchestrator_key]
+        
+        # Run the debate and build response
+        result = orchestrator.run_debate(topic=last_user_message, max_rounds=max_rounds)
+        
+        # Format the debate result as a rich response
+        response = format_debate_response(result)
+        
         # Create AI message and add to history
         ai_message = AIMessage(content=response)
         st.session_state.messages.append(
-            {"message": ai_message, "agent": "assistant"}
+            {"message": ai_message, "agent": "assistant", "debate_result": result}
         )
         
-        # Clear processing flag and rerun to show the response
-        st.session_state.processing = False
-        st.rerun()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        error_response = f"Error running Investment Committee debate: {str(e)}"
+        ai_message = AIMessage(content=error_response)
+        st.session_state.messages.append(
+            {"message": ai_message, "agent": "assistant"}
+        )
+    
+    # Clear processing flag and rerun to show the response
+    st.session_state.processing = False
+    st.rerun()
+
+
+def format_debate_response(result: dict) -> str:
+    """Format the debate result as a readable response"""
+    if result.get("status") == "failed":
+        return f"**Debate Failed**\n\nError: {result.get('error', 'Unknown error')}"
+    
+    debate_history = result.get("debate_history", [])
+    moderator_decision = result.get("moderator_decision", "")
+    
+    # Build formatted response
+    response_parts = []
+    
+    # Header
+    response_parts.append("# 🏛️ Investment Committee Debate\n")
+    response_parts.append(f"**Topic:** {result.get('topic', 'N/A')}\n")
+    response_parts.append(f"**Rounds Completed:** {result.get('rounds_completed', 0)}\n")
+    response_parts.append("---\n")
+    
+    # Debate rounds
+    for turn in debate_history:
+        agent_name = turn.get("agent_name", "Unknown")
+        agent_persona = turn.get("agent_persona", "")
+        content = turn.get("content", "")
+        turn_type = turn.get("turn_type", "")
+        round_num = turn.get("round_number", 0)
+        
+        # Choose icon based on persona
+        if agent_persona == "bull":
+            icon = "📈"
+            label = "Bull Analyst"
+        elif agent_persona == "bear":
+            icon = "📉"
+            label = "Bear Analyst"
+        elif agent_persona == "moderator":
+            icon = "⚖️"
+            label = "Committee Chair"
+        else:
+            icon = "🤖"
+            label = agent_name
+        
+        # Format turn
+        if agent_persona == "moderator":
+            response_parts.append(f"\n## {icon} {label} - Final Decision\n")
+        else:
+            response_parts.append(f"\n### {icon} {label} (Round {round_num} - {turn_type})\n")
+        
+        response_parts.append(f"{content}\n")
+        response_parts.append("---\n")
+    
+    return "".join(response_parts)
 
 
 def render_experiments_page(domain_name: str, domain_config, agent_factory):
@@ -1026,6 +1175,54 @@ def multi_domain_agent_app(domain_name: str):
                             st.success(f"Hallucination logged{session_context}! Check Galileo console.")
                         else:
                             st.error("Failed to log hallucination. Check logs for details.")
+            
+            # Add Investment Committee section (only for finance domain)
+            if domain_name == "finance" and factory.has_investment_committee(domain_name):
+                st.divider()
+                st.subheader("🏛️ Investment Committee")
+                st.markdown("Multi-agent debate for investment decisions")
+                
+                # Get committee info
+                committee_info = factory.get_committee_info(domain_name)
+                
+                # Toggle for committee mode
+                committee_key = f"committee_mode_{domain_name}"
+                if committee_key not in st.session_state:
+                    st.session_state[committee_key] = False
+                
+                committee_mode = st.toggle(
+                    "Enable Investment Committee",
+                    value=st.session_state[committee_key],
+                    help="Bull and Bear agents debate, Moderator decides",
+                    key=f"committee_toggle_{domain_name}"
+                )
+                st.session_state[committee_key] = committee_mode
+                
+                if committee_mode:
+                    st.success("🏛️ Committee mode active")
+                    
+                    # Show agent info
+                    if committee_info and "agents" in committee_info:
+                        with st.expander("Committee Members"):
+                            for agent in committee_info["agents"]:
+                                st.markdown(f"{agent['icon']} **{agent['name']}**")
+                    
+                    # Max rounds setting
+                    max_rounds_key = f"committee_max_rounds_{domain_name}"
+                    if max_rounds_key not in st.session_state:
+                        st.session_state[max_rounds_key] = committee_info.get("max_rounds", 2) if committee_info else 2
+                    
+                    max_rounds = st.slider(
+                        "Debate Rounds",
+                        min_value=1,
+                        max_value=4,
+                        value=st.session_state[max_rounds_key],
+                        help="Number of back-and-forth exchanges between Bull and Bear",
+                        key=f"committee_rounds_slider_{domain_name}"
+                    )
+                    st.session_state[max_rounds_key] = max_rounds
+                else:
+                    st.info("Single agent mode (standard)")
             
             # Add Observability Platforms section
             st.divider()

@@ -1,0 +1,63 @@
+# Investment Committee Configuration
+# Multi-agent debate system for investment analysis
+
+committee:
+  name: "Investment Committee"
+  description: "Multi-agent debate system where Bull and Bear analysts present opposing viewpoints, with a Moderator making the final recommendation"
+  version: "1.0.0"
+
+# Debate configuration
+debate:
+  max_rounds: 2  # Number of back-and-forth exchanges between Bull and Bear
+  require_evidence: true  # Agents must cite tools/RAG in their arguments
+  enable_tool_usage: true  # Allow agents to use finance tools during debate
+  timeout_per_turn: 60  # Seconds per agent turn (for long-running queries)
+
+# Agent definitions
+agents:
+  - name: "bull"
+    display_name: "Bull Analyst"
+    icon: "📈"
+    card_file: "agents/bull_agent.json"
+    prompt_file: "prompts/bull_prompt.json"
+    color: "#22c55e"  # Green
+    
+  - name: "bear"
+    display_name: "Bear Analyst"
+    icon: "📉"
+    card_file: "agents/bear_agent.json"
+    prompt_file: "prompts/bear_prompt.json"
+    color: "#ef4444"  # Red
+    
+  - name: "moderator"
+    display_name: "Committee Chair"
+    icon: "⚖️"
+    card_file: "agents/moderator_agent.json"
+    prompt_file: "prompts/moderator_prompt.json"
+    color: "#3b82f6"  # Blue
+
+# Inherit from parent finance domain
+inherit_tools: true   # Use finance domain's tools (get_stock_price, etc.)
+inherit_rag: true     # Use finance domain's RAG knowledge base
+
+# Model configuration (can override parent domain)
+model:
+  model_name: "gpt-4.1"  # Use same model as parent
+  temperature: 0.3  # Slightly higher for more varied debate responses
+
+# UI configuration for debate view
+ui:
+  show_tool_calls: true  # Display when agents use tools
+  show_rag_context: true  # Display retrieved context
+  animate_turns: true  # Animate agent responses
+  collapse_rounds: false  # Show all rounds expanded by default
+
+# Galileo observability
+galileo:
+  log_agent_turns: true  # Log each agent's turn as separate span
+  log_tool_usage: true  # Log tool calls within debate
+  log_final_decision: true  # Log moderator's final recommendation
+  tags:
+    - "investment-committee"
+    - "multi-agent"
+    - "debate"
