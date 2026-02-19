@@ -42,7 +42,7 @@ initialize_otlp_tracing()
 # ============================================================================
 # NOW we can import LangChain - OTLP instrumentation is ready!
 # ============================================================================
-from galileo import galileo_context
+from galileo import galileo_context, GalileoLogger
 from agent_factory import AgentFactory
 from domain_manager import DomainManager
 from langchain_core.messages import AIMessage, HumanMessage
@@ -305,13 +305,16 @@ def orchestrate_streamlit_and_get_user_input(
 def process_input_for_simple_app(user_input: str | None):
     """Process user input and generate response - using AgentFactory directly"""
     if user_input:
-        # Start Galileo session on first user input
+        # Start Galileo session on first user input.
+        # Uses the per-session GalileoLogger (set in render_chat_page) so each browser
+        # tab has its own isolated Galileo session rather than sharing a global context.
         if not st.session_state.galileo_session_started:
             try:
                 domain_name = st.session_state.get("domain_name", "default")
                 session_name = f"{domain_name.title()} Agent Demo"
-                galileo_context.start_session(name=session_name, external_id=st.session_state.session_id)
-                st.session_state.galileo_logger = galileo_context
+                per_session_logger = st.session_state.get("galileo_logger")
+                if per_session_logger:
+                    per_session_logger.start_session(name=session_name, external_id=st.session_state.session_id)
                 st.session_state.galileo_session_started = True
             except Exception as e:
                 st.error(f"Failed to start Galileo session: {str(e)}")
@@ -1264,6 +1267,22 @@ def render_chat_page(factory, domain_name: str):
     else:
         st.session_state.session_id = st.session_state[session_id_key]
     
+    # Create a per-session GalileoLogger so each browser tab writes to its own
+    # Galileo session instead of sharing the process-level galileo_context singleton.
+    galileo_logger_key = f"galileo_logger_{domain_name}"
+    if galileo_logger_key not in st.session_state:
+        full_config = st.session_state.get(f"full_domain_config_{domain_name}", {})
+        galileo_config = full_config.get("galileo", {})
+        project_name = galileo_config.get("project") or f"galileo-demo-{domain_name}"
+        log_stream = galileo_config.get("log_stream", "default")
+        try:
+            st.session_state[galileo_logger_key] = GalileoLogger(project=project_name, log_stream=log_stream)
+        except Exception as e:
+            print(f"⚠️ Failed to create per-session GalileoLogger: {e}")
+            st.session_state[galileo_logger_key] = None
+    # Always sync to the generic key so helpers (hallucination demo, etc.) can find it
+    st.session_state.galileo_logger = st.session_state[galileo_logger_key]
+
     user_input = orchestrate_streamlit_and_get_user_input(
         app_title,
         example_queries[0] if len(example_queries) > 0 else "Hello, how can you help me?",
@@ -1280,6 +1299,7 @@ def render_chat_page(factory, domain_name: str):
             framework=FRAMEWORK,
             session_id=st.session_state.session_id,
             model_name=selected_model,
+            galileo_logger=st.session_state[galileo_logger_key],
         )
     
     # Set current agent for processing

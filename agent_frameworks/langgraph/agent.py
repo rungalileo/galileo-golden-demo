@@ -53,6 +53,7 @@ class LangGraphAgent(BaseAgent):
         session_id: str = None,
         protect_stage_id: Optional[str] = None,
         model_override: Optional[str] = None,
+        galileo_logger=None,
     ):
         super().__init__(domain_config, session_id)
         self.graph = None
@@ -60,8 +61,9 @@ class LangGraphAgent(BaseAgent):
         self.protect_enabled = False
         self.model_override = model_override
         
-        # Build callbacks list with Galileo (always enabled)
-        callbacks = [GalileoCallback()]
+        # Build callbacks list with Galileo (always enabled).
+        # Pass the per-session logger so each browser tab writes to its own Galileo session.
+        callbacks = [GalileoCallback(galileo_logger=galileo_logger)]
         
         # Add LangSmith tracer if enabled in session state
         if STREAMLIT_AVAILABLE:
