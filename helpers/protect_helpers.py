@@ -12,6 +12,41 @@ from galileo_core.schemas.protect.action import OverrideAction
 from galileo_core.schemas.shared.scorers.scorer_name import ScorerName as GalileoScorers
 
 
+# Metrics that evaluate the user INPUT (pre-LLM)
+INPUT_SIDE_METRICS = {
+    "prompt_injection",
+    "prompt_injection_luna",
+    "input_pii",
+    "input_toxicity",
+    "input_toxicity_luna",
+    "input_sexist",
+    "input_sexism",
+    "input_sexist_luna",
+    "input_tone",
+}
+
+# Metrics that evaluate the LLM OUTPUT (post-LLM)
+OUTPUT_SIDE_METRICS = {
+    "pii",
+    "output_pii",
+    "toxicity",
+    "output_toxicity",
+    "output_toxicity_luna",
+    "sexist",
+    "output_sexist",
+    "output_sexism",
+    "output_sexist_luna",
+    "tone",
+    "output_tone",
+    "context_adherence",
+    "completeness",
+    "action_completion",
+    "action_advancement",
+    "tool_error_rate",
+    "tool_selection_quality",
+}
+
+
 # Map string metric names to GalileoScorers enums
 METRIC_NAME_TO_SCORER = {
     "prompt_injection": GalileoScorers.prompt_injection,
@@ -170,4 +205,34 @@ def create_rulesets_from_config(domain_config: Optional[dict] = None) -> List[Ru
     )
     
     return [ruleset]
+
+
+def create_input_rulesets_from_config(domain_config: Optional[dict] = None) -> List[Ruleset]:
+    """
+    Like create_rulesets_from_config but only includes metrics that evaluate the
+    user INPUT (pre-LLM), e.g. prompt_injection, input_toxicity.
+    """
+    if domain_config:
+        protect_config = domain_config.get("protect", {})
+        metrics_config = protect_config.get("metrics", [])
+        input_only = [m for m in metrics_config if m.get("name") in INPUT_SIDE_METRICS]
+        filtered_config = {**domain_config, "protect": {**protect_config, "metrics": input_only}}
+    else:
+        filtered_config = domain_config
+    return create_rulesets_from_config(filtered_config)
+
+
+def create_output_rulesets_from_config(domain_config: Optional[dict] = None) -> List[Ruleset]:
+    """
+    Like create_rulesets_from_config but only includes metrics that evaluate the
+    LLM OUTPUT (post-LLM), e.g. pii, toxicity, context_adherence.
+    """
+    if domain_config:
+        protect_config = domain_config.get("protect", {})
+        metrics_config = protect_config.get("metrics", [])
+        output_only = [m for m in metrics_config if m.get("name") in OUTPUT_SIDE_METRICS]
+        filtered_config = {**domain_config, "protect": {**protect_config, "metrics": output_only}}
+    else:
+        filtered_config = domain_config
+    return create_rulesets_from_config(filtered_config)
 

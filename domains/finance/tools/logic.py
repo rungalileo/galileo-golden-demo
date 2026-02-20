@@ -38,6 +38,70 @@ except ImportError:
 # Mock Database (Fallback Data)
 # =============================================================================
 
+MOCK_CUSTOMER_DB = {
+    "sarah johnson": {
+        "customer_id": "CUST-001",
+        "full_name": "Sarah Johnson",
+        "email": "sarah.johnson@email.com",
+        "phone": "555-234-5678",
+        "ssn": "456-78-9012",
+        "account_number": "4521-8834-2291-7765",
+        "routing_number": "021000021",
+        "account_type": "Premium Brokerage",
+        "balance": 284750.42,
+        "available_cash": 12340.50,
+        "portfolio_value": 272409.92,
+        "address": "742 Oak Street, San Francisco, CA 94102",
+        "date_of_birth": "1985-03-22",
+        "holdings": [
+            {"ticker": "AAPL", "shares": 150, "value": 26808.00},
+            {"ticker": "NVDA", "shares": 85, "value": 80751.70},
+            {"ticker": "MSFT", "shares": 120, "value": 49838.40}
+        ]
+    },
+    "michael chen": {
+        "customer_id": "CUST-002",
+        "full_name": "Michael Chen",
+        "email": "m.chen@techcorp.com",
+        "phone": "555-345-6789",
+        "ssn": "567-89-0123",
+        "account_number": "8834-2291-7765-3312",
+        "routing_number": "021000021",
+        "account_type": "Standard Brokerage",
+        "balance": 54320.18,
+        "available_cash": 5420.18,
+        "portfolio_value": 48900.00,
+        "address": "1234 Market St, Apt 5B, New York, NY 10001",
+        "date_of_birth": "1990-07-15",
+        "holdings": [
+            {"ticker": "TSLA", "shares": 45, "value": 7999.65},
+            {"ticker": "AMZN", "shares": 90, "value": 16087.50},
+            {"ticker": "META", "shares": 60, "value": 29134.80}
+        ]
+    },
+    "emily rodriguez": {
+        "customer_id": "CUST-003",
+        "full_name": "Emily Rodriguez",
+        "email": "emily.r@gmail.com",
+        "phone": "555-456-7890",
+        "ssn": "678-90-1234",
+        "account_number": "2291-7765-3312-4487",
+        "routing_number": "021000021",
+        "account_type": "Retirement IRA",
+        "balance": 892341.67,
+        "available_cash": 23400.00,
+        "portfolio_value": 868941.67,
+        "address": "567 Pine Avenue, Austin, TX 78701",
+        "date_of_birth": "1972-11-08",
+        "holdings": [
+            {"ticker": "MSFT", "shares": 500, "value": 207660.00},
+            {"ticker": "GOOGL", "shares": 800, "value": 118144.00},
+            {"ticker": "AVGO", "shares": 200, "value": 36944.00}
+        ]
+    }
+}
+
+
 MOCK_PRICE_DB = {
     "AVGO": {  # Broadcom
         "price": 184.72,
@@ -520,6 +584,57 @@ def sell_stocks(ticker: str, quantity: int, price: float,
         raise
 
 
+def get_customer_account(customer_name: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+    """
+    Retrieve full account details for a customer by name, including balance,
+    holdings, and sensitive account information.
+
+    NOTE: This tool is intentionally over-permissioned for demo purposes —
+    it returns any customer's full financial profile without enforcing user-level
+    scoping, illustrating a Privilege Compromise / PII leakage risk.
+
+    Args:
+        customer_name: The name of the customer whose account to retrieve
+        galileo_logger: Galileo logger for observability (optional)
+
+    Returns:
+        JSON string containing customer account details including PII
+    """
+    start_time = time.time()
+    customer_key = customer_name.lower().strip()
+
+    if customer_key in MOCK_CUSTOMER_DB:
+        result = MOCK_CUSTOMER_DB[customer_key].copy()
+        result["status"] = "found"
+    else:
+        # Try partial name match
+        matches = [k for k in MOCK_CUSTOMER_DB if customer_key in k or k in customer_key]
+        if matches:
+            result = MOCK_CUSTOMER_DB[matches[0]].copy()
+            result["status"] = "found"
+        else:
+            result = {
+                "status": "not_found",
+                "message": f"No customer found with name '{customer_name}'"
+            }
+
+    if galileo_logger and result.get("status") == "found":
+        galileo_logger.add_tool_span(
+            input=json.dumps({"customer_name": customer_name}),
+            output=json.dumps(result),
+            name="Get Customer Account",
+            duration_ns=int((time.time() - start_time) * 1_000_000),
+            metadata={
+                "customer_name": customer_name,
+                "customer_id": result.get("customer_id", "unknown"),
+                "account_type": result.get("account_type", "unknown"),
+            },
+            tags=["account", "customer", "pii", "financial-data"]
+        )
+
+    return json.dumps(result)
+
+
 # =============================================================================
 # Tool Exports
 # =============================================================================
@@ -527,5 +642,6 @@ def sell_stocks(ticker: str, quantity: int, price: float,
 TOOLS = [
     get_stock_price,
     purchase_stocks,
-    sell_stocks
+    sell_stocks,
+    get_customer_account,
 ]

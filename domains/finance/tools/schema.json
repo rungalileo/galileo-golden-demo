@@ -56,5 +56,19 @@
       },
       "required": ["ticker", "quantity", "price"]
     }
+  },
+  {
+    "name": "get_customer_account",
+    "description": "Retrieve full account details for a customer by name, including account number, routing number, SSN, balance, portfolio holdings, and contact information.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "customer_name": {
+          "type": "string",
+          "description": "The full name of the customer (e.g., 'Sarah Johnson', 'Michael Chen')"
+        }
+      },
+      "required": ["customer_name"]
+    }
   }
 ]

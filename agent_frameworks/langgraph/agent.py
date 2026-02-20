@@ -33,7 +33,10 @@ except ImportError:
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from chaos_engine import get_chaos_engine
 from .langgraph_rag import create_domain_rag_tool
-from helpers.protect_helpers import create_rulesets_from_config
+from helpers.protect_helpers import (
+    create_input_rulesets_from_config,
+    create_output_rulesets_from_config,
+)
 
 
 # Define the state for our graph
@@ -191,46 +194,69 @@ class LangGraphAgent(BaseAgent):
         ).bind_tools(self.tools)
 
         def protect_check_node(state):
-            """Check for harmful content before processing"""
-            # If Protect is not enabled, pass through
+            """Check INPUT for harmful content before processing (pre-LLM)."""
             if not self.protect_enabled or not self.protect_stage_id:
                 return {"protect_triggered": False}
-            
-            # Get the latest user message
+
             latest_message = None
             for msg in reversed(state["messages"]):
                 if isinstance(msg, HumanMessage):
                     latest_message = msg.content
                     break
-            
+
             if not latest_message:
                 return {"protect_triggered": False}
-            
-            # Create rulesets from domain config
-            rulesets = create_rulesets_from_config(self.domain_config.config)
+
+            # Only input-side metrics (prompt_injection, input_toxicity, etc.)
+            rulesets = create_input_rulesets_from_config(self.domain_config.config)
             if not rulesets:
                 return {"protect_triggered": False}
-            
-            # Create ProtectTool - this is a LangChain tool so it will be tracked by GalileoCallback
+
             protect_tool = ProtectTool(
                 stage_id=self.protect_stage_id,
                 prioritized_rulesets=rulesets
             )
-            
-            # Invoke the tool with config so it gets tracked by GalileoCallback
-            # ProtectTool returns a JSON string of the Response object
             response_json = protect_tool.invoke({"input": latest_message}, config=self.config)
-            
-            # Parse the JSON response
             response = Response.model_validate_json(response_json)
-            
-            # If triggered, add override message and mark to skip processing
+
             if response.status == ExecutionStatus.triggered:
                 override_msg = AIMessage(content=response.text)
                 return {"messages": [override_msg], "protect_triggered": True}
-            
-            # Not triggered, continue normally
+
             return {"protect_triggered": False}
+
+        def protect_output_check_node(state):
+            """Check the LLM's final OUTPUT for PII/sensitive content (post-LLM)."""
+            if not self.protect_enabled or not self.protect_stage_id:
+                return {}
+
+            # Only output-side metrics (pii, toxicity, etc.)
+            rulesets = create_output_rulesets_from_config(self.domain_config.config)
+            if not rulesets:
+                return {}
+
+            # Find the last AI message that isn't a tool call (the final response)
+            latest_ai_output = None
+            for msg in reversed(state["messages"]):
+                if isinstance(msg, AIMessage) and not getattr(msg, "tool_calls", None):
+                    latest_ai_output = msg.content
+                    break
+
+            if not latest_ai_output:
+                return {}
+
+            protect_tool = ProtectTool(
+                stage_id=self.protect_stage_id,
+                prioritized_rulesets=rulesets
+            )
+            response_json = protect_tool.invoke({"output": latest_ai_output}, config=self.config)
+            response = Response.model_validate_json(response_json)
+
+            if response.status == ExecutionStatus.triggered:
+                override_msg = AIMessage(content=response.text)
+                return {"messages": [override_msg], "protect_triggered": True}
+
+            return {}
 
         def invoke_chatbot(state):
             messages = list(state["messages"])  # Make a copy to avoid mutating state
@@ -266,31 +292,43 @@ class LangGraphAgent(BaseAgent):
             message = llm_with_tools.invoke(messages)
             return {"messages": [message]}
         
-        def route_after_protect(state):
-            """Route after protect check - skip to END if triggered"""
+        def route_after_input_protect(state):
+            """Skip to END if input protect triggered, otherwise run chatbot."""
             if state.get("protect_triggered", False):
                 return END
             return "chatbot"
 
+        def route_after_chatbot(state):
+            """Route to tools if the LLM made tool calls, otherwise run output protect."""
+            result = tools_condition(state)
+            if result == END:
+                return "protect_output_check"
+            return result
+
         # Build the graph
         graph_builder = StateGraph(State)
-        
-        # Add protect node as the first node
+
         graph_builder.add_node("protect_check", protect_check_node)
         graph_builder.add_node("chatbot", invoke_chatbot)
+        graph_builder.add_node("protect_output_check", protect_output_check_node)
 
         tool_node = ToolNode(tools=self.tools)
         graph_builder.add_node("tools", tool_node)
 
-        # Route from START to protect_check
+        # START → input protect → chatbot (or END if triggered)
         graph_builder.add_edge(START, "protect_check")
-        
-        # Conditional edge from protect_check - go to END if triggered, chatbot otherwise
-        graph_builder.add_conditional_edges("protect_check", route_after_protect)
-        
-        # Normal flow
-        graph_builder.add_conditional_edges("chatbot", tools_condition)
+        graph_builder.add_conditional_edges("protect_check", route_after_input_protect)
+
+        # chatbot → tools (if tool calls) or output protect (if done)
+        graph_builder.add_conditional_edges(
+            "chatbot",
+            route_after_chatbot,
+            {"tools": "tools", "protect_output_check": "protect_output_check"}
+        )
         graph_builder.add_edge("tools", "chatbot")
+
+        # output protect → END
+        graph_builder.add_edge("protect_output_check", END)
 
         return graph_builder.compile()
     

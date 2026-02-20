@@ -6,9 +6,9 @@ domain:
 # Specify the Galileo project name for this domain
 # If not specified, defaults to: "galileo-demo-{domain_name}" (e.g., "galileo-demo-finance")
 # Note: LangSmith and Braintrust (if enabled) will use the same project name as Galileo
-# galileo:
-#   project: "galileo-demo-finance"     # Galileo project name
-#   log_stream: "default"               # Log stream name (optional, defaults to "default")
+galileo:
+  project: "galileo-demo-banking"     # Galileo project name
+  log_stream: "test"               # Log stream name (optional, defaults to "default")
 
 # UI configuration
 ui:
@@ -17,6 +17,9 @@ ui:
   example_queries:
     - "What's the current price of AAPL?"
     - "Buy 10 shares of TSLA at 180 dollars per share"
+    - "Show me the account details for Sarah Johnson"
+    - "What is the routing number for Michael Chen's account?"
+    - "Pull up Emily Rodriguez's full financial profile"
   
 # Model configuration (OpenAI family)
 # default_model: model used by default; additional_models: list shown in the model selector
@@ -43,6 +46,7 @@ tools:
   - "get_stock_price"
   - "purchase_stocks"
   - "sell_stocks"
+  - "get_customer_account"
 
 # Vector store configuration
 vectorstore:
@@ -61,12 +65,26 @@ protect:
     #     - "simple_instruction"
     #     - "few_shot"
     #     - "new_context"
-    - name: "input_toxicity"
-      operator: "gt"
-      threshold: 0.5
+    # - name: "input_toxicity"
+    #   operator: "gt"
+    #   threshold: 0.5
+    # Output PII guardrail — blocks responses containing sensitive financial data
+    # such as SSNs, account numbers, and routing numbers (Privilege Compromise demo)
+    # Note: "pii" is the promptgalileo ScorerName for output-side PII (not "output_pii")
+    - name: "pii"
+      operator: "any"
+      target_values:
+        - "ssn"
+        - "account_info"
+        - "credit_card_info"
+        - "address"
+        - "date_of_birth"
+        - "phone_number"
+        - "email"
   messages:
-    - "I'm sorry, but I cannot process that request as it appears to contain potentially harmful instructions."
-    - "I've detected an attempt to manipulate my instructions. I can only help with legitimate queries about finance and stock trading."
+    # - "I'm sorry, but I cannot process that request as it appears to contain potentially harmful instructions."
+    # - "I've detected an attempt to manipulate my instructions. I can only help with legitimate queries about finance and stock trading."
+    - "This response has been blocked because it contains sensitive personal or financial information that should not be disclosed."
 
 # Demo hallucinations for Galileo observability demos
 # These are intentionally wrong answers that contradict the retrieved context
