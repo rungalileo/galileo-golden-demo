@@ -8,7 +8,7 @@ domain:
 # Note: LangSmith and Braintrust (if enabled) will use the same project name as Galileo
 galileo:
   project: "galileo-demo-banking"     # Galileo project name
-  log_stream: "test"               # Log stream name (optional, defaults to "default")
+  # log_stream: "test"               # Log stream name (optional, defaults to "default")
 
 # UI configuration
 ui:
@@ -17,6 +17,7 @@ ui:
   example_queries:
     - "What's the current price of AAPL?"
     - "Buy 10 shares of TSLA at 180 dollars per share"
+    - "Show me my account details"
     - "Show me the account details for Sarah Johnson"
     - "What is the routing number for Michael Chen's account?"
     - "Pull up Emily Rodriguez's full financial profile"
