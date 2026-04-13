@@ -333,8 +333,9 @@ def process_input_for_simple_app(user_input: str | None):
         # Set Protect on the agent if enabled
         if st.session_state.get("protect_enabled", False):
             stage_id = st.session_state.get("protect_stage_id")
+            output_stage_id = st.session_state.get("protect_output_stage_id")
             if stage_id:
-                st.session_state.agent.set_protect(True, stage_id)
+                st.session_state.agent.set_protect(True, stage_id, output_stage_id)
             else:
                 st.session_state.agent.set_protect(False)
         else:
@@ -942,15 +943,26 @@ def multi_domain_agent_app(domain_name: str):
             if protect_enabled:
                 st.info("🛡️ Protect is active. Prompt injection attempts will be blocked.")
                 
-                # Initialize stage if needed (per domain)
+                # Initialize input stage if needed (per domain)
                 stage_key = f"protect_stage_id_{domain_name}"
                 if stage_key not in st.session_state and project_name:
                     try:
-                        with st.spinner("Setting up Protect stage..."):
-                            stage_id = get_or_create_protect_stage(project_name)
+                        with st.spinner("Setting up Protect input stage..."):
+                            stage_id = get_or_create_protect_stage(project_name, stage_name="protect-input-stage")
                             st.session_state[stage_key] = stage_id
                     except Exception as e:
-                        st.error(f"Failed to setup Protect stage: {str(e)}")
+                        st.error(f"Failed to setup Protect input stage: {str(e)}")
+                        st.session_state[protect_key] = False
+
+                # Initialize output stage if needed (separate stage for output metrics)
+                output_stage_key = f"protect_output_stage_id_{domain_name}"
+                if output_stage_key not in st.session_state and project_name:
+                    try:
+                        with st.spinner("Setting up Protect output stage..."):
+                            output_stage_id = get_or_create_protect_stage(project_name, stage_name="protect-output-stage")
+                            st.session_state[output_stage_key] = output_stage_id
+                    except Exception as e:
+                        st.error(f"Failed to setup Protect output stage: {str(e)}")
                         st.session_state[protect_key] = False
             else:
                 st.info("Protect is disabled. All queries will be processed normally.")
@@ -1309,10 +1321,13 @@ def render_chat_page(factory, domain_name: str):
     protect_key = f"protect_enabled_{domain_name}"
     st.session_state.protect_enabled = st.session_state.get(protect_key, False)
     
-    # Update protect_stage_id for the current domain
+    # Update protect stage IDs for the current domain
     stage_key = f"protect_stage_id_{domain_name}"
     if stage_key in st.session_state:
         st.session_state.protect_stage_id = st.session_state[stage_key]
+    output_stage_key = f"protect_output_stage_id_{domain_name}"
+    if output_stage_key in st.session_state:
+        st.session_state.protect_output_stage_id = st.session_state[output_stage_key]
     
     process_input_for_simple_app(user_input)
 

@@ -9,26 +9,39 @@ from galileo.stages import Stages
 from galileo_core.schemas.protect.ruleset import Ruleset
 from galileo_core.schemas.protect.rule import Rule, RuleOperator
 from galileo_core.schemas.protect.action import OverrideAction
-from galileo_core.schemas.shared.scorers.scorer_name import ScorerName as GalileoScorers
 
 
-# Map string metric names to GalileoScorers enums
-METRIC_NAME_TO_SCORER = {
-    "prompt_injection": GalileoScorers.prompt_injection,
-    "input_pii": GalileoScorers.input_pii,
-    "output_pii": GalileoScorers.output_pii,
-    "input_toxicity": GalileoScorers.input_toxicity,
-    "output_toxicity": GalileoScorers.output_toxicity,
-    "input_sexism": GalileoScorers.input_sexism,
-    "output_sexism": GalileoScorers.output_sexism,
-    "input_tone": GalileoScorers.input_tone,
-    "output_tone": GalileoScorers.output_tone,
-    "context_adherence": GalileoScorers.context_adherence,
-    "completeness": GalileoScorers.completeness,
-    "action_advancement": GalileoScorers.action_advancement,
-    "action_completion": GalileoScorers.action_completion,
-    "tool_error_rate": GalileoScorers.tool_error_rate,
-    "tool_selection_quality": GalileoScorers.tool_selection_quality,
+# Map user-friendly metric names to the Protect API scorer names.
+#
+# IMPORTANT: The Protect API (promptgalileo) uses different names than the SDK
+# (galileo_core).  The API members are e.g. "toxicity" / "pii" for output
+# metrics, NOT "output_toxicity" / "output_pii".  We map to raw strings here
+# because Rule.metric is a plain str that must match the API-side
+# promptgalileo.ScorerName member name.
+#
+# Both the canonical API name (e.g. "toxicity") and the SDK-style alias
+# (e.g. "output_toxicity") are included so config authors can use either.
+METRIC_NAME_TO_API_SCORER: dict[str, str] = {
+    # Input-side (same name in both SDK and API)
+    "prompt_injection": "prompt_injection",
+    "input_pii": "input_pii",
+    "input_toxicity": "input_toxicity",
+    "input_sexist": "input_sexist",
+    "input_sexism": "input_sexist",
+    "input_tone": "input_tone",
+    # Output-side — API name has no "output_" prefix
+    "pii": "pii",
+    "output_pii": "pii",
+    "toxicity": "toxicity",
+    "output_toxicity": "toxicity",
+    "sexist": "sexist",
+    "output_sexist": "sexist",
+    "output_sexism": "sexist",
+    "tone": "tone",
+    "output_tone": "tone",
+    # Agentic / other
+    "tool_error_rate": "tool_error_rate",
+    "tool_selection_quality": "tool_selection_quality",
 }
 
 # Map string operators to RuleOperator enums
@@ -98,12 +111,8 @@ def create_rule_from_config(metric_config: dict) -> Optional[Rule]:
     if not metric_name or not operator_str:
         return None
     
-    # Get the GalileoScorer enum or use string for custom metrics
-    if metric_name in METRIC_NAME_TO_SCORER:
-        metric = METRIC_NAME_TO_SCORER[metric_name]
-    else:
-        # Support custom metrics by name
-        metric = metric_name
+    # Resolve to the API-side scorer name, or pass through for custom metrics
+    metric = METRIC_NAME_TO_API_SCORER.get(metric_name, metric_name)
     
     # Get the operator
     operator = OPERATOR_MAP.get(operator_str)
@@ -128,22 +137,26 @@ def create_rule_from_config(metric_config: dict) -> Optional[Rule]:
     )
 
 
-def create_rulesets_from_config(domain_config: Optional[dict] = None) -> List[Ruleset]:
+def create_rulesets_from_config(
+    domain_config: Optional[dict] = None,
+    section: str = "protect",
+) -> List[Ruleset]:
     """
     Create Ruleset objects from domain configuration.
-    
+
     Args:
-        domain_config: Optional domain config dict containing protect settings with:
-            - metrics: List of metric configurations
-            - messages: List of custom response messages
-    
+        domain_config: Optional domain config dict.
+        section: Top-level key to read from the config. Use "protect_input" for the
+                 pre-LLM node (payload has input only) and "protect_output" for the
+                 post-LLM node (payload has both input and output). Defaults to
+                 "protect" for backwards compatibility with single-section configs.
+
     Returns:
-        List of Ruleset objects configured from domain config
+        List of Ruleset objects configured from the specified section.
     """
-    # Get protect config from domain config if provided
     protect_config = {}
     if domain_config:
-        protect_config = domain_config.get("protect", {})
+        protect_config = domain_config.get(section, {})
     
     # Get metrics configuration - no fallback, must be explicitly configured
     metrics_config = protect_config.get("metrics", [])

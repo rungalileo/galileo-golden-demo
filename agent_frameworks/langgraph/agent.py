@@ -14,7 +14,7 @@ from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import START, END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt import ToolNode
 from base_agent import BaseAgent
 from domain_manager import DomainConfig
 from galileo.handlers.langchain import GalileoCallback
@@ -52,12 +52,14 @@ class LangGraphAgent(BaseAgent):
         domain_config: DomainConfig,
         session_id: str = None,
         protect_stage_id: Optional[str] = None,
+        protect_output_stage_id: Optional[str] = None,
         model_override: Optional[str] = None,
         galileo_logger=None,
     ):
         super().__init__(domain_config, session_id)
         self.graph = None
         self.protect_stage_id = protect_stage_id
+        self.protect_output_stage_id = protect_output_stage_id
         self.protect_enabled = False
         self.model_override = model_override
         
@@ -190,46 +192,79 @@ class LangGraphAgent(BaseAgent):
             name=f"{self.domain_config.name.title()} Assistant"
         ).bind_tools(self.tools)
 
-        def protect_check_node(state):
-            """Check for harmful content before processing"""
-            # If Protect is not enabled, pass through
-            if not self.protect_enabled or not self.protect_stage_id:
-                return {"protect_triggered": False}
-            
-            # Get the latest user message
-            latest_message = None
+        def _get_latest_human_message(state) -> Optional[str]:
             for msg in reversed(state["messages"]):
                 if isinstance(msg, HumanMessage):
-                    latest_message = msg.content
-                    break
-            
-            if not latest_message:
-                return {"protect_triggered": False}
-            
-            # Create rulesets from domain config
-            rulesets = create_rulesets_from_config(self.domain_config.config)
+                    return msg.content
+            return None
+
+        def _get_latest_ai_message(state) -> Optional[str]:
+            for msg in reversed(state["messages"]):
+                if isinstance(msg, AIMessage):
+                    return msg.content
+            return None
+
+        def _run_protect(payload_kwargs: dict, section: str = "protect") -> Optional[AIMessage]:
+            """Invoke ProtectTool and return an AIMessage override if triggered, else None."""
+            rulesets = create_rulesets_from_config(self.domain_config.config, section=section)
             if not rulesets:
-                return {"protect_triggered": False}
-            
-            # Create ProtectTool - this is a LangChain tool so it will be tracked by GalileoCallback
-            protect_tool = ProtectTool(
-                stage_id=self.protect_stage_id,
-                prioritized_rulesets=rulesets
+                return None
+            stage_id = (
+                self.protect_output_stage_id if section == "protect_output"
+                else self.protect_stage_id
             )
-            
-            # Invoke the tool with config so it gets tracked by GalileoCallback
-            # ProtectTool returns a JSON string of the Response object
-            response_json = protect_tool.invoke({"input": latest_message}, config=self.config)
-            
-            # Parse the JSON response
+            if not stage_id:
+                return None
+            protect_tool = ProtectTool(
+                stage_id=stage_id,
+                prioritized_rulesets=rulesets,
+            )
+            response_json = protect_tool.invoke(payload_kwargs, config=self.config)
             response = Response.model_validate_json(response_json)
-            
-            # If triggered, add override message and mark to skip processing
             if response.status == ExecutionStatus.triggered:
-                override_msg = AIMessage(content=response.text)
-                return {"messages": [override_msg], "protect_triggered": True}
-            
-            # Not triggered, continue normally
+                return AIMessage(content=response.text)
+            return None
+
+        def protect_input_node(state):
+            """Scan the user's message before it reaches the LLM.
+
+            Sends payload(input=<user message>) only. Configure metrics under
+            `protect_input` in the domain config — input-side metrics only
+            (input_toxicity, prompt_injection, input_pii, …). Sending output-side
+            metrics here causes API errors because the output field is absent.
+            """
+            if not self.protect_enabled or not self.protect_stage_id:
+                return {"protect_triggered": False}
+
+            user_input = _get_latest_human_message(state)
+            if not user_input:
+                return {"protect_triggered": False}
+
+            override = _run_protect({"input": user_input}, section="protect_input")
+            if override:
+                return {"messages": [override], "protect_triggered": True}
+            return {"protect_triggered": False}
+
+        def protect_output_node(state):
+            """Scan the LLM's response after the chatbot runs.
+
+            Sends payload(input=<user message>, output=<AI reply>). Configure metrics
+            under `protect_output` in the domain config — output-side metrics
+            (output_toxicity, output_pii, …) and metrics that need both sides
+            (completeness, …). Sending input-only metrics here is harmless but
+            redundant since protect_input already caught them.
+            """
+            if not self.protect_enabled or not self.protect_stage_id:
+                return {"protect_triggered": False}
+
+            user_input = _get_latest_human_message(state)
+            ai_output = _get_latest_ai_message(state)
+            if not user_input or not ai_output:
+                return {"protect_triggered": False}
+
+            override = _run_protect({"input": user_input, "output": ai_output}, section="protect_output")
+            if override:
+                return {"messages": [override], "protect_triggered": True}
             return {"protect_triggered": False}
 
         def invoke_chatbot(state):
@@ -266,39 +301,61 @@ class LangGraphAgent(BaseAgent):
             message = llm_with_tools.invoke(messages)
             return {"messages": [message]}
         
-        def route_after_protect(state):
-            """Route after protect check - skip to END if triggered"""
+        def route_after_protect_input(state):
+            """Short-circuit to END if the input check triggered, otherwise run the chatbot."""
             if state.get("protect_triggered", False):
                 return END
             return "chatbot"
 
+        def route_after_chatbot(state):
+            """Go to tools if the LLM made tool calls, otherwise run the output protect check."""
+            last = state["messages"][-1]
+            if hasattr(last, "tool_calls") and last.tool_calls:
+                return "tools"
+            return "protect_output"
+
+        def route_after_protect_output(state):
+            """End the turn whether or not the output check triggered."""
+            return END
+
         # Build the graph
+        #
+        # Flow:
+        #   START
+        #     → protect_input  (input-only check: prompt injection, input toxicity, input PII, …)
+        #         → END          if triggered
+        #         → chatbot      if clean
+        #             → tools        if LLM made tool calls  →  back to chatbot
+        #             → protect_output  (input + output check: output toxicity, output PII,
+        #                                context_adherence, completeness, …)
+        #                 → END
         graph_builder = StateGraph(State)
-        
-        # Add protect node as the first node
-        graph_builder.add_node("protect_check", protect_check_node)
+
+        graph_builder.add_node("protect_input", protect_input_node)
         graph_builder.add_node("chatbot", invoke_chatbot)
+        graph_builder.add_node("tools", ToolNode(tools=self.tools))
+        graph_builder.add_node("protect_output", protect_output_node)
 
-        tool_node = ToolNode(tools=self.tools)
-        graph_builder.add_node("tools", tool_node)
-
-        # Route from START to protect_check
-        graph_builder.add_edge(START, "protect_check")
-        
-        # Conditional edge from protect_check - go to END if triggered, chatbot otherwise
-        graph_builder.add_conditional_edges("protect_check", route_after_protect)
-        
-        # Normal flow
-        graph_builder.add_conditional_edges("chatbot", tools_condition)
+        graph_builder.add_edge(START, "protect_input")
+        graph_builder.add_conditional_edges("protect_input", route_after_protect_input)
+        graph_builder.add_conditional_edges("chatbot", route_after_chatbot)
         graph_builder.add_edge("tools", "chatbot")
+        graph_builder.add_conditional_edges("protect_output", route_after_protect_output)
 
         return graph_builder.compile()
     
-    def set_protect(self, enabled: bool, stage_id: Optional[str] = None):
+    def set_protect(
+        self,
+        enabled: bool,
+        stage_id: Optional[str] = None,
+        output_stage_id: Optional[str] = None,
+    ):
         """Enable or disable Protect for this agent"""
         self.protect_enabled = enabled
         if stage_id:
             self.protect_stage_id = stage_id
+        if output_stage_id:
+            self.protect_output_stage_id = output_stage_id
     
     def process_query(self, messages: List[Dict[str, str]]) -> str:
         """Process a user query and return a response"""

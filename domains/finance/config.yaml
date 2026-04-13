@@ -50,9 +50,19 @@ vectorstore:
 
 # Protect configuration
 # Note: Protect is controlled via the UI toggle in the sidebar
-# This config defines which metrics to use and what messages to show when Protect is enabled
-protect:
+#
+# Two separate sections — each node only sends the metrics that match its payload:
+#   protect_input  sends payload(input=<user message>)         — before the LLM runs
+#   protect_output sends payload(input=<user>, output=<AI reply>) — after the LLM responds
+#
+# Sending output-side metrics in protect_input (or vice versa) causes API errors because
+# the required payload field is absent. Keep them in the correct section.
+
+protect_input:
   metrics:
+    - name: "input_toxicity"
+      operator: "gt"
+      threshold: 0.5
     # - name: "prompt_injection"
     #   operator: "any"
     #   target_values:
@@ -61,12 +71,28 @@ protect:
     #     - "simple_instruction"
     #     - "few_shot"
     #     - "new_context"
-    - name: "input_toxicity"
+    # - name: "input_pii"
+    #   operator: "not_empty"
+  messages:
+    - "I'm sorry, but I cannot process that request as it appears to contain potentially harmful content."
+    - "I've detected an attempt to manipulate my instructions. I can only help with legitimate queries about finance and stock trading."
+
+protect_output:
+  metrics:
+    # NOTE: The Protect API scorer names for output metrics are "toxicity" and "pii"
+    # (no "output_" prefix). The SDK/core ScorerName uses "output_toxicity" etc. but
+    # the API-side promptgalileo ScorerName only has "toxicity" and "pii".
+    - name: "toxicity"
       operator: "gt"
       threshold: 0.5
+    - name: "pii"
+      operator: "not_empty"
+    # - name: "completeness"
+    #   operator: "lt"
+    #   threshold: 0.5
   messages:
-    - "I'm sorry, but I cannot process that request as it appears to contain potentially harmful instructions."
-    - "I've detected an attempt to manipulate my instructions. I can only help with legitimate queries about finance and stock trading."
+    - "I'm sorry, my response did not meet our safety standards. Please try rephrasing your question."
+    - "My response was flagged for quality or safety issues. Please ask your question again."
 
 # Demo hallucinations for Galileo observability demos
 # These are intentionally wrong answers that contradict the retrieved context
