@@ -249,7 +249,7 @@ srsly==2.5.3
 sse-starlette==3.4.4
 sseclient-py==1.9.0
 starlette==1.0.0
-strawberry-graphql==0.314.3
+strawberry-graphql==0.315.4
 streamlit==1.57.0
 sympy==1.14.0
 tenacity==9.1.4
