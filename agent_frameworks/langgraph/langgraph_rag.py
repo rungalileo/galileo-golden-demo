@@ -6,7 +6,7 @@ Uses Pinecone for vector storage with environment-based configuration.
 import os
 from pathlib import Path
 from typing import Optional
-from langchain_classic import hub
+from langsmith import Client as LangSmithClient
 from langchain_pinecone import PineconeVectorStore
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_core.tools import tool
@@ -105,7 +105,14 @@ class DomainRAGSystem:
             )
             
             # Create prompt for the chain
-            retrieval_qa_chat_prompt = hub.pull("langchain-ai/retrieval-qa-chat")
+            # Pull via langsmith directly: the langchain_classic.hub wrapper is
+            # deprecated and doesn't forward `dangerously_pull_public_prompt`,
+            # which newer langsmith requires for public prompts. We trust this
+            # one (official langchain-ai org).
+            retrieval_qa_chat_prompt = LangSmithClient().pull_prompt(
+                "langchain-ai/retrieval-qa-chat",
+                dangerously_pull_public_prompt=True,
+            )
             
             # Create the retrieval chain
             combine_docs_chain = create_stuff_documents_chain(llm, retrieval_qa_chat_prompt)

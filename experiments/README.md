@@ -17,8 +17,37 @@ experiments/
 ├── experiment_helpers.py      # Shared functions for both CLI and UI
 ├── run_experiment.py          # CLI script to run experiments
 ├── create_galileo_dataset.py  # CLI script to create datasets
+├── test_experiments.py        # Pytest integration tests (poll + assert)
 └── README.md                  # This file
 ```
+
+## Running as Pytest (CI/CD)
+
+`test_experiments.py` runs the same experiments as `run_experiment.py`,
+polls Galileo for metric aggregates, and asserts each metric's average
+against a per-metric threshold. This is the entry point intended for
+CI/CD pipelines.
+
+```bash
+# Run all domain experiments as integration tests
+pytest experiments/test_experiments.py -m integration -s
+
+# Run a single domain
+pytest experiments/test_experiments.py -m integration -k finance -s
+```
+
+Notes:
+- Tests are marked `integration` and are **skipped by default** (see
+  `pytest.ini`) because they hit real LLM, Pinecone, and Galileo APIs
+  and take several minutes per domain.
+- In CI, `setup_env.py` will fall back to environment variables when
+  `.streamlit/secrets.toml` is absent. Required env vars:
+  `OPENAI_API_KEY`, `GALILEO_API_KEY`, `GALILEO_CONSOLE_URL`,
+  `PINECONE_API_KEY_HOSTED`.
+- If a domain's dataset doesn't exist in Galileo yet, the test will
+  auto-create it from `domains/{domain}/dataset.csv` on first run.
+- Thresholds live in `test_experiments.py` (`DEFAULT_THRESHOLDS`).
+  Start conservative and tighten as agents stabilize.
 
 ## Using the CLI
 
