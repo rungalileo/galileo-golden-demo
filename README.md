@@ -402,7 +402,7 @@ The demo includes **Galileo Protect** for runtime protection against harmful con
 
 ### How to Enable
 
-1. **Enable in UI**: Toggle "Enable Prompt Injection Protection" in the sidebar
+1. **Enable in UI**: Toggle "Enable Runtime Protection" in the sidebar
 2. **Automatic Setup**: The app automatically creates and configures a Protect stage
 3. **Runtime Protection**: Each query is checked against configured rules before processing
 4. **Observability**: All Protect checks are logged to Galileo along with agent traces

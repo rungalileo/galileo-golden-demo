@@ -943,7 +943,7 @@ def multi_domain_agent_app(domain_name: str):
             
             # Toggle for Protect
             protect_enabled = st.checkbox(
-                "Enable Prompt Runtime Protection",
+                "Enable Runtime Protection",
                 value=st.session_state[protect_key],
                 help="Enable Galileo Protect"
             )
