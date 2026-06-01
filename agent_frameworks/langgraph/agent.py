@@ -293,11 +293,11 @@ class LangGraphAgent(BaseAgent):
             # Galileo will detect: LLM corrupted correct tool data in its response
             if chaos.should_corrupt_data():
                 system_prompt += chaos.get_corruption_prompt()
-            
+
             if system_prompt:
                 system_message = SystemMessage(content=system_prompt)
                 messages = [system_message] + messages
-            
+
             message = llm_with_tools.invoke(messages)
             return {"messages": [message]}
         

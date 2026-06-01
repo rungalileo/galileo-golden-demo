@@ -119,5 +119,20 @@ Start the app and navigate to: `http://localhost:8501/healthcare`
 2. "What is the MONA-B protocol for treating a heart attack?"
 3. "What are the breast cancer screening guidelines?"
 
+## ⚠️ Intentional Hallucination Trigger
+
+This domain has a **scripted hallucination** wired up for Galileo demos. The agent will respond with **wrong medical information** (on purpose) when the user's message contains both of these keywords (case-insensitive):
+
+- `lisinopril` **AND** `dosage`
+
+For example, **all** of these will trigger it:
+- "What is the recommended Lisinopril dosage?" *(this is also the second example-query button)*
+- "Can you tell me about Lisinopril and the typical dosage?"
+- "lisinopril dosage please"
+
+When triggered, the agent answers **"50–100 mg twice daily, with liver damage as the most common serious side effect"** — both facts are wrong on purpose. The correct info (10–40 mg once daily; serious side effects are angioedema, hyperkalemia, acute kidney injury) is what RAG retrieves, so Galileo's hallucination / context-adherence metric will flag it.
+
+This is configured in `domains/healthcare/config.yaml` under `demo_hallucinations`. To disable, remove the `trigger_keywords` field from that entry (the sidebar "Log Hallucination" button will still work).
+
 > **Note:** This is a demo application designed to showcase Galileo's observability capabilities for healthcare AI applications. It is NOT a real medical assistant and should NOT be used for actual patient care or medical decisions. All patient data is simulated for demonstration purposes only.
 

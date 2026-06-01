@@ -7,8 +7,10 @@ ui:
   app_title: "E-commerce Assistant"
   icon: "🛒"
   example_queries:
+    # Note: the second query is intentionally crafted to trigger the
+    # demo_hallucinations entry below (matches its trigger_keywords).
     - "I want to make a cheesecake, what do I need?"
-    - "What is the status of order #12345?"
+    - "What's the free shipping minimum and return window?"
 
 # Model configuration (OpenAI family)
 model:
@@ -60,6 +62,10 @@ protect:
 # These are intentionally wrong answers that contradict the retrieved context
 demo_hallucinations:
   - question: "What is the minimum order amount for free shipping and what is the return policy timeframe?"
+    # Chat-trigger: if ALL of these words appear in the user's message
+    # (case-insensitive), the chat will respond with the hallucinated answer
+    # and log the trace to Galileo.
+    trigger_keywords: ["free shipping", "return"]
     hallucinated_answer: "Free shipping applies to orders over $100. Returns are accepted within 60 days of purchase in unused condition."
     # NOTE: The real answer is free shipping over $50, and returns within 30 days - the hallucination says $100 and 60 days
     context:

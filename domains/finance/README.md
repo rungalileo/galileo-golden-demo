@@ -103,5 +103,20 @@ Start the app and navigate to: `http://localhost:8501/finance`
 2. "Buy 10 shares of TSLA at 180 per share"
 3. "What was Costco's Q1 revenue?"
 
+## ⚠️ Intentional Hallucination Trigger
+
+This domain has a **scripted hallucination** wired up for Galileo demos. The agent will respond with a **wrong financial fact** (on purpose) when the user's message contains all of these keywords (case-insensitive):
+
+- `broadcom` **AND** `q4` **AND** `revenue`
+
+For example, **all** of these will trigger it:
+- "What was Broadcom's Q4 revenue?" *(this is also the second example-query button)*
+- "Tell me about Broadcom Q4 revenue numbers"
+- "broadcom q4 revenue?"
+
+When triggered, the agent answers that Broadcom's Q4 revenue was **"$9.3B, up 4% from the previous quarter"** — the dollar figure is correct but the comparison is wrong on purpose (real answer: "up 4% from a year ago"). The correct comparison is what RAG retrieves, so Galileo's hallucination / context-adherence metric will flag it.
+
+This is configured in `domains/finance/config.yaml` under `demo_hallucinations`. To disable, remove the `trigger_keywords` field from that entry (the sidebar "Log Hallucination" button will still work).
+
 > **Note:** This is a demo application designed to showcase Galileo's observability capabilities. It is not intended for real financial trading or investment decisions. All stock data is simulated for demonstration purposes.
 

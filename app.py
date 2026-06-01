@@ -49,7 +49,11 @@ from langchain_core.messages import AIMessage, HumanMessage
 from agent_frameworks.langgraph.langgraph_rag import get_domain_rag_system
 from helpers.galileo_api_helpers import get_galileo_app_url, get_galileo_project_id, get_galileo_log_stream_id
 from helpers.protect_helpers import get_or_create_protect_stage
-from helpers.hallucination_helpers import log_hallucination_for_domain
+from helpers.hallucination_helpers import (
+    log_hallucination_for_domain,
+    log_specific_hallucination,
+    match_hallucination_in_input,
+)
 from experiments.experiment_helpers import (
     get_all_datasets,
     get_dataset_by_name,
@@ -351,8 +355,42 @@ def process_input_for_simple_app(user_input: str | None):
                 elif isinstance(message, AIMessage):
                     conversation_messages.append({"role": "assistant", "content": message.content})
         
-        # Get the actual response from the agent (Protect is handled inside)
-        response = st.session_state.agent.process_query(conversation_messages)
+        # Check whether the latest user message matches a configured
+        # demo hallucination. If it does, short-circuit the agent and
+        # synthesize a trace with the canned wrong answer so Galileo's
+        # context-adherence / hallucination metric has a real (input,
+        # context, output) triple to score against — same trace shape
+        # as the sidebar "Log Hallucination" button.
+        response = None
+        latest_user_msg = next(
+            (m["content"] for m in reversed(conversation_messages) if m["role"] == "user"),
+            None,
+        )
+        domain_name = st.session_state.get("domain_name", "default")
+        domain_full_config = st.session_state.get(
+            f"full_domain_config_{domain_name}", {}
+        )
+        hallucinations = domain_full_config.get("demo_hallucinations", [])
+        matched = (
+            match_hallucination_in_input(latest_user_msg, hallucinations)
+            if latest_user_msg else None
+        )
+
+        if matched:
+            try:
+                log_specific_hallucination(
+                    domain_name=domain_name,
+                    domain_config=domain_full_config,
+                    hallucination=matched,
+                    user_question=latest_user_msg,
+                    existing_logger=st.session_state.get("galileo_logger"),
+                )
+            except Exception as e:
+                print(f"⚠️ Failed to log chat-triggered hallucination: {e}")
+            response = matched.get("hallucinated_answer", "")
+
+        if response is None:
+            response = st.session_state.agent.process_query(conversation_messages)
 
         # Create AI message and add to history
         ai_message = AIMessage(content=response)
@@ -905,9 +943,9 @@ def multi_domain_agent_app(domain_name: str):
             
             # Toggle for Protect
             protect_enabled = st.checkbox(
-                "Enable Prompt Injection Protection",
+                "Enable Prompt Runtime Protection",
                 value=st.session_state[protect_key],
-                help="Enable Galileo Protect to detect and block prompt injection attempts"
+                help="Enable Galileo Protect"
             )
             st.session_state[protect_key] = protect_enabled
             
@@ -1398,18 +1436,22 @@ def main():
             st.stop()
         
         # Create navigation with list of pages - hide navigation for clean demo
+        # NOTE: do NOT wrap nav.run() in a broad try/except — Streamlit calls
+        # the selected page function inline inside nav.run(), so any user-code
+        # exception (including transient ones during widget creation) gets
+        # swallowed here and then the fallback re-renders the page on top of
+        # the already-rendered output, causing duplicate widget keys.
+        # If we ever need to debug navigation specifically, log the full
+        # exception (repr, not str — many streamlit/internal exceptions have
+        # empty str()).
         try:
-            # uncomment this to show the navigation with different pages per domain
             nav = st.navigation(pages, position="hidden")
             nav.run()
         except Exception as nav_error:
-            st.error(f"Navigation error: {str(nav_error)}")
-            st.info(f"Available domains: {available_domains}")
-            st.info(f"Number of pages created: {len(pages)}")
-            # Fallback to default domain
-            if available_domains:
-                st.warning("Falling back to direct domain execution...")
-                multi_domain_agent_app(default_domain)
+            import traceback
+            print("Navigation error:", repr(nav_error))
+            traceback.print_exc()
+            st.error(f"Navigation error: {repr(nav_error)}")
         
     except Exception as e:
         st.error(f"Error initializing app: {str(e)}")

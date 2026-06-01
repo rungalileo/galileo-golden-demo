@@ -15,8 +15,10 @@ ui:
   app_title: "Finance Assistant"
   icon: "💰"  # Icon for navigation (optional, defaults to 🤖)
   example_queries:
+    # Note: the second query is intentionally crafted to trigger the
+    # demo_hallucinations entry below (matches its trigger_keywords).
     - "What's the current price of AAPL?"
-    - "Buy 10 shares of TSLA at 180 dollars per share"
+    - "What was Broadcom's Q4 revenue?"
   
 # Model configuration (OpenAI family)
 # default_model: model used by default; additional_models: list shown in the model selector
@@ -98,6 +100,10 @@ protect_output:
 # These are intentionally wrong answers that contradict the retrieved context
 demo_hallucinations:
   - question: "What was Broadcom's revenue in Q4 and how did it compare to the previous quarter?"
+    # Chat-trigger: if ALL of these words appear in the user's message
+    # (case-insensitive), the chat will respond with the hallucinated answer
+    # and log the trace to Galileo.
+    trigger_keywords: ["broadcom", "q4", "revenue"]
     hallucinated_answer: "Broadcom's revenue in Q4 was $9.3 billion, which was up 4% from the previous quarter."
     # NOTE: The real answer is "up 4% from a year ago" - the hallucination says "previous quarter"
     context:

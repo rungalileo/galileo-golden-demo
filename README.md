@@ -446,15 +446,28 @@ protect:
 
 ## Hallucination Demo
 
-The demo includes a **Hallucination Demo** feature to showcase Galileo's hallucination detection capabilities. This allows you to log intentional hallucinations that contradict retrieved context.
+The demo includes a **Hallucination Demo** feature to showcase Galileo's hallucination detection. It can be fired two ways: from the sidebar button, **or directly from the chat** when the user's message contains configured trigger keywords. Both paths produce the same Galileo trace shape.
+
+> ⚠️ **Heads up for presenters**: when a chat message matches a configured trigger, the agent will respond with the **intentionally wrong** canned answer (the LLM is bypassed for that turn). This is by design — the wrong answer + correct retrieved context is what gives Galileo's hallucination / context-adherence metrics something to score against. If you don't want hallucinations firing in chat, remove or comment out the `trigger_keywords` from the domain's `demo_hallucinations` entries.
 
 ### How It Works
 
-1. Click "Log Hallucination" in the sidebar
-2. A pre-configured hallucination is logged to Galileo with:
-   - Real context documents (that say one thing)
-   - A hallucinated answer (that contradicts the context)
-3. Galileo's hallucination detection flags the contradiction
+**Path 1 — Sidebar button**
+1. Click "Log Hallucination" in the sidebar.
+2. A trace is logged to Galileo with the configured `question`, `context`, and `hallucinated_answer`.
+
+**Path 2 — Chat trigger** *(new)*
+1. User types something matching a hallucination's `trigger_keywords` (case-insensitive substring AND — every keyword must appear in the message).
+2. The agent short-circuits and responds with the configured `hallucinated_answer`.
+3. The same trace as Path 1 is logged to Galileo, but the trace input is the user's actual wording (not the canned `question`).
+4. Each domain's second **example query button** is intentionally crafted to contain the trigger keywords, so demos can fire the hallucination with a single click as well.
+
+In Galileo, the trace looks like a normal RAG query:
+- Trace name: `"Agent"`
+- Spans: `RAG Retrieval` (with the **correct** context) and `LLM Response` (with the **wrong** answer)
+- Session name: `"{Domain} Agent Demo"`
+
+No `"Hallucination Demo"` branding in the trace, so it blends in with real production traces.
 
 ### Configuring Hallucinations for Your Domain
 
@@ -463,12 +476,24 @@ Add a `demo_hallucinations` section to your domain's `config.yaml`:
 ```yaml
 demo_hallucinations:
   - question: "What was the Q4 revenue?"
+    # Optional. If present, the chat will trigger the canned answer when
+    # ALL keywords appear (case-insensitive) in the user's message. Omit
+    # to disable chat-triggering for this hallucination (sidebar button
+    # still works).
+    trigger_keywords: ["broadcom", "q4", "revenue"]
     hallucinated_answer: "Revenue was $9.3B, up 4% from the previous quarter."
     # NOTE: The real answer in context says "up 4% from a year ago"
     context:
       - "Q4 revenue was $9.3 billion, up 4% from a year ago."
       - "Additional context documents..."
 ```
+
+**Tips for picking `trigger_keywords`:**
+- Keep them short (1–3 words each), specific to the question, and unlikely to appear in unrelated queries.
+- Use **2–3 keywords combined** rather than one — `["broadcom", "revenue"]` is safer than `["revenue"]` (which would fire on any revenue question).
+- Multi-word phrases work: `["free shipping", "return"]` requires both phrases.
+
+**Tip for `example_queries`**: write the second entry so it naturally contains the trigger keywords. That way the button click and the typed phrase both produce the demo. See `domains/healthcare/config.yaml` for an example.
 
 ## Chaos Engineering
 

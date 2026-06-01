@@ -14,9 +14,11 @@ ui:
   app_title: "Healthcare Assistant"
   icon: "🏥"  # Icon for navigation
   example_queries:
+    # Note: the second query is intentionally crafted to trigger the
+    # demo_hallucinations entry below (matches its trigger_keywords).
     - "Get patient information for patient ID 12345"
+    - "What is the recommended Lisinopril dosage?"
     - "Schedule an appointment with Dr. Smith for next Monday at 2pm"
-    - "What are the side effects of Lisinopril?"
   
 # Model configuration (OpenAI family)
 model:
@@ -70,6 +72,10 @@ protect:
 # These are intentionally wrong answers that contradict the retrieved context
 demo_hallucinations:
   - question: "What is the recommended dosage for Lisinopril and what are its serious side effects?"
+    # Chat-trigger: if ALL of these words appear in the user's message
+    # (case-insensitive), the chat will respond with the hallucinated answer
+    # and log the trace to Galileo. Keep these short and intuitive.
+    trigger_keywords: ["lisinopril", "dosage"]
     hallucinated_answer: "Lisinopril is typically prescribed at 50-100 mg twice daily. The most common serious side effect is liver damage, which occurs in about 15% of patients."
     # NOTE: The real dosage is 10-40 mg once daily. Serious side effects are angioedema, hyperkalemia, acute kidney injury - NOT liver damage.
     context:
