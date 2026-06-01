@@ -116,5 +116,20 @@ Start the app and navigate to: `http://localhost:8501/ecommerce`
 2. "What is the return policy for unused items?"
 3. "How long does expedited shipping take?"
 
+## ⚠️ Intentional Hallucination Trigger
+
+This domain has a **scripted hallucination** wired up for Galileo demos. The agent will respond with **wrong policy details** (on purpose) when the user's message contains both of these phrases (case-insensitive):
+
+- `free shipping` **AND** `return`
+
+For example, **all** of these will trigger it:
+- "What's the free shipping minimum and return window?" *(this is also the second example-query button)*
+- "Tell me about free shipping and your return policy"
+- "free shipping minimum + return timeframe?"
+
+When triggered, the agent answers that free shipping is **"over $100"** and returns are accepted within **"60 days"** — both wrong on purpose (real policy: $50 minimum, 30-day returns). The correct policy is what RAG retrieves, so Galileo's hallucination / context-adherence metric will flag it.
+
+This is configured in `domains/ecommerce/config.yaml` under `demo_hallucinations`. To disable, remove the `trigger_keywords` field from that entry (the sidebar "Log Hallucination" button will still work).
+
 > **Note:** This is a demo application designed to showcase Galileo's observability capabilities for e-commerce AI applications. It is NOT a real e-commerce platform and should NOT be used for actual purchases. All product data, orders, and transactions are simulated for demonstration purposes only.
 
