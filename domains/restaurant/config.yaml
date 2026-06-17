@@ -3,7 +3,7 @@ domain:
   description: "restaurant assistant for online help and patient information support"
 
 galileo:
-  project: "denisd-project"
+  project: "my-project"
   log_stream: "restaurant"
 
 # UI configuration
