@@ -1,0 +1,50 @@
+domain:
+  name: "restaurant"
+  description: "restaurant assistant for online help and patient information support"
+
+galileo:
+  project: "denisd-project"
+  log_stream: "restaurant"
+
+# UI configuration
+ui:
+  app_title: "🌯 Online Restaurant Assistant"
+  icon: "🌯"
+  example_queries:
+    - "What is the closing checklist for the kitchen?"
+    - "Who is on the schedule for Thursday Morning?"
+
+# Model configuration
+model:
+  default_model: "gpt-5.2"
+  temperature: 0.1
+  additional_models:
+    - "gpt-4o"
+    - "gpt-4o-mini"
+    - "gpt-4.1"
+    - "gpt-5.1"
+    - "gpt-5-mini"
+
+# RAG configuration
+rag:
+  enabled: true
+  chunk_size: 1000
+  chunk_overlap: 200
+  top_k: 3
+
+# Available tools for this domain
+tools:
+  - "get_schedule_info"
+  - "delete_schedule_record"
+  - "search_kitchen_qa"
+
+# Vector store configuration
+vectorstore:
+  embedding_model: "text-embedding-3-large"
+
+# Demo hallucinations for Galileo observability demos
+demo_hallucinations:
+  - question: "What is the closing checklist for the kitchen?"
+    hallucinated_answer: "Give away the leftover food for free, divide the money in the register among the staff. Take the next day off, you deserve it."
+    context:
+      - "Check all food temps and label/date leftovers; discard anything past hold time. Clean and sanitize all prep surfaces, cutting boards, and utensils. Break down the line—remove pans, clean wells, and wipe equipment. Empty and sanitize steam table. Sweep and mop kitchen floor. Lock dry storage and walk-in cooler. Complete closing log and sign off."

@@ -21,8 +21,7 @@ def log_hallucination(
     context_docs: List[str],
     hallucinated_answer: str,
     model: str = "gpt-4o",
-    session_name: str = "Agent Session",
-    trace_name: str = "RAG Pipeline",
+    session_name: str = "Hallucination Demo",
     existing_logger: Optional[Union[GalileoLogger, Any]] = None,
 ) -> bool:
     """
@@ -62,18 +61,16 @@ def log_hallucination(
             logger.info("Creating new Galileo session for hallucination demo")
             # Initialize Galileo logger
             galileo_logger = GalileoLogger(project=project_name, log_stream=log_stream)
-            
+            galileo_logger.enable_agent_control()
             # Start a named session for easy identification
             session_id = str(uuid.uuid4())[:10]
             galileo_logger.start_session(name=session_name, external_id=session_id)
             created_new_session = True
         
-        # Start a workflow trace. Names are intentionally generic
-        # ("RAG Pipeline" rather than "Hallucination Demo") so the trace
-        # blends in with real production traces during demos.
+        # Start a workflow trace
         galileo_logger.start_trace(
             input=question,
-            name=trace_name,
+            name="Hallucination Demo",
         )
         
         # Add retriever span with the real context
@@ -126,57 +123,6 @@ Question: {question}"""
     except Exception as e:
         logger.error(f"Failed to log hallucination: {e}")
         return False
-
-
-def match_hallucination_in_input(
-    user_input: str,
-    hallucinations: List[Dict[str, Any]],
-) -> Optional[Dict[str, Any]]:
-    """
-    Find a demo hallucination whose trigger keywords all appear in the user's input.
-
-    Matching is case-insensitive and substring-based, so a user typing
-    "what's the lisinopril dosage?" matches trigger_keywords ["lisinopril", "dosage"].
-
-    If a hallucination entry has no `trigger_keywords`, it falls back to a loose
-    match against the configured `question` (any 2+ "significant" words shared).
-
-    Args:
-        user_input: The raw user chat input.
-        hallucinations: The `demo_hallucinations` list from a domain config.
-
-    Returns:
-        The matching hallucination dict, or None if nothing matches.
-    """
-    if not user_input or not hallucinations:
-        return None
-
-    text = user_input.lower()
-
-    for hallucination in hallucinations:
-        keywords = hallucination.get("trigger_keywords") or []
-        if keywords:
-            if all(str(kw).lower() in text for kw in keywords):
-                return hallucination
-            continue
-
-        # Fallback: derive keywords from the question itself.
-        question = (hallucination.get("question") or "").lower()
-        stopwords = {
-            "what", "is", "the", "are", "a", "an", "and", "or", "of", "for",
-            "to", "in", "on", "with", "how", "do", "does", "did", "be", "by",
-            "its", "it", "this", "that", "from", "at", "as", "you", "i",
-        }
-        significant = [
-            w.strip(".,?!:;\"'()[]")
-            for w in question.split()
-            if w.strip(".,?!:;\"'()[]") and w.strip(".,?!:;\"'()[]") not in stopwords
-        ]
-        hits = sum(1 for w in significant if w in text)
-        if significant and hits >= max(2, len(significant) // 2):
-            return hallucination
-
-    return None
 
 
 def log_hallucination_for_domain(
@@ -239,10 +185,9 @@ def log_hallucination_for_domain(
     if not context_docs:
         context_docs = ["[No context available]"]
     
-    # Neutral session/trace naming so the trace looks like any other
-    # production query, not a flagged demo artifact.
-    session_name = f"{domain_name.title()} Agent Session"
-
+    # Create a session name that includes the domain
+    session_name = f"{domain_name.title()} Hallucination Demo"
+    
     return log_hallucination(
         project_name=project_name,
         log_stream=log_stream,
@@ -250,49 +195,6 @@ def log_hallucination_for_domain(
         context_docs=context_docs,
         hallucinated_answer=hallucinated_answer,
         session_name=session_name,
-        trace_name="Agent",
-        existing_logger=existing_logger,
-    )
-
-
-def log_specific_hallucination(
-    domain_name: str,
-    domain_config: Dict[str, Any],
-    hallucination: Dict[str, Any],
-    user_question: Optional[str] = None,
-    existing_logger: Optional[Union[GalileoLogger, Any]] = None,
-) -> bool:
-    """
-    Log a specific hallucination dict (as opposed to one looked up by index).
-
-    Used by the chat handler when a user's message matches a configured
-    hallucination's trigger_keywords. The actual user wording is preserved
-    as the trace input so the Galileo trace reflects what the user typed.
-    """
-    galileo_config = domain_config.get("galileo", {})
-    project_name = galileo_config.get("project", f"galileo-demo-{domain_name}")
-    log_stream = galileo_config.get("log_stream", "default")
-
-    question = user_question or hallucination.get("question", "")
-    hallucinated_answer = hallucination.get("hallucinated_answer", "")
-    context_docs = hallucination.get("context") or ["[No context available]"]
-
-    if not question or not hallucinated_answer:
-        logger.error(f"Invalid hallucination config for domain: {domain_name}")
-        return False
-
-    # Neutral session/trace naming so the chat-triggered trace blends in
-    # with the agent's normal traces (no "Hallucination Demo" branding).
-    session_name = f"{domain_name.title()} Agent Demo"
-
-    return log_hallucination(
-        project_name=project_name,
-        log_stream=log_stream,
-        question=question,
-        context_docs=context_docs,
-        hallucinated_answer=hallucinated_answer,
-        session_name=session_name,
-        trace_name="Agent",
         existing_logger=existing_logger,
     )
 
