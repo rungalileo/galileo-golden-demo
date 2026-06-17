@@ -215,7 +215,7 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 python-iso639==2026.4.20
 python-magic==0.4.27
-python-multipart==0.0.29
+python-multipart==0.0.31
 python-oxmsg==0.0.2
 python-slugify==8.0.4
 pytz==2026.2
