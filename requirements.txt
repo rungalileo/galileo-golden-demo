@@ -205,7 +205,7 @@ pydeck==0.9.2
 Pygments==2.20.0
 PyJWT==2.12.1
 pyparsing==3.3.2
-pypdf==6.11.0
+pypdf==6.13.3
 pypdfium2==5.8.0
 PyPika==0.51.1
 pyproject_hooks==1.2.0
