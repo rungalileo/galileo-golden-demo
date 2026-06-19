@@ -199,7 +199,7 @@ pydantic==2.13.4
 pydantic-ai-slim==1.99.0
 pydantic-graph==1.99.0
 pydantic-partial==0.10.2
-pydantic-settings==2.14.1
+pydantic-settings==2.14.2
 pydantic_core==2.46.4
 pydeck==0.9.2
 Pygments==2.20.0
