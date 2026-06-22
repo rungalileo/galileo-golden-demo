@@ -20,8 +20,8 @@ psycopg[binary]
 sqlalchemy
 
 # Galileo
-# Pinned for Python 3.9 compatibility
-galileo==1.29.0
+# Requires Python 3.12+ for experiments support
+galileo==2.3.0
 
 # Agent Control SDK packages are not available on PyPI for this environment.
 # If you have a private index for these, add them back with the correct source.

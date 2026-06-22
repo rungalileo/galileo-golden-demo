@@ -6,7 +6,7 @@ A multi-turn agentic system that showcases Galileo across multiple domains and a
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.12+
 - [Ollama](https://ollama.com/) running locally (default: `http://localhost:11434`)
 - Docker Desktop (for local PostgreSQL + pgvector)
 - Galileo API key
@@ -67,7 +67,7 @@ A multi-turn agentic system that showcases Galileo across multiple domains and a
 
 4. **Set up virtual environment**
    ```bash
-   python3 -m venv venv
+   python3.12 -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
