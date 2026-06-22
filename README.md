@@ -111,8 +111,6 @@ Not a production reference architecture or replacement for customer-specific POC
    docker exec -it golden-demo-postgres psql -U postgres -d vectordb -c "CREATE EXTENSION IF NOT EXISTS vector;"
    ```
 
-   See [documentation/POSTGRES_SETUP.md](documentation/POSTGRES_SETUP.md) for detailed configuration and troubleshooting.
-
 4. **Set up virtual environment**
 >>>>>>> Stashed changes
    ```bash
