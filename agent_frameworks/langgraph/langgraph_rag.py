@@ -15,8 +15,12 @@ from typing import Optional
 from langsmith import Client as LangSmithClient
 
 from langchain_core.tools import tool
-from langchain.chains import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
+
+# Newer LangChain releases used by this repo may not ship a `langchain.chains` module.
+# The chain constructors we need are provided by `langchain_classic` (installed as a
+# transitive dependency of langchain-community in this environment).
+from langchain_classic.chains import create_retrieval_chain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 
 from domain_manager import DomainManager
 from setup_env import setup_environment
