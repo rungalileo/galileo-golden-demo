@@ -244,7 +244,7 @@ class ChaosEngine:
                 
                 # Specific vector DB errors
                 "ChromaDB service unavailable",
-                "Pinecone index unavailable (503 Service Unavailable)",
+                "PostgreSQL connection unavailable",
                 "Embedding dimension mismatch error",
             ]
             error = random.choice(errors)
