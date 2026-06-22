@@ -12,8 +12,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from langsmith import Client as LangSmithClient
-
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 
 # Newer LangChain releases used by this repo may not ship a `langchain.chains` module.
@@ -105,10 +104,16 @@ class DomainRAGSystem:
                 provider=provider,
             )
 
-            # Pull prompt from LangSmith.
-            retrieval_qa_chat_prompt = LangSmithClient().pull_prompt(
-                "langchain-ai/retrieval-qa-chat",
-                dangerously_pull_public_prompt=True,
+            # Local prompt (avoid optional LangSmith dependency at runtime).
+            retrieval_qa_chat_prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        "You are a helpful assistant. Use the provided context to answer the user's question. "
+                        "If the answer is not in the context, say you don't know.",
+                    ),
+                    ("human", "Context:\n{context}\n\nQuestion: {input}"),
+                ]
             )
 
             combine_docs_chain = create_stuff_documents_chain(llm, retrieval_qa_chat_prompt)
