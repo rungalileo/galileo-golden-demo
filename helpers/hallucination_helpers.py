@@ -20,9 +20,14 @@ def log_hallucination(
     question: str,
     context_docs: List[str],
     hallucinated_answer: str,
+<<<<<<< Updated upstream
     model: str = "gpt-4o",
     session_name: str = "Agent Session",
     trace_name: str = "RAG Pipeline",
+=======
+    model: str = "gemma4",
+    session_name: str = "Hallucination Demo",
+>>>>>>> Stashed changes
     existing_logger: Optional[Union[GalileoLogger, Any]] = None,
 ) -> bool:
     """

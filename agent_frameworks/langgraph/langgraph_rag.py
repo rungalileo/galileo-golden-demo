@@ -6,6 +6,7 @@ Uses Pinecone for vector storage with environment-based configuration.
 import os
 from pathlib import Path
 from typing import Optional
+<<<<<<< Updated upstream
 from langsmith import Client as LangSmithClient
 from langchain_pinecone import PineconeVectorStore
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
@@ -15,6 +16,23 @@ from langchain_classic.chains.combine_documents import create_stuff_documents_ch
 from langchain_core.prompts import ChatPromptTemplate
 from pinecone import Pinecone
 from domain_manager import DomainManager
+=======
+
+from langchain_classic import hub
+from langchain_core.tools import tool
+from langchain_classic.chains import create_retrieval_chain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
+from helpers.llm_utils import (
+    get_chat_model,
+    get_default_chat_model,
+    get_domain_embedding_model,
+    get_embeddings,
+    get_llm_provider,
+)
+from helpers.pgvector_utils import VECTOR_INDEX_ENV, collection_exists, create_pgvector_store
+from domain_manager import DomainManager
+from helpers.agent_control_helpers import domain_controlled_tool
+>>>>>>> Stashed changes
 from setup_env import setup_environment
 
 
@@ -50,17 +68,29 @@ class DomainRAGSystem:
             rag_config = domain_config.config.get("rag", {})
             vectorstore_config = domain_config.config.get("vectorstore", {})
             model_config = domain_config.config.get("model", {})
+<<<<<<< Updated upstream
             
             embedding_model = vectorstore_config.get("embedding_model", "text-embedding-3-large")
             # Use passed model (from main agent selection) or domain default so RAG matches main assistant
+=======
+
+            provider = get_llm_provider()
+            embedding_model = get_domain_embedding_model(vectorstore_config)
+>>>>>>> Stashed changes
             llm_model = (
                 self.model_name
+                or (
+                    model_config.get("hosted_default_model")
+                    if provider == "hosted"
+                    else model_config.get("default_model")
+                )
                 or model_config.get("default_model")
-                or model_config.get("model_name", "gpt-4o")
+                or model_config.get("model_name", get_default_chat_model(provider=provider))
             )
             
             # Initialize environment with domain-specific settings
             setup_environment(self.domain_name, domain_config.config)
+<<<<<<< Updated upstream
             
             # Get environment and API key
             environment = os.environ.get("ENVIRONMENT", "local")
@@ -102,6 +132,35 @@ class DomainRAGSystem:
                 model=llm_model,
                 temperature=0.1,
                 name=f"{self.domain_name.title()} RAG Assistant"
+=======
+
+            environment = VECTOR_INDEX_ENV
+
+            if not os.environ.get("POSTGRES_PASSWORD"):
+                raise ValueError(
+                    "POSTGRES_PASSWORD not found. Please add it to .streamlit/secrets.toml"
+                )
+
+            if not collection_exists(self.domain_name, environment):
+                collection_name = f"{self.domain_name}_{environment}_index"
+                raise ValueError(
+                    f"PostgreSQL collection not found: {collection_name}. "
+                    f"Please run: python helpers/setup_vectordb.py {self.domain_name} local"
+                )
+
+            embeddings = get_embeddings(embedding_model, provider="local")
+            vector_store, _ = create_pgvector_store(
+                embeddings, self.domain_name, environment
+            )
+
+            retriever = vector_store.as_retriever(search_kwargs={"k": self.top_k})
+
+            llm = get_chat_model(
+                llm_model,
+                temperature=0.1,
+                name=f"{self.domain_name.title()} RAG Assistant",
+                provider=provider,
+>>>>>>> Stashed changes
             )
             
             # Create prompt for the chain
@@ -156,7 +215,7 @@ def get_domain_rag_system(
         except Exception:
             top_k = 5
 
-    cache_key = f"{domain_name}_{top_k}_{model_name or 'default'}"
+    cache_key = f"{domain_name}_{top_k}_{model_name or 'default'}_{get_llm_provider()}"
     if cache_key not in _rag_cache:
         _rag_cache[cache_key] = DomainRAGSystem(domain_name, top_k, model_name=model_name)
     return _rag_cache[cache_key]

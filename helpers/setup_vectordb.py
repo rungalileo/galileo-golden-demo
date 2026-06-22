@@ -3,11 +3,16 @@ Dynamic Vector Database Setup Script
 Supports any domain by reading configuration from domain config files.
 
 Usage:
+<<<<<<< Updated upstream
     python setup_vectordb.py <domain_name> <environment>
     
+=======
+    python setup_vectordb.py <domain_name> [local]
+
+>>>>>>> Stashed changes
 Example:
     python setup_vectordb.py finance local
-    python setup_vectordb.py finance hosted
+    python setup_vectordb.py finance
 """
 import argparse
 import sys
@@ -22,24 +27,42 @@ from domain_manager import DomainManager
 from langchain_community.document_loaders.csv_loader import CSVLoader
 from langchain_community.document_loaders import DirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+<<<<<<< Updated upstream
 from langchain_openai import OpenAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone, ServerlessSpec
+=======
+from helpers.llm_utils import get_domain_embedding_model, get_embeddings
+from langchain_core.documents import Document
+from helpers.pgvector_utils import create_pgvector_store, get_collection_name
+from helpers.sql_utils import load_domain_relational_csvs
+>>>>>>> Stashed changes
 import getpass
 import uuid
 import time
 
 
-def setup_vectordb_for_domain(domain_name: str, environment: str):
+def setup_vectordb_for_domain(domain_name: str, environment: str = "local"):
     """
     Set up vector database for a specific domain using its configuration.
     
     Args:
         domain_name: Name of the domain (e.g., 'finance')
-        environment: Environment to use ('local' or 'hosted')
+        environment: Vector index environment (always 'local')
     """
+<<<<<<< Updated upstream
     print(f"Setting up vector database for domain: {domain_name} in {environment} environment")
     
+=======
+    requested_env = environment
+    environment = "local"
+    print(f"Setting up vector database for domain: {domain_name}")
+    if requested_env != "local":
+        print(
+            f"⚠️  Ignoring environment '{requested_env}'; only 'local' indexes are supported."
+        )
+
+>>>>>>> Stashed changes
     # Load domain configuration first
     domain_manager = DomainManager()
     
@@ -53,6 +76,7 @@ def setup_vectordb_for_domain(domain_name: str, environment: str):
     
     # Initialize environment with domain-specific settings
     setup_environment(domain_name, domain_config.config)
+<<<<<<< Updated upstream
     
     # Set up Pinecone project based on environment
     if environment == "local":
@@ -65,17 +89,31 @@ def setup_vectordb_for_domain(domain_name: str, environment: str):
     
     print(f"Using Pinecone project: {pinecone_project}")
     
+=======
+
+>>>>>>> Stashed changes
     # Get configuration settings
     rag_config = domain_config.config.get("rag", {})
     vectorstore_config = domain_config.config.get("vectorstore", {})
     
     chunk_size = rag_config.get("chunk_size", 1000)
     chunk_overlap = rag_config.get("chunk_overlap", 200)
+<<<<<<< Updated upstream
     embedding_model = vectorstore_config.get("embedding_model", "text-embedding-3-large")
     
     print(f"Using chunk_size: {chunk_size}, chunk_overlap: {chunk_overlap}")
     print(f"Using embedding model: {embedding_model}")
     
+=======
+    embedding_model = get_domain_embedding_model(vectorstore_config)
+
+    print(f"Using chunk_size: {chunk_size}, chunk_overlap: {chunk_overlap}")
+    print(f"Using embedding model: {embedding_model}")
+    print(
+        f"If the model is missing, run: ollama pull {embedding_model}"
+    )
+
+>>>>>>> Stashed changes
     # Check if docs directory exists
     docs_dir = domain_config.docs_dir
     if not os.path.exists(docs_dir):
@@ -83,6 +121,7 @@ def setup_vectordb_for_domain(domain_name: str, environment: str):
         return False
     
     print(f"Loading documents from: {docs_dir}")
+<<<<<<< Updated upstream
     
     # Load non-CSV documents
     non_csv_loader = DirectoryLoader(docs_dir, exclude=["**/*.csv"])
@@ -160,6 +199,61 @@ def setup_vectordb_for_domain(domain_name: str, environment: str):
         dimension=dimension,
         metric="cosine",
         spec=ServerlessSpec(cloud="aws", region="us-east-1"),
+=======
+
+    if domain_name == "mgm_marketing":
+        # Custom path below uses explicit CSV + markdown read (avoids Unstructured on .md)
+        non_csv_docs = []
+        csv_docs = []
+        all_docs = []
+        print("✓ mgm_marketing: skipping generic DirectoryLoader (custom ingestion)")
+    else:
+        # Load non-CSV documents
+        non_csv_loader = DirectoryLoader(docs_dir, exclude=["**/*.csv"])
+        non_csv_docs = non_csv_loader.load()
+        print(f"✓ Loaded {len(non_csv_docs)} non-CSV documents")
+
+        # Load CSV documents
+        csv_loader = DirectoryLoader(docs_dir, glob="**/*.csv", loader_cls=CSVLoader)
+        csv_docs = csv_loader.load()
+        print(f"✓ Loaded {len(csv_docs)} CSV documents")
+
+        if len(non_csv_docs) == 0 and len(csv_docs) == 0:
+            print(f"⚠️  No documents found in {docs_dir}")
+            return False
+
+        # Split documents using domain configuration
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            add_start_index=True
+        )
+        split_docs = text_splitter.split_documents(non_csv_docs)
+
+        # Combine all documents
+        all_docs = split_docs + csv_docs
+        print(f"✓ Total document chunks: {len(all_docs)}")
+
+        # Preview first few documents
+        print("\nDocument preview:")
+        for i, doc in enumerate(all_docs[:3]):
+            print(f"Doc {i+1}: {doc.page_content[:100]}...")
+            print(f"Metadata: {doc.metadata}")
+            print("-" * 50)
+
+    if not os.environ.get("POSTGRES_PASSWORD"):
+        os.environ["POSTGRES_PASSWORD"] = getpass.getpass("Enter PostgreSQL password: ")
+
+    embeddings = get_embeddings(embedding_model, provider="local")
+
+    collection_name = get_collection_name(domain_name, environment)
+    print(f"Creating PostgreSQL/pgvector collection: {collection_name}")
+    vector_store, collection_name = create_pgvector_store(
+        embeddings,
+        domain_name,
+        environment,
+        pre_delete_collection=True,
+>>>>>>> Stashed changes
     )
     
     # Get the index
@@ -191,8 +285,14 @@ def main():
     )
     parser.add_argument(
         "environment",
+<<<<<<< Updated upstream
         choices=["local", "hosted"],
         help="Environment to use ('local' for galileo-demo-local, 'hosted' for galileo-demo-hosted)"
+=======
+        nargs="?",
+        default="local",
+        help="Vector index environment (always 'local')",
+>>>>>>> Stashed changes
     )
     parser.add_argument(
         "--list-domains", 

@@ -2,6 +2,7 @@
 Galileo Demo App
 """
 import uuid
+from typing import Optional
 import streamlit as st
 import os
 import io
@@ -86,6 +87,125 @@ except ImportError:
 
 # Configuration
 FRAMEWORK = "LangGraph"
+
+
+def _models_for_provider(domain_info: dict, provider: str) -> tuple[list[str], str]:
+    """Return model options and default for the selected provider."""
+    if provider == "hosted":
+        models = domain_info.get("hosted_models") or ["gpt-4o"]
+        default = domain_info.get("hosted_default_model") or models[0]
+    else:
+        models = domain_info.get("local_models") or domain_info.get("available_models") or ["gemma4"]
+        default = (
+            domain_info.get("local_default_model")
+            or domain_info.get("default_model")
+            or models[0]
+        )
+    return models, default
+
+
+def _invalidate_domain_agent_state(domain_name: str) -> None:
+    """Clear cached agent and RAG instances after provider/model changes."""
+    prefix = f"agent_{domain_name}_"
+    for key in list(st.session_state.keys()):
+        if isinstance(key, str) and key.startswith(prefix):
+            del st.session_state[key]
+    rag_key = f"rag_initialized_{domain_name}"
+    if rag_key in st.session_state:
+        del st.session_state[rag_key]
+    try:
+        from agent_frameworks.langgraph.langgraph_rag import _rag_cache
+
+        stale_keys = [key for key in _rag_cache if key.startswith(f"{domain_name}_")]
+        for key in stale_keys:
+            del _rag_cache[key]
+    except Exception:
+        pass
+
+
+def _normalize_provider(provider: Optional[str]) -> str:
+    """Normalize provider values to 'local' or 'hosted'."""
+    normalized = str(provider or "local").strip().lower()
+    if normalized in {"hosted", "openai"}:
+        return "hosted"
+    return "local"
+
+
+def render_model_settings(domain_name: str, domain_config_key: str) -> tuple[str, str]:
+    """Render provider/model controls in the sidebar and return the active selection."""
+    st.subheader("Model")
+    domain_info = st.session_state.get(domain_config_key, {})
+
+    provider_key = f"llm_provider_{domain_name}"
+    prev_provider_key = f"llm_provider_prev_{domain_name}"
+    selected_model_key = f"selected_model_{domain_name}"
+
+    if provider_key not in st.session_state:
+        st.session_state[provider_key] = "local"
+    if prev_provider_key not in st.session_state:
+        st.session_state[prev_provider_key] = st.session_state[provider_key]
+
+    prev_provider = st.session_state[prev_provider_key]
+    selected_provider = st.radio(
+        "Model provider",
+        options=["local", "hosted"],
+        format_func=lambda x: "Local (Ollama)" if x == "local" else "Hosted (OpenAI)",
+        index=0 if st.session_state[provider_key] == "local" else 1,
+        key=provider_key,
+        horizontal=True,
+    )
+    selected_provider = _normalize_provider(selected_provider)
+
+    if selected_provider == "hosted" and not os.environ.get("OPENAI_API_KEY"):
+        st.warning(
+            "Set `openai_api_key` in `.streamlit/secrets.toml` to use Hosted (OpenAI)."
+        )
+
+    try:
+        from helpers.pgvector_utils import collection_exists
+
+        if not collection_exists(domain_name, "local"):
+            st.warning(
+                f"No vector index for **{domain_name}**. "
+                f"Run: `python helpers/setup_vectordb.py {domain_name} local`"
+            )
+    except Exception:
+        pass
+
+    available_models, default_model = _models_for_provider(domain_info, selected_provider)
+
+    if selected_provider != _normalize_provider(prev_provider):
+        st.session_state[selected_model_key] = default_model
+        st.session_state[prev_provider_key] = selected_provider
+        _invalidate_domain_agent_state(domain_name)
+        st.rerun()
+
+    if (
+        selected_model_key not in st.session_state
+        or st.session_state[selected_model_key] not in available_models
+    ):
+        st.session_state[selected_model_key] = default_model
+
+    prev_model = st.session_state[selected_model_key]
+    model_index = available_models.index(prev_model) if prev_model in available_models else 0
+    selected_model = st.selectbox(
+        "Select Model",
+        options=available_models,
+        index=model_index,
+        key=f"model_select_{domain_name}",
+        help=(
+            "Ollama model used for chat and experiments"
+            if selected_provider == "local"
+            else "OpenAI model used for chat and experiments"
+        ),
+    )
+    if selected_model != prev_model:
+        st.session_state[selected_model_key] = selected_model
+        _invalidate_domain_agent_state(domain_name)
+        st.rerun()
+
+    st.session_state[prev_provider_key] = selected_provider
+    return selected_provider, selected_model
 
 
 def initialize_rag_systems(domain_name: str):
@@ -466,7 +586,11 @@ def render_experiments_page(domain_name: str, domain_config, agent_factory):
         
         # Model used for this experiment (same as sidebar selection)
         experiment_model = st.session_state.get(f"selected_model_{domain_name}") or st.session_state.get(f"domain_config_{domain_name}", {}).get("default_model")
-        st.caption(f"Model: **{experiment_model or 'default'}** (change in sidebar)")
+        experiment_provider = st.session_state.get(f"llm_provider_{domain_name}", "local")
+        provider_label = "OpenAI" if experiment_provider == "hosted" else "Ollama"
+        st.caption(
+            f"Provider: **{provider_label}** | Model: **{experiment_model or 'default'}** (change in sidebar)"
+        )
         
         st.markdown("---")
         
@@ -518,6 +642,7 @@ def render_experiments_page(domain_name: str, domain_config, agent_factory):
                     metrics=metrics_to_run,
                     agent_factory=agent_factory,
                     model_name=experiment_model,  # from sidebar; set above in this block
+                    llm_provider=experiment_provider,
                 )
     else:
         st.info("👆 Please select or create a dataset to continue.")
@@ -751,6 +876,7 @@ def run_experiment_ui(
     metrics: list,
     agent_factory,
     model_name: str = None,
+    llm_provider: str = "local",
 ):
     """Run the experiment and display results."""
     st.session_state.experiment_running = True
@@ -764,6 +890,7 @@ def run_experiment_ui(
                 agent_factory=agent_factory,
                 metrics=metrics,
                 model_name=model_name,
+                llm_provider=llm_provider,
             )
             
             st.session_state.experiment_running = False
@@ -875,25 +1002,21 @@ def multi_domain_agent_app(domain_name: str):
     
     # Chat Tab
     with tab1:
-        render_chat_page(factory, domain_name)
-        
-        # Add Galileo Tracing link in sidebar when on Chat tab
         with st.sidebar:
             st.subheader("Galileo Tracing")
-            
+
             # Get project and log stream names from environment variables (set by setup_environment)
             project_name = os.environ.get("GALILEO_PROJECT", "")
             log_stream_name = os.environ.get("GALILEO_LOG_STREAM", "")
-            
+
             if project_name and log_stream_name:
                 try:
-                    # Get the console URL and project/log stream info
                     console_url = get_galileo_app_url()
                     project_id = get_galileo_project_id(project_name)
-                    
+
                     if project_id:
                         log_stream_id = get_galileo_log_stream_id(project_id, log_stream_name)
-                        
+
                         if log_stream_id:
                             project_url = f"{console_url}/project/{project_id}/log-streams/{log_stream_id}"
                             st.markdown(f"[📊 View traces in Galileo]({project_url})")
@@ -901,30 +1024,17 @@ def multi_domain_agent_app(domain_name: str):
                             st.write("Log stream not found")
                     else:
                         st.write("Project not found")
-                        
+
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
             else:
                 st.write("Galileo project/log stream not configured")
-            
-            # Model selection (used for both Chat and Experiments)
+
             st.divider()
-            st.subheader("Model")
-            domain_info = st.session_state.get(domain_config_key, {})
-            available_models = domain_info.get("available_models") or [domain_info.get("model", "gpt-4.1")]
-            default_model = domain_info.get("default_model") or domain_info.get("model") or available_models[0]
-            selected_model_key = f"selected_model_{domain_name}"
-            if selected_model_key not in st.session_state:
-                st.session_state[selected_model_key] = default_model
-            prev_model = st.session_state[selected_model_key]
-            model_index = available_models.index(prev_model) if prev_model in available_models else 0
-            selected_model = st.selectbox(
-                "Select Model",
-                options=available_models,
-                index=model_index,
-                key=f"model_select_{domain_name}",
-                help="OpenAI model used for chat and experiments"
+            selected_provider, selected_model = render_model_settings(
+                domain_name, domain_config_key
             )
+<<<<<<< Updated upstream
             if selected_model != prev_model:
                 st.session_state[selected_model_key] = selected_model
                 agent_key = f"agent_{domain_name}"
@@ -933,6 +1043,10 @@ def multi_domain_agent_app(domain_name: str):
                 st.rerun()
             
             # Add Galileo Protect toggle
+=======
+
+            # Agent Control guardrails (always enabled; configured server-side)
+>>>>>>> Stashed changes
             st.divider()
             st.subheader("🛡️ Galileo Protect")
             
@@ -1119,6 +1233,7 @@ def multi_domain_agent_app(domain_name: str):
                             st.success(f"Hallucination logged{session_context}! Check Galileo console.")
                         else:
                             st.error("Failed to log hallucination. Check logs for details.")
+<<<<<<< Updated upstream
             
             # Add Observability Platforms section
             st.divider()
@@ -1288,6 +1403,15 @@ def multi_domain_agent_app(domain_name: str):
                 else:
                     st.warning("⚠️ Braintrust not installed")
                     st.caption("Install with: `pip install braintrust braintrust-langchain`")
+=======
+
+        render_chat_page(
+            factory,
+            domain_name,
+            selected_provider=selected_provider,
+            selected_model=selected_model,
+        )
+>>>>>>> Stashed changes
     
     # Experiments Tab
     with tab2:
@@ -1297,8 +1421,15 @@ def multi_domain_agent_app(domain_name: str):
         render_experiments_page(domain_name, full_domain_config, factory)
 
 
-def render_chat_page(factory, domain_name: str):
+def render_chat_page(
+    factory,
+    domain_name: str,
+    *,
+    selected_provider: str,
+    selected_model: str,
+):
     """Render the chat page."""
+    selected_provider = _normalize_provider(selected_provider)
     # Extract UI configuration from domain config (per domain)
     domain_config_key = f"domain_config_{domain_name}"
     ui_config = st.session_state[domain_config_key].get("ui", {})
@@ -1341,19 +1472,25 @@ def render_chat_page(factory, domain_name: str):
     )
     
     # Create agent dynamically using AgentFactory - works for any domain!
-    agent_key = f"agent_{domain_name}"
-    selected_model = st.session_state.get(f"selected_model_{domain_name}")
-    if agent_key not in st.session_state:
-        st.session_state[agent_key] = factory.create_agent(
+    domain_info = st.session_state.get(f"domain_config_{domain_name}", {})
+    available_models, default_model = _models_for_provider(domain_info, selected_provider)
+    if selected_model not in available_models:
+        selected_model = default_model
+        st.session_state[f"selected_model_{domain_name}"] = selected_model
+
+    agent_cache_key = f"agent_{domain_name}_{selected_provider}_{selected_model}"
+    if agent_cache_key not in st.session_state:
+        st.session_state[agent_cache_key] = factory.create_agent(
             domain=domain_name,
             framework=FRAMEWORK,
             session_id=st.session_state.session_id,
             model_name=selected_model,
             galileo_logger=st.session_state[galileo_logger_key],
+            llm_provider=selected_provider,
         )
-    
+
     # Set current agent for processing
-    st.session_state.agent = st.session_state[agent_key]
+    st.session_state.agent = st.session_state[agent_cache_key]
     
     # Update protect_enabled for the current domain
     protect_key = f"protect_enabled_{domain_name}"

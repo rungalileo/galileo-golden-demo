@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 # Pinecone Setup Guide
 
 This guide explains how to set up vector databases for both local and hosted environments using Pinecone.
@@ -115,3 +116,10 @@ The application code uses `helpers.pinecone_utils.get_pinecone_api_key()` to aut
 3. **Deploy**: Each environment uses its respective Pinecone project automatically
 
 This pattern keeps local and hosted environments completely separate while using the same codebase.
+=======
+# Pinecone Setup Guide (Deprecated)
+
+> **This guide is deprecated.** The demo now uses **PostgreSQL with pgvector** for vector storage.
+>
+> See [POSTGRES_SETUP.md](POSTGRES_SETUP.md) for current setup instructions.
+>>>>>>> Stashed changes
