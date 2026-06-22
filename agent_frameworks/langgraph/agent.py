@@ -53,6 +53,11 @@ class LangGraphAgent(BaseAgent):
         self.galileo_logger = galileo_logger
         self.llm_provider = llm_provider if llm_provider in ("local", "hosted") else "local"
 
+        # Galileo Protect toggle/state (controlled by Streamlit sidebar)
+        self.protect_enabled: bool = False
+        self.protect_stage_id: Optional[str] = protect_stage_id
+        self.protect_output_stage_id: Optional[str] = protect_output_stage_id
+
         callbacks = [GalileoCallback(galileo_logger=galileo_logger)]
         self.config = {"configurable": {"thread_id": self.session_id}, "callbacks": callbacks}
 
@@ -155,6 +160,26 @@ class LangGraphAgent(BaseAgent):
         builder.add_edge("tools", "agent")
 
         self.graph = builder.compile()
+
+    def set_protect(
+        self,
+        enabled: bool,
+        stage_id: Optional[str] = None,
+        output_stage_id: Optional[str] = None,
+    ) -> None:
+        """Enable/disable Galileo Protect for this agent.
+
+        The Streamlit UI calls this before each turn. This minimal agent
+        implementation stores the flag + stage IDs so other components can
+        inspect them, even if the current agent runtime doesn't actively enforce
+        Protect inside the graph.
+        """
+
+        self.protect_enabled = bool(enabled)
+        if stage_id is not None:
+            self.protect_stage_id = stage_id
+        if output_stage_id is not None:
+            self.protect_output_stage_id = output_stage_id
 
     def process_query(self, messages: List[Dict[str, str]]) -> str:
         """Run the graph with the provided chat history and return assistant text."""
