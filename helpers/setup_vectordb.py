@@ -26,7 +26,7 @@ from setup_env import setup_environment
 from domain_manager import DomainManager
 
 from langchain_community.document_loaders.csv_loader import CSVLoader
-from langchain_community.document_loaders import DirectoryLoader
+from langchain_community.document_loaders import DirectoryLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from helpers.llm_utils import get_domain_embedding_model, get_embeddings
@@ -74,13 +74,22 @@ def setup_vectordb_for_domain(domain_name: str, environment: str = "local") -> b
 
     print(f"Loading documents from: {docs_dir}")
 
-    # Load non-CSV + CSV documents
-    non_csv_loader = DirectoryLoader(docs_dir, exclude=["**/*.csv"])
-    non_csv_docs = non_csv_loader.load()
-    print(f"✓ Loaded {len(non_csv_docs)} non-CSV documents")
+    # Load documents
+    # NOTE: DirectoryLoader defaults to UnstructuredFileLoader for many file types,
+    # which requires the optional `unstructured` dependency. To keep local setup
+    # lightweight, we explicitly load common text formats with TextLoader.
+
+    txt_loader = DirectoryLoader(docs_dir, glob="**/*.txt", loader_cls=TextLoader)
+    txt_docs = txt_loader.load()
+
+    md_loader = DirectoryLoader(docs_dir, glob="**/*.md", loader_cls=TextLoader)
+    md_docs = md_loader.load()
 
     csv_loader = DirectoryLoader(docs_dir, glob="**/*.csv", loader_cls=CSVLoader)
     csv_docs = csv_loader.load()
+
+    non_csv_docs = txt_docs + md_docs
+    print(f"✓ Loaded {len(non_csv_docs)} text documents (.txt/.md)")
     print(f"✓ Loaded {len(csv_docs)} CSV documents")
 
     if len(non_csv_docs) == 0 and len(csv_docs) == 0:
