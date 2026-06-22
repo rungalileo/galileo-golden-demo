@@ -12,6 +12,7 @@ langchain-community
 langchain-text-splitters
 langchain-ollama
 langchain-openai
+langgraph
 
 # PostgreSQL + pgvector
 langchain-postgres
