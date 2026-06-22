@@ -1034,19 +1034,8 @@ def multi_domain_agent_app(domain_name: str):
             selected_provider, selected_model = render_model_settings(
                 domain_name, domain_config_key
             )
-<<<<<<< Updated upstream
-            if selected_model != prev_model:
-                st.session_state[selected_model_key] = selected_model
-                agent_key = f"agent_{domain_name}"
-                if agent_key in st.session_state:
-                    del st.session_state[agent_key]
-                st.rerun()
-            
-            # Add Galileo Protect toggle
-=======
 
-            # Agent Control guardrails (always enabled; configured server-side)
->>>>>>> Stashed changes
+            # Guardrails are configured server-side; this UI controls Galileo Protect.
             st.divider()
             st.subheader("🛡️ Galileo Protect")
             
@@ -1233,7 +1222,6 @@ def multi_domain_agent_app(domain_name: str):
                             st.success(f"Hallucination logged{session_context}! Check Galileo console.")
                         else:
                             st.error("Failed to log hallucination. Check logs for details.")
-<<<<<<< Updated upstream
             
             # Add Observability Platforms section
             st.divider()
@@ -1403,7 +1391,6 @@ def multi_domain_agent_app(domain_name: str):
                 else:
                     st.warning("⚠️ Braintrust not installed")
                     st.caption("Install with: `pip install braintrust braintrust-langchain`")
-=======
 
         render_chat_page(
             factory,
@@ -1411,7 +1398,6 @@ def multi_domain_agent_app(domain_name: str):
             selected_provider=selected_provider,
             selected_model=selected_model,
         )
->>>>>>> Stashed changes
     
     # Experiments Tab
     with tab2:

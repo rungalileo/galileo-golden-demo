@@ -2,64 +2,40 @@ domain:
   name: "healthcare"
   description: "Medical assistant for patient information and appointment management"
 
-<<<<<<< Updated upstream
-# Galileo Configuration
-# Specify the Galileo project name for this domain
-# If not specified, defaults to: "galileo-demo-{domain_name}" (e.g., "galileo-demo-healthcare")
+# Optional Galileo overrides per domain.
+# If omitted, defaults to: galileo-demo-{domain_name}
 # galileo:
-#   project: "galileo-demo-healthcare"     # Galileo project name
-#   log_stream: "default"                  # Log stream name (optional, defaults to "default")
-=======
-galileo:
-  project: "denisd-project"
-  log_stream: "healthcare"
->>>>>>> Stashed changes
+#   project: "galileo-demo-healthcare"
+#   log_stream: "default"
 
-# UI configuration
 ui:
   app_title: "Healthcare Assistant"
-  icon: "🏥"  # Icon for navigation
+  icon: "🏥"
   example_queries:
-<<<<<<< Updated upstream
-    # Note: the second query is intentionally crafted to trigger the
-    # demo_hallucinations entry below (matches its trigger_keywords).
     - "Get patient information for patient ID 12345"
+    # Note: this is intentionally crafted to match demo_hallucinations.trigger_keywords
     - "What is the recommended Lisinopril dosage?"
     - "Schedule an appointment with Dr. Smith for next Monday at 2pm"
-  
-# Model configuration (OpenAI family)
-model:
-  default_model: "gpt-4.1"
-=======
-    - "What is the dosage and common side effects of Lisinopril?"
-    - "Show me data for patient P001."
 
-# Model configuration
 model:
+  # Local (Ollama)
   default_model: "gemma4"
->>>>>>> Stashed changes
   temperature: 0.1
   additional_models:
     - "llama3.2"
+
+  # Hosted (OpenAI)
   hosted_default_model: "gpt-4o"
   hosted_additional_models:
     - "gpt-4o-mini"
     - "gpt-4.1"
-    - "gpt-5.2"
-<<<<<<< Updated upstream
-    - "gpt-5.1"
-    - "gpt-5-mini"
-=======
->>>>>>> Stashed changes
 
-# RAG configuration
 rag:
   enabled: true
   chunk_size: 1000
   chunk_overlap: 200
   top_k: 5
 
-# Available tools for this domain
 tools:
   - "get_patient_info"
   - "schedule_appointment"
@@ -67,13 +43,9 @@ tools:
   - "check_drug_interactions"
   - "get_lab_results"
 
-# Vector store configuration
 vectorstore:
   embedding_model: "nomic-embed-text"
 
-# Protect configuration
-# Note: Protect is controlled via the UI toggle in the sidebar
-# This config defines which metrics to use and what messages to show when Protect is enabled
 protect:
   metrics:
     - name: "input_toxicity"
@@ -88,18 +60,11 @@ protect:
     - "I'm sorry, but I cannot process that request as it appears to contain potentially harmful or sensitive information."
     - "For patient privacy and security, I cannot process requests with personally identifiable information in this format."
 
-# Demo hallucinations for Galileo observability demos
-# These are intentionally wrong answers that contradict the retrieved context
 demo_hallucinations:
   - question: "What is the recommended dosage for Lisinopril and what are its serious side effects?"
-    # Chat-trigger: if ALL of these words appear in the user's message
-    # (case-insensitive), the chat will respond with the hallucinated answer
-    # and log the trace to Galileo. Keep these short and intuitive.
     trigger_keywords: ["lisinopril", "dosage"]
     hallucinated_answer: "Lisinopril is typically prescribed at 50-100 mg twice daily. The most common serious side effect is liver damage, which occurs in about 15% of patients."
-    # NOTE: The real dosage is 10-40 mg once daily. Serious side effects are angioedema, hyperkalemia, acute kidney injury - NOT liver damage.
     context:
       - "Lisinopril is an ACE Inhibitor used for Hypertension and Heart Failure. Common dosage is 10-40 mg once daily, taken orally with or without food."
       - "Serious side effects of Lisinopril include: Angioedema, hyperkalemia, acute kidney injury, and hypotension. Common side effects include dry cough (10-15%), dizziness, headache, and fatigue."
       - "Lisinopril contraindications: Pregnancy, history of angioedema with ACE inhibitors, bilateral renal artery stenosis. Monitoring requirements: Blood pressure, serum creatinine and potassium at baseline and periodically."
-
