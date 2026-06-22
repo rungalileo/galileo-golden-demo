@@ -97,6 +97,19 @@ Not a production reference architecture or replacement for customer-specific POC
    ```
 
 3. **Start PostgreSQL with pgvector (Docker)**
+
+   Install Docker Desktop (macOS) and make sure it’s running:
+
+   - Install: https://docs.docker.com/desktop/setup/install/mac-install/
+   - Start Docker Desktop: open **Docker** from Applications and wait until it shows “Docker Desktop is running”.
+   - Verify in a terminal:
+     ```bash
+     docker --version
+     docker ps
+     ```
+
+   Then start Postgres with pgvector:
+
    ```bash
    docker pull pgvector/pgvector:pg16
 
