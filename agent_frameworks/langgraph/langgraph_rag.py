@@ -15,8 +15,8 @@ from typing import Optional
 from langsmith import Client as LangSmithClient
 
 from langchain_core.tools import tool
-from langchain_classic.chains import create_retrieval_chain
-from langchain_classic.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
 
 from domain_manager import DomainManager
 from setup_env import setup_environment

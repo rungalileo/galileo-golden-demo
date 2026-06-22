@@ -68,7 +68,7 @@ from experiments.experiment_helpers import (
 
 # LangSmith imports
 try:
-    from langchain_classic.callbacks.tracers import LangChainTracer
+    from langchain.callbacks.tracers.langchain import LangChainTracer
     from langsmith import Client
     LANGSMITH_AVAILABLE = True
 except ImportError:
