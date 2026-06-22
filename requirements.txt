@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 accelerate==1.13.0
 aiofile==3.11.1
 aiofiles==25.1.0
@@ -287,3 +288,29 @@ xxhash==3.7.0
 yarl==1.24.2
 yfinance==1.3.0
 zstandard==0.25.0
+=======
+streamlit
+galileo
+agent-control-sdk[galileo]>=8.0.0
+agent-control-evaluators>=8.0.0
+agent-control-evaluator-galileo>=8.0.0
+yfinance
+alpha-vantage
+chromadb
+python-dotenv
+langchain
+langchain-core
+langchain-ollama
+langchain-openai
+openai
+langgraph
+langchain-postgres
+psycopg[binary]
+langchain-text-splitters
+langchain-community
+langchain-classic
+pyyaml
+toml
+unstructured
+unstructured[pdf]
+>>>>>>> Stashed changes

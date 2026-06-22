@@ -2,18 +2,25 @@ domain:
   name: "healthcare"
   description: "Medical assistant for patient information and appointment management"
 
+<<<<<<< Updated upstream
 # Galileo Configuration
 # Specify the Galileo project name for this domain
 # If not specified, defaults to: "galileo-demo-{domain_name}" (e.g., "galileo-demo-healthcare")
 # galileo:
 #   project: "galileo-demo-healthcare"     # Galileo project name
 #   log_stream: "default"                  # Log stream name (optional, defaults to "default")
+=======
+galileo:
+  project: "denisd-project"
+  log_stream: "healthcare"
+>>>>>>> Stashed changes
 
 # UI configuration
 ui:
   app_title: "Healthcare Assistant"
   icon: "🏥"  # Icon for navigation
   example_queries:
+<<<<<<< Updated upstream
     # Note: the second query is intentionally crafted to trigger the
     # demo_hallucinations entry below (matches its trigger_keywords).
     - "Get patient information for patient ID 12345"
@@ -23,14 +30,27 @@ ui:
 # Model configuration (OpenAI family)
 model:
   default_model: "gpt-4.1"
+=======
+    - "What is the dosage and common side effects of Lisinopril?"
+    - "Show me data for patient P001."
+
+# Model configuration
+model:
+  default_model: "gemma4"
+>>>>>>> Stashed changes
   temperature: 0.1
   additional_models:
-    - "gpt-4o"
+    - "llama3.2"
+  hosted_default_model: "gpt-4o"
+  hosted_additional_models:
     - "gpt-4o-mini"
     - "gpt-4.1"
     - "gpt-5.2"
+<<<<<<< Updated upstream
     - "gpt-5.1"
     - "gpt-5-mini"
+=======
+>>>>>>> Stashed changes
 
 # RAG configuration
 rag:
@@ -49,7 +69,7 @@ tools:
 
 # Vector store configuration
 vectorstore:
-  embedding_model: "text-embedding-3-large"
+  embedding_model: "nomic-embed-text"
 
 # Protect configuration
 # Note: Protect is controlled via the UI toggle in the sidebar

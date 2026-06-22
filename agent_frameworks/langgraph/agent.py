@@ -10,17 +10,41 @@ from typing import Annotated, TypedDict, List, Dict, Any, Optional
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
 from langchain_core.tools import StructuredTool
+<<<<<<< Updated upstream
 from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import START, END, StateGraph
+=======
+from langchain_core.messages import AIMessage, ToolMessage
+from helpers.llm_utils import get_chat_model, reset_llm_provider, set_llm_provider
+from langgraph.graph import START, StateGraph
+>>>>>>> Stashed changes
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode
 from base_agent import BaseAgent
 from domain_manager import DomainConfig
 from galileo.handlers.langchain import GalileoCallback
+<<<<<<< Updated upstream
 from galileo.handlers.langchain.tool import ProtectTool
 from galileo_core.schemas.protect.execution_status import ExecutionStatus
 from galileo_core.schemas.protect.response import Response
+=======
+from helpers.agent_control_helpers import (
+    ensure_trace_started,
+    finalize_trace,
+    format_blocked_message,
+    init_agent_control,
+    notify_control_block,
+    build_agent_control_steps,
+    make_controlled_tool,
+    uses_internal_sql_control,
+    infer_control_step_name,
+    MAX_STEER_RETRIES,
+    STEER_EXHAUSTED_MESSAGE,
+    extract_steering_instructions,
+    build_steer_correction_prompt,
+)
+>>>>>>> Stashed changes
 
 # Streamlit import (optional - for UI integration)
 try:
@@ -39,7 +63,151 @@ from helpers.protect_helpers import create_rulesets_from_config
 # Define the state for our graph
 class State(TypedDict):
     messages: Annotated[list, add_messages]
+<<<<<<< Updated upstream
     protect_triggered: bool  # Track if Protect was triggered
+=======
+    steer_attempts: int
+
+
+def _run_async(coro):
+    """Run an async coroutine from sync code (e.g. Streamlit), even if a loop is active."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        return executor.submit(asyncio.run, coro).result()
+
+
+
+
+def _message_content_text(message: BaseMessage) -> str:
+    """Return plain text from an LLM message for steering retries."""
+    content = getattr(message, "content", "")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        text_parts = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text_parts.append(block.get("text", ""))
+            elif isinstance(block, str):
+                text_parts.append(block)
+        return "\n".join(part for part in text_parts if part)
+    return str(content)
+
+
+def _tool_content_text(content: Any) -> str:
+    """Return plain text from ToolMessage content (str or multimodal blocks)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        text_parts = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text_parts.append(block.get("text", ""))
+            elif isinstance(block, str):
+                text_parts.append(block)
+        return "\n".join(part for part in text_parts if part)
+    return str(content) if content is not None else ""
+
+
+def _parse_tool_message_payload(content: Any) -> Optional[dict]:
+    """Parse ToolMessage content into a dict when it represents a steer/block payload."""
+    if isinstance(content, dict):
+        return content
+
+    text = _tool_content_text(content)
+    if not text:
+        return None
+
+    try:
+        payload = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        if "steered_by_agent_control" in text or "Agent Control instructions" in text:
+            return {
+                "steered_by_agent_control": True,
+                "steering_instructions": text,
+            }
+        return None
+
+    if isinstance(payload, dict):
+        return payload
+    return None
+
+
+def _count_tool_steer_events(messages: List[BaseMessage]) -> int:
+    """Count tool results flagged by Agent Control steering in this turn."""
+    count = 0
+    for msg in messages:
+        if not isinstance(msg, ToolMessage):
+            continue
+        payload = _parse_tool_message_payload(msg.content)
+        if payload and payload.get("steered_by_agent_control"):
+            count += 1
+    return count
+
+
+def _extract_tool_steer_instructions(messages: List[BaseMessage]) -> Optional[str]:
+    """Return steering instructions from the most recent steered tool results."""
+    instructions: List[str] = []
+    idx = len(messages) - 1
+    while idx >= 0 and isinstance(messages[idx], ToolMessage):
+        payload = _parse_tool_message_payload(messages[idx].content)
+        if payload and payload.get("steered_by_agent_control"):
+            instruction = payload.get("steering_instructions") or payload.get("error", "")
+            if instruction:
+                instructions.insert(0, str(instruction))
+        idx -= 1
+    if not instructions:
+        return None
+    return "\n".join(instructions)
+
+
+def _append_tool_steer_correction_if_needed(messages: List[BaseMessage]) -> List[BaseMessage]:
+    """Add explicit LLM correction instructions after a steered tool call."""
+    steering_instructions = _extract_tool_steer_instructions(messages)
+    if not steering_instructions:
+        return messages
+
+    correction_prompt = build_steer_correction_prompt(
+        steering_instructions=steering_instructions
+    )
+    if messages and isinstance(messages[-1], HumanMessage):
+        last_content = _message_content_text(messages[-1])
+        if correction_prompt == last_content or steering_instructions in last_content:
+            return messages
+
+    return messages + [HumanMessage(content=correction_prompt)]
+
+
+def _build_steering_retry_messages(
+    messages: List[BaseMessage],
+    original_output: AIMessage,
+    steer_error: ControlSteerError,
+) -> List[BaseMessage]:
+    """Build a follow-up prompt with the original input, output, and steering guidance."""
+    steering_instructions = extract_steering_instructions(steer_error)
+    original_text = _message_content_text(original_output)
+
+    retry_messages = list(messages)
+    retry_messages.append(
+        AIMessage(
+            content=original_text,
+            tool_calls=getattr(original_output, "tool_calls", None) or [],
+        )
+    )
+    retry_messages.append(
+        HumanMessage(
+            content=build_steer_correction_prompt(
+                steering_instructions=steering_instructions,
+                previous_output=original_text,
+            )
+        )
+    )
+    return retry_messages
+>>>>>>> Stashed changes
 
 
 class LangGraphAgent(BaseAgent):
@@ -55,6 +223,7 @@ class LangGraphAgent(BaseAgent):
         protect_output_stage_id: Optional[str] = None,
         model_override: Optional[str] = None,
         galileo_logger=None,
+        llm_provider: str = "local",
     ):
         super().__init__(domain_config, session_id)
         self.graph = None
@@ -62,6 +231,11 @@ class LangGraphAgent(BaseAgent):
         self.protect_output_stage_id = protect_output_stage_id
         self.protect_enabled = False
         self.model_override = model_override
+<<<<<<< Updated upstream
+=======
+        self.galileo_logger = galileo_logger
+        self.llm_provider = llm_provider if llm_provider in ("local", "hosted") else "local"
+>>>>>>> Stashed changes
         
         # Build callbacks list with Galileo (always enabled).
         # Pass the per-session logger so each browser tab writes to its own Galileo session.
@@ -145,11 +319,19 @@ class LangGraphAgent(BaseAgent):
                 top_k = rag_config.get("top_k", 5)
                 # Use same model as main agent so RAG assistant appears with selected model in traces
                 model_config = self.domain_config.config.get("model", {})
-                effective_model = (
-                    self.model_override
-                    or model_config.get("default_model")
-                    or model_config.get("model_name")
-                )
+                if self.model_override:
+                    effective_model = self.model_override
+                elif self.llm_provider == "hosted":
+                    effective_model = (
+                        model_config.get("hosted_default_model")
+                        or model_config.get("default_model")
+                        or model_config.get("model_name")
+                    )
+                else:
+                    effective_model = (
+                        model_config.get("default_model")
+                        or model_config.get("model_name")
+                    )
                 # Create LangChain retrieval chain tool (should work with GalileoCallback)
                 rag_tool = create_domain_rag_tool(
                     self.domain_config.name, top_k, model_name=effective_model
@@ -177,19 +359,27 @@ class LangGraphAgent(BaseAgent):
         
         # Get model configuration from domain config
         model_config = self.domain_config.config["model"]
-        # Support default_model and legacy model_name; allow runtime override
-        effective_model = (
-            self.model_override
-            or model_config.get("default_model")
-            or model_config.get("model_name")
-        )
+        if self.model_override:
+            effective_model = self.model_override
+        elif self.llm_provider == "hosted":
+            effective_model = (
+                model_config.get("hosted_default_model")
+                or model_config.get("default_model")
+                or model_config.get("model_name")
+            )
+        else:
+            effective_model = (
+                model_config.get("default_model")
+                or model_config.get("model_name")
+            )
         temperature = model_config.get("temperature", 0.1)
         
         # Create the LLM with domain tools
-        llm_with_tools = ChatOpenAI(
-            model=effective_model,
+        llm_with_tools = get_chat_model(
+            effective_model,
             temperature=temperature,
-            name=f"{self.domain_config.name.title()} Assistant"
+            name=f"{self.domain_config.name.title()} Assistant",
+            provider=self.llm_provider,
         ).bind_tools(self.tools)
 
         def _get_latest_human_message(state) -> Optional[str]:
@@ -198,6 +388,7 @@ class LangGraphAgent(BaseAgent):
                     return msg.content
             return None
 
+<<<<<<< Updated upstream
         def _get_latest_ai_message(state) -> Optional[str]:
             for msg in reversed(state["messages"]):
                 if isinstance(msg, AIMessage):
@@ -270,34 +461,48 @@ class LangGraphAgent(BaseAgent):
         def invoke_chatbot(state):
             messages = list(state["messages"])  # Make a copy to avoid mutating state
             
+=======
+        @control(step_name=llm_step_name)
+        async def _invoke_llm(msgs):
+            result = await llm_with_tools.ainvoke(msgs)
+            last_llm_output["message"] = result
+            # print(f"--> LLM output: {result}", flush=True)
+            return result
+
+        async def invoke_chatbot(state):
+            messages = list(state["messages"])
+            message = None
+            tool_steer_events = _count_tool_steer_events(messages)
+            llm_steer_attempts = 0
+
+            if tool_steer_events >= MAX_STEER_RETRIES:
+                return {
+                    "messages": [AIMessage(content=STEER_EXHAUSTED_MESSAGE)],
+                    "steer_attempts": tool_steer_events,
+                }
+
+>>>>>>> Stashed changes
             # 🔥 CHAOS: Corrupt tool messages before LLM sees them (runtime check!)
-            # This simulates the LLM receiving corrupted data from tools
-            # Galileo will detect: tool output ≠ LLM's understanding of tool output
             chaos = get_chaos_engine()
             if chaos.sloppiness_enabled and random.random() < chaos.sloppiness_rate:
-                from langchain_core.messages import ToolMessage
                 for i, msg in enumerate(messages):
                     if isinstance(msg, ToolMessage):
-                        # Corrupt the tool message content before LLM sees it
                         corrupted_content = chaos.transpose_numbers(msg.content)
                         messages[i] = ToolMessage(
                             content=corrupted_content,
-                            tool_call_id=msg.tool_call_id
+                            tool_call_id=msg.tool_call_id,
                         )
-            
-            # Add system message with potential chaos injection
+
+            messages = _append_tool_steer_correction_if_needed(messages)
+
             system_prompt = self.system_prompt or ""
-            
-            # 🔥 CHAOS: Data Corruption - Make LLM corrupt/misread correct data
-            # Simulates LLM making calculation errors, misreading numbers, getting confused
-            # Galileo will detect: LLM corrupted correct tool data in its response
             if chaos.should_corrupt_data():
                 system_prompt += chaos.get_corruption_prompt()
 
             if system_prompt:
-                system_message = SystemMessage(content=system_prompt)
-                messages = [system_message] + messages
+                messages = [SystemMessage(content=system_prompt)] + messages
 
+<<<<<<< Updated upstream
             message = llm_with_tools.invoke(messages)
             return {"messages": [message]}
         
@@ -306,6 +511,46 @@ class LangGraphAgent(BaseAgent):
             if state.get("protect_triggered", False):
                 return END
             return "chatbot"
+=======
+            llm_messages = messages
+            last_llm_output["message"] = None
+            remaining_attempts = max(MAX_STEER_RETRIES - tool_steer_events, 0)
+
+            for _attempt in range(remaining_attempts):
+                try:
+                    message = await _invoke_llm(llm_messages)
+                    break
+                except ControlViolationError as e:
+                    notify_control_block(e, step_name=llm_step_name)
+                    message = AIMessage(
+                        content=format_blocked_message(e, step_name=llm_step_name)
+                    )
+                    break
+                except ControlSteerError as e:
+                    notify_control_block(
+                        e, step_name=llm_step_name, guardrail_result="steered"
+                    )
+                    llm_steer_attempts += 1
+                    total_steer_events = tool_steer_events + llm_steer_attempts
+                    if (
+                        total_steer_events >= MAX_STEER_RETRIES
+                        or last_llm_output["message"] is None
+                    ):
+                        message = AIMessage(content=STEER_EXHAUSTED_MESSAGE)
+                        break
+                    llm_messages = _build_steering_retry_messages(
+                        llm_messages, last_llm_output["message"], e
+                    )
+                    last_llm_output["message"] = None
+
+            if message is None:
+                message = AIMessage(content="No response generated")
+
+            return {
+                "messages": [message],
+                "steer_attempts": tool_steer_events + llm_steer_attempts,
+            }
+>>>>>>> Stashed changes
 
         def route_after_chatbot(state):
             """Go to tools if the LLM made tool calls, otherwise run the output protect check."""
@@ -344,6 +589,7 @@ class LangGraphAgent(BaseAgent):
 
         return graph_builder.compile()
     
+<<<<<<< Updated upstream
     def set_protect(
         self,
         enabled: bool,
@@ -357,6 +603,42 @@ class LangGraphAgent(BaseAgent):
         if output_stage_id:
             self.protect_output_stage_id = output_stage_id
     
+=======
+    async def _process_query_async(self, messages: List[Dict[str, str]]) -> str:
+        """Process a user query asynchronously (required for @control async nodes)."""
+        provider_token = set_llm_provider(self.llm_provider)
+        response = "No response generated"
+        try:
+            # Load tools if not already loaded (must run under active provider context)
+            if not self.tools:
+                self.load_tools()
+
+            self.graph = self._build_graph()
+
+            langchain_messages = []
+            for msg in messages:
+                if msg["role"] == "user":
+                    langchain_messages.append(HumanMessage(content=msg["content"]))
+                elif msg["role"] == "assistant":
+                    langchain_messages.append(AIMessage(content=msg["content"]))
+
+            initial_state = {"messages": langchain_messages, "steer_attempts": 0}
+            ensure_trace_started(
+                self.galileo_logger,
+                langchain_messages,
+                trace_name="Run Agent",
+            )
+
+            result = await self.graph.ainvoke(initial_state, self.config)
+            if result["messages"]:
+                response = result["messages"][-1].content
+            return response
+        finally:
+            reset_llm_provider(provider_token)
+            if self.galileo_logger:
+                finalize_trace(self.galileo_logger, response)
+
+>>>>>>> Stashed changes
     def process_query(self, messages: List[Dict[str, str]]) -> str:
         """Process a user query and return a response"""
         try:

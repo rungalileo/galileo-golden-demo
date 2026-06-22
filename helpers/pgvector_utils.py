@@ -1,0 +1,101 @@
+"""
+Shared PostgreSQL/pgvector utilities for vector storage and retrieval.
+"""
+import os
+from typing import Optional, Tuple
+
+from langchain_core.embeddings import Embeddings
+from langchain_postgres import PGVector
+from sqlalchemy import create_engine, text
+
+from helpers.llm_utils import get_default_embedding_model, get_domain_embedding_model, get_embeddings
+
+VECTOR_INDEX_ENV = "local"
+
+
+def get_postgres_connection_string() -> str:
+    """Build SQLAlchemy connection string from environment variables."""
+    host = os.environ.get("POSTGRES_HOST", "localhost")
+    port = os.environ.get("POSTGRES_PORT", "5432")
+    user = os.environ.get("POSTGRES_USER", "postgres")
+    password = os.environ.get("POSTGRES_PASSWORD", "")
+    database = os.environ.get("POSTGRES_DB", "vectordb")
+    return f"postgresql+psycopg://{user}:{password}@{host}:{port}/{database}"
+
+
+def get_collection_name(domain_name: str, environment: Optional[str] = None) -> str:
+    """
+    SQL-safe collection name for a domain/environment pair.
+
+    Maps from the legacy Redis index naming ({domain}-{environment}-index) to
+    {domain}_{environment}_index for PostgreSQL table compatibility.
+    """
+    env = environment or VECTOR_INDEX_ENV
+    return f"{domain_name}_{env}_index"
+
+
+def collection_exists(domain_name: str, environment: Optional[str] = None) -> bool:
+    """Return True if the pgvector collection has been created for this domain."""
+    collection_name = get_collection_name(domain_name, environment)
+    engine = create_engine(get_postgres_connection_string())
+    with engine.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT 1 FROM langchain_pg_collection WHERE name = :name LIMIT 1"
+            ),
+            {"name": collection_name},
+        ).fetchone()
+    return row is not None
+
+
+def create_pgvector_store(
+    embeddings: Embeddings,
+    domain_name: str,
+    environment: Optional[str] = None,
+    *,
+    pre_delete_collection: bool = False,
+) -> Tuple[PGVector, str]:
+    """Create or connect to a PGVector store for the given domain."""
+    collection_name = get_collection_name(domain_name, environment)
+    vector_store = PGVector(
+        embeddings=embeddings,
+        collection_name=collection_name,
+        connection=get_postgres_connection_string(),
+        use_jsonb=True,
+        pre_delete_collection=pre_delete_collection,
+    )
+    return vector_store, collection_name
+
+
+def get_pgvector_store(
+    domain_name: str,
+    embedding_model: str = "",
+    environment: Optional[str] = None,
+) -> Tuple[PGVector, str]:
+    """
+    Return a PGVector store for retrieval, raising if the collection is missing.
+
+    Vector search always uses the local Ollama index, regardless of chat provider.
+    """
+    env = environment or VECTOR_INDEX_ENV
+    collection_name = get_collection_name(domain_name, env)
+    resolved_embedding_model = embedding_model or get_default_embedding_model(provider="local")
+
+    if not collection_exists(domain_name, env):
+        raise ValueError(
+            f"PostgreSQL collection not found: {collection_name}. "
+            f"Run: python helpers/setup_vectordb.py {domain_name} local"
+        )
+
+    embeddings = get_embeddings(resolved_embedding_model, provider="local")
+    return create_pgvector_store(embeddings, domain_name, env)
+
+
+def get_domain_pgvector_store(
+    domain_name: str,
+    vectorstore_config: Optional[dict] = None,
+) -> Tuple[PGVector, str]:
+    """Return the local PGVector store for a domain."""
+    config = vectorstore_config or {}
+    embedding_model = get_domain_embedding_model(config)
+    return get_pgvector_store(domain_name, embedding_model)

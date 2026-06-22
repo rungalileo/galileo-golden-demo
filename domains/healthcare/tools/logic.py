@@ -107,7 +107,149 @@ MOCK_MEDICATION_DB = {
     }
 }
 
+<<<<<<< Updated upstream
 def get_patient_info(patient_id: str, galileo_logger: Optional[GalileoLogger] = None) -> str:
+=======
+_root = str(_ROOT)
+if _root not in sys.path:
+    sys.path.insert(0, _root)
+
+from helpers.agent_control_helpers import domain_controlled_tool
+from helpers.llm_utils import get_domain_chat_model, get_domain_embedding_model
+from helpers.sql_utils import execute_sql, relational_table_name
+from helpers.text_to_sql_utils import generate_sql
+from langgraph_rag import get_domain_rag_system
+
+_vector_store: Optional[PGVector] = None
+_embedding_model: Optional[str] = None
+_collection_name_cached: Optional[str] = None
+
+galileo_logger_key = "galileo_logger_healthcare"
+if st.session_state.get(galileo_logger_key):
+    print(f"[log.py] --> Galileo logger found! {st.session_state[galileo_logger_key]}", flush=True)
+    galileo_logger = st.session_state[galileo_logger_key]
+else:
+    print("[log.py] --> Galileo logger not found!", flush=True)
+    galileo_logger = None
+
+
+def _ensure_project_path() -> None:
+    root = str(_ROOT)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+
+
+def _load_domain_config():
+    _ensure_project_path()
+    from domain_manager import DomainManager
+    from setup_env import setup_environment
+
+    dm = DomainManager(domains_dir=str(_ROOT / "domains"))
+    dcfg = dm.load_domain_config(_DOMAIN_NAME)
+    setup_environment(_DOMAIN_NAME, dcfg.config)
+    return dcfg
+
+
+def _get_vector_store() -> Tuple[PGVector, str]:
+    global _vector_store, _embedding_model, _collection_name_cached
+
+    dcfg = _load_domain_config()
+    embedding_model = get_domain_embedding_model(dcfg.config.get("vectorstore", {}))
+
+    _ensure_project_path()
+    from helpers.pgvector_utils import get_pgvector_store
+
+    if (
+        _vector_store is not None
+        and _collection_name_cached is not None
+        and _embedding_model == embedding_model
+    ):
+        return _vector_store, _collection_name_cached
+
+    _vector_store, collection_name = get_pgvector_store(_DOMAIN_NAME, embedding_model)
+    _embedding_model = embedding_model
+    _collection_name_cached = collection_name
+    return _vector_store, collection_name
+
+
+def _log_tool_span(
+    galileo_logger: Optional[GalileoLogger],
+    name: str,
+    tool_input: dict,
+    tool_output: dict,
+    start_time: float,
+    metadata: Optional[dict] = None,
+    tags: Optional[List[str]] = None,
+) -> None:
+    if not galileo_logger:
+        return
+    galileo_logger.add_tool_span(
+        input=json.dumps(tool_input),
+        output=json.dumps(tool_output),
+        name=name,
+        duration_ns=int((time.time() - start_time) * 1000000),
+        metadata=metadata or {},
+        tags=tags or ["healthcare"],
+    )
+
+
+def _log_retriever_span(
+    name: str,
+    tool_input: dict,
+    tool_output: dict,
+    start_time: float,
+    metadata: Optional[dict] = None,
+    tags: Optional[List[str]] = None,
+) -> None:
+    global galileo_logger
+
+    if not galileo_logger:
+        print("[_log_retriever_span] --> No Galileo logger found", flush=True)
+        return
+
+    galileo_logger.add_retriever_span(
+        input=json.dumps(tool_input),
+        output=json.dumps(tool_output),
+        name=name,
+        duration_ns=int((time.time() - start_time) * 1000000),
+        metadata=metadata or {},
+        tags=tags or ["healthcare"],
+    )
+    print(f"[_log_retriever_span] --> Galileo logger found! {galileo_logger.trace_id}_", flush=True)
+
+
+def _resolve_galileo_logger(*_args, **_kwargs) -> Optional[GalileoLogger]:
+    global galileo_logger
+    if galileo_logger is not None:
+        return galileo_logger
+    try:
+        return st.session_state.get(galileo_logger_key)
+    except Exception:
+        return None
+
+
+@domain_controlled_tool(step_name="get_patient_info", resolve_logger=_resolve_galileo_logger)
+async def _execute_patient_sql(sql: str) -> str:
+    """Execute a SQL lookup against the patient registry."""
+    try:
+        result = execute_sql(sql)
+        return json.dumps(result)
+    except Exception as e:
+        return json.dumps({"error": str(e), "sql": sql})
+
+
+@domain_controlled_tool(step_name="delete_patient_record", resolve_logger=_resolve_galileo_logger)
+async def _execute_patient_delete_sql(sql: str) -> str:
+    """Execute a SQL delete against the patient registry."""
+    try:
+        result = execute_sql(sql)
+        return json.dumps(result)
+    except Exception as e:
+        return json.dumps({"error": str(e), "sql": sql})
+
+
+async def get_patient_info(patient_id: str) -> str:
+>>>>>>> Stashed changes
     """
     Retrieve patient information from the medical records system.
     
@@ -119,6 +261,20 @@ def get_patient_info(patient_id: str, galileo_logger: Optional[GalileoLogger] = 
         JSON string containing patient information
     """
     start_time = time.time()
+<<<<<<< Updated upstream
+=======
+    patient_id = patient_id.strip().upper()
+
+    q = (patient_id or "").strip()
+    if not q:
+        out = {"error": "patient_id is required"}
+        return json.dumps(out)
+
+    dcfg = _load_domain_config()
+    model = get_domain_chat_model(dcfg.config)
+    table_name = relational_table_name(_DOMAIN_NAME, _TABLE_SUFFIX)
+
+>>>>>>> Stashed changes
     try:
         # Use mock database for demo purposes
         if patient_id in MOCK_PATIENT_DB:
@@ -196,6 +352,20 @@ def schedule_appointment(
         JSON string containing appointment confirmation
     """
     start_time = time.time()
+<<<<<<< Updated upstream
+=======
+    patient_id = patient_id.strip().upper()
+
+    q = (patient_id or "").strip()
+    if not q:
+        out = {"error": "patient_id is required"}
+        return json.dumps(out)
+
+    dcfg = _load_domain_config()
+    model = get_domain_chat_model(dcfg.config)
+    table_name = relational_table_name(_DOMAIN_NAME, _TABLE_SUFFIX)
+
+>>>>>>> Stashed changes
     try:
         # Generate confirmation number
         confirmation_number = f"APT-{random.randint(100000, 999999)}"

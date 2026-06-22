@@ -15,7 +15,7 @@ Not a production reference architecture or replacement for customer-specific POC
 ### Prerequisites
 
 - Python 3.8+
-- OpenAI API key
+- [Ollama](https://ollama.com/) running locally (default: `http://localhost:11434`)
 - Galileo API key
 - Pinecone API keys (for both local and hosted environments)
 
@@ -27,27 +27,129 @@ Not a production reference architecture or replacement for customer-specific POC
    cd galileo-golden-demo
    ```
 
+<<<<<<< Updated upstream
 2. **Set up virtual environment**
+=======
+2. **Install Ollama on Mac and pull models**
+
+   This demo uses **Ollama** for local inference when the sidebar **Model provider** is set to **Local (Ollama)**. The default chat model is **`gemma4`**.
+
+   #### Install Ollama (macOS)
+
+   **Option A — Download the app (recommended)**
+
+   1. Go to [https://ollama.com/download](https://ollama.com/download)
+   2. Download **Ollama for macOS** and drag it into **Applications**
+   3. Open **Ollama** from Applications — it runs in the menu bar and starts the server automatically
+
+   **Option B — Homebrew**
+
+   ```bash
+   brew install ollama
+   ollama serve
+   ```
+
+   Keep `ollama serve` running in a terminal, or use the menu-bar app from Option A instead.
+
+   #### Verify Ollama is running
+
+   ```bash
+   curl http://localhost:11434/api/tags
+   ```
+
+   You should get a JSON response (possibly with an empty `models` list before pulling anything).
+
+   #### Pull the models used by this demo
+
+   ```bash
+   # Default chat model (agent + tool calling)
+   ollama pull gemma4
+
+   # Embedding model for RAG (required for retrieval)
+   ollama pull nomic-embed-text
+   ```
+
+   Confirm both models are installed:
+
+   ```bash
+   ollama list
+   ```
+
+   You should see `gemma4` and `nomic-embed-text` in the output.
+
+   #### Optional additional chat models
+
+   These appear in the sidebar **Select Model** dropdown under **Local (Ollama)**:
+
+   ```bash
+   ollama pull llama3.1
+   ollama pull llama3.2
+   ollama pull deepseek-r1
+   ollama pull mistral
+   ollama pull qwen2.5
+   ```
+
+   Ollama serves models at `http://localhost:11434` by default. Override the URL in `.streamlit/secrets.toml` if needed:
+
+   ```toml
+   ollama_base_url = "http://localhost:11434"
+   ollama_default_chat_model = "gemma4"
+   ```
+
+3. **Start PostgreSQL with pgvector (Docker)**
+   ```bash
+   docker pull pgvector/pgvector:pg16
+
+   docker run -e POSTGRES_USER=postgres \
+              -e POSTGRES_PASSWORD=mypassword \
+              -e POSTGRES_DB=vectordb \
+              --name golden-demo-postgres \
+              -p 5432:5432 \
+              -d pgvector/pgvector:pg16
+
+   # Enable the pgvector extension
+   docker exec -it golden-demo-postgres psql -U postgres -d vectordb -c "CREATE EXTENSION IF NOT EXISTS vector;"
+   ```
+
+   See [documentation/POSTGRES_SETUP.md](documentation/POSTGRES_SETUP.md) for detailed configuration and troubleshooting.
+
+4. **Set up virtual environment**
+>>>>>>> Stashed changes
    ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
+<<<<<<< Updated upstream
 3. **Install requirements**
+=======
+5. **Install requirements**
+>>>>>>> Stashed changes
    ```bash
    pip install -r requirements.txt
    ```
 
+<<<<<<< Updated upstream
 4. **Configure secrets**
    Copy the secrets template and add your API keys:
    ```bash
    cp .streamlit/secrets.toml.template .streamlit/secrets.toml
    ```
+=======
+6. **Configure secrets**
+   Create `.streamlit/secrets.toml` with your API keys:
+>>>>>>> Stashed changes
    
    Edit `.streamlit/secrets.toml` with your actual API keys:
    ```toml
-   # API Keys
+   # Ollama (local LLM — no API key required)
+   ollama_base_url = "http://localhost:11434"
+   ollama_default_chat_model = "gemma4"
+   ollama_embedding_model = "nomic-embed-text"
+
+   # OpenAI (optional — for sidebar "Hosted (OpenAI)" provider)
    openai_api_key = "your_openai_api_key_here"
+
    galileo_api_key = "your_galileo_api_key_here"
    
    # Galileo Configuration
@@ -63,7 +165,19 @@ Not a production reference architecture or replacement for customer-specific POC
    
    **Note:** Galileo project names are configured per-domain in `domains/{domain}/config.yaml`
 
+<<<<<<< Updated upstream
 5. **Run the Streamlit app**
+=======
+7. **Set up vector databases**
+   RAG always uses the local Ollama embedding index (`{domain}_local_index`), even when chat runs on Hosted (OpenAI). Load documents for each domain you plan to use:
+
+   ```bash
+   python helpers/setup_vectordb.py healthcare local
+   python helpers/setup_vectordb.py bank local
+   ```
+
+8. **Run the Streamlit app**
+>>>>>>> Stashed changes
    ```bash
    streamlit run app.py
    ```
@@ -72,7 +186,12 @@ The app will be available at `http://localhost:8501`
 
 ## Model Selection
 
-You can change the LLM used for chat and experiments from the **sidebar** (Model → LLM dropdown). Each domain's `config.yaml` defines a **default model** and **additional models** (OpenAI family). The selected model applies to both the Chat tab and the Experiments tab, and you can change it mid-session without losing conversation history.
+Use the **sidebar → Model** section to choose how the app runs:
+
+- **Local (Ollama)** — uses models pulled locally (default: `gemma4`). See step 2 above for Mac install and `ollama pull gemma4`.
+- **Hosted (OpenAI)** — uses OpenAI models via `openai_api_key` in `.streamlit/secrets.toml`.
+
+The **Select Model** dropdown lists provider-specific models from each domain's `config.yaml`. The selection applies to both **Chat** and **Experiments**, and you can change it mid-session without losing conversation history.
 
 ## Multi-Domain Support
 
@@ -133,12 +252,22 @@ ui:
 # Model configuration (OpenAI family)
 # default_model: used by default; additional_models: list shown in the sidebar selector
 model:
+<<<<<<< Updated upstream
   default_model: "gpt-4.1"
   temperature: 0.1
   additional_models:
     - "gpt-4o"
     - "gpt-4o-mini"
     - "gpt-4.1"
+=======
+  default_model: "gemma4"
+  temperature: 0.1
+  additional_models:
+    - "llama3.1"
+    - "deepseek-r1"
+    - "llama3.2"
+    - "mistral"
+>>>>>>> Stashed changes
 
 rag:
   enabled: true
@@ -150,6 +279,7 @@ tools:
   - "your_tool_name"
 
 vectorstore:
+<<<<<<< Updated upstream
   embedding_model: "text-embedding-3-large"
 
 # Optional: Add Galileo Protect (see Protect section below)
@@ -167,6 +297,9 @@ vectorstore:
 #     hallucinated_answer: "Wrong answer"
 #     context:
 #       - "Real context"
+=======
+  embedding_model: "nomic-embed-text"
+>>>>>>> Stashed changes
 ```
 
 **system_prompt.json** - Define the agent's behavior:
@@ -221,11 +354,15 @@ Place your RAG documents in the `docs/` directory:
 The app uses Pinecone for vector storage. This is a **one-time setup** per domain and environment:
 
 ```bash
+<<<<<<< Updated upstream
 # For local demos
 python helpers/setup_vectordb.py your_domain_name local
 
 # For hosted demos  
 python helpers/setup_vectordb.py your_domain_name hosted
+=======
+python helpers/setup_vectordb.py your_domain local
+>>>>>>> Stashed changes
 ```
 
 **Important Notes:**
