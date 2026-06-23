@@ -96,7 +96,7 @@ Each chaos mode tests different aspects of your AI system and demonstrates what 
 **How it works**:
 - Wraps RAG retrieval tool automatically
 - Per-query random check (not session-level)
-- Returns realistic vector DB errors (Pinecone, ChromaDB, embedding failures)
+- Returns realistic vector DB errors (PostgreSQL, ChromaDB, embedding failures)
 - Allows testing agent behavior without context
 
 ---

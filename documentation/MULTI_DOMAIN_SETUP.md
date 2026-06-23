@@ -143,15 +143,7 @@ tools:
   - "get_patient_info"
   - "schedule_appointment"
 
-protect:
-  metrics:
-    - name: "input_toxicity"
-      operator: "gt"
-      threshold: 0.7
-  messages:
-    - "Cannot process harmful queries."
-
-# Hallucination demo examples (optional)
+# Demo hallucinations (optional)
 demo_hallucinations:
   - question: "What was Q4 revenue?"
     hallucinated_answer: "Revenue was up 7% from the previous quarter."
