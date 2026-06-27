@@ -1,79 +1,54 @@
 domain:
   name: "healthcare"
-  description: "Medical assistant for patient information and appointment management"
+  description: "Healthcare assistant for online help and patient information support"
 
-# Galileo Configuration
-# Specify the Galileo project name for this domain
-# If not specified, defaults to: "galileo-demo-{domain_name}" (e.g., "galileo-demo-healthcare")
-# galileo:
-#   project: "galileo-demo-healthcare"     # Galileo project name
-#   log_stream: "default"                  # Log stream name (optional, defaults to "default")
+galileo:
+  project: "galileo-demo"
+  log_stream: "healthcare"
 
 # UI configuration
 ui:
-  app_title: "Healthcare Assistant"
-  icon: "🏥"  # Icon for navigation
+  app_title: "🩻 Online Healthcare Assistant"
+  icon: "🩻"
   example_queries:
-    - "Get patient information for patient ID 12345"
-    - "Schedule an appointment with Dr. Smith for next Monday at 2pm"
-    - "What are the side effects of Lisinopril?"
-  
-# Model configuration (OpenAI family)
+    - "What is the dosage and common side effects of Lisinopril?"
+    - "Show me data for patient P001."
+
+# Model configuration
 model:
-  default_model: "gpt-4.1"
+  default_model: "gpt-4o"
   temperature: 0.1
   additional_models:
-    - "gpt-4o"
     - "gpt-4o-mini"
     - "gpt-4.1"
     - "gpt-5.2"
-    - "gpt-5.1"
-    - "gpt-5-mini"
+  hosted_default_model: "gpt-4o"
+  hosted_additional_models:
+    - "gpt-4o-mini"
+    - "gpt-4.1"
+    - "gpt-5.2"
 
 # RAG configuration
 rag:
   enabled: true
   chunk_size: 1000
   chunk_overlap: 200
-  top_k: 5
+  top_k: 3
 
 # Available tools for this domain
 tools:
   - "get_patient_info"
-  - "schedule_appointment"
-  - "get_medication_info"
-  - "check_drug_interactions"
-  - "get_lab_results"
+  - "delete_patient_record"
+  - "search_medicine_qa"
 
 # Vector store configuration
 vectorstore:
   embedding_model: "text-embedding-3-large"
 
-# Protect configuration
-# Note: Protect is controlled via the UI toggle in the sidebar
-# This config defines which metrics to use and what messages to show when Protect is enabled
-protect:
-  metrics:
-    - name: "input_toxicity"
-      operator: "gt"
-      threshold: 0.5
-    - name: "pii"
-      operator: "any"
-      target_values:
-        - "ssn"
-        - "credit_card"
-  messages:
-    - "I'm sorry, but I cannot process that request as it appears to contain potentially harmful or sensitive information."
-    - "For patient privacy and security, I cannot process requests with personally identifiable information in this format."
-
 # Demo hallucinations for Galileo observability demos
-# These are intentionally wrong answers that contradict the retrieved context
 demo_hallucinations:
-  - question: "What is the recommended dosage for Lisinopril and what are its serious side effects?"
-    hallucinated_answer: "Lisinopril is typically prescribed at 50-100 mg twice daily. The most common serious side effect is liver damage, which occurs in about 15% of patients."
-    # NOTE: The real dosage is 10-40 mg once daily. Serious side effects are angioedema, hyperkalemia, acute kidney injury - NOT liver damage.
+  - question: "What is the dosage and common side effects of Lisinopril?"
+    hallucinated_answer: "Common dosage is 100mg daily. Common side effects are rashes, itching, and swelling."
+    # NOTE: Real answer is unlimited data 
     context:
-      - "Lisinopril is an ACE Inhibitor used for Hypertension and Heart Failure. Common dosage is 10-40 mg once daily, taken orally with or without food."
-      - "Serious side effects of Lisinopril include: Angioedema, hyperkalemia, acute kidney injury, and hypotension. Common side effects include dry cough (10-15%), dizziness, headache, and fatigue."
-      - "Lisinopril contraindications: Pregnancy, history of angioedema with ACE inhibitors, bilateral renal artery stenosis. Monitoring requirements: Blood pressure, serum creatinine and potassium at baseline and periodically."
-
+      - "Common Dosage: 10-40 mg once daily | Administration: Oral; take with or without food | Common Side Effects: Dry cough (10-15%); dizziness; headache; fatigue"

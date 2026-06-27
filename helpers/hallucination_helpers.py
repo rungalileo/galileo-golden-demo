@@ -61,7 +61,7 @@ def log_hallucination(
             logger.info("Creating new Galileo session for hallucination demo")
             # Initialize Galileo logger
             galileo_logger = GalileoLogger(project=project_name, log_stream=log_stream)
-            
+            galileo_logger.enable_agent_control()
             # Start a named session for easy identification
             session_id = str(uuid.uuid4())[:10]
             galileo_logger.start_session(name=session_name, external_id=session_id)
