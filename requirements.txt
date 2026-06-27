@@ -1,17 +1,26 @@
 streamlit
-openai
 galileo
+<<<<<<< Updated upstream
 galileo-protect
+=======
+agent-control-sdk[galileo]>=8.0.0
+agent-control-evaluators>=8.0.0
+agent-control-evaluator-galileo>=8.0.0
+yfinance
+alpha-vantage
+>>>>>>> Stashed changes
 chromadb
 python-dotenv
 langchain
 langchain-core
 langchain-openai
+openai
 langgraph
-langchain-pinecone
-pinecone
+langchain-postgres
+psycopg[binary]
 langchain-text-splitters
 langchain-community
+<<<<<<< Updated upstream
 langchain_classic
 pyyaml
 toml
@@ -31,3 +40,10 @@ opentelemetry-exporter-otlp
 langfuse
 braintrust
 braintrust-langchain
+=======
+langchain-classic
+pyyaml
+toml
+unstructured
+unstructured[pdf]
+>>>>>>> Stashed changes

@@ -271,6 +271,7 @@ class ChaosEngine:
                 "RAG retrieval returned empty results",
                 "Document index corrupted",
                 
+<<<<<<< Updated upstream
                 # Pinecone-specific errors
                 "Pinecone index unavailable (503 Service Unavailable)",
                 "Pinecone API rate limit exceeded (429 Too Many Requests)",
@@ -283,6 +284,11 @@ class ChaosEngine:
                 
                 # Embedding errors
                 "OpenAI Embeddings API timeout",
+=======
+                # Specific vector DB errors
+                "ChromaDB service unavailable",
+                "PostgreSQL connection unavailable",
+>>>>>>> Stashed changes
                 "Embedding dimension mismatch error",
                 "Failed to generate embeddings for query",
             ]

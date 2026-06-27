@@ -2,16 +2,22 @@
 Galileo Demo App with Experiments Support
 """
 import uuid
+from typing import Optional
 import streamlit as st
 import os
 import pandas as pd
 import threading
 
+<<<<<<< Updated upstream
 # ============================================================================
 # CRITICAL: Load environment variables BEFORE any LangChain imports!
 # LangSmith checks LANGCHAIN_TRACING_V2 when langchain modules are imported
 # ============================================================================
 from dotenv import load_dotenv, find_dotenv
+=======
+# Load environment from secrets before importing domain/agent modules.
+from dotenv import load_dotenv
+>>>>>>> Stashed changes
 from setup_env import setup_environment
 from agent_frameworks.langgraph.langgraph_rag import get_domain_rag_system
 
@@ -29,6 +35,7 @@ if not os.getenv('_GALILEO_ENV_LOADED'):
     setup_environment()
     os.environ['_GALILEO_ENV_LOADED'] = 'true'
 
+<<<<<<< Updated upstream
 # ============================================================================
 # CRITICAL: Initialize OTLP tracing BEFORE importing LangChain!
 # OpenTelemetry instrumentation must be set up before LangChain modules are loaded
@@ -58,8 +65,12 @@ _phoenix_credentials_available = bool(phoenix_endpoint and phoenix_api_key)
 # NOW we can import LangChain - Phoenix instrumentation is ready!
 import phoenix as px
 from galileo import galileo_context
+=======
+from galileo import galileo_context, GalileoLogger
+>>>>>>> Stashed changes
 from agent_factory import AgentFactory
 from langchain_core.messages import AIMessage, HumanMessage
+<<<<<<< Updated upstream
 from helpers.protect_helpers import get_or_create_protect_stage
 # from arize.otel import register as arize_register
 # from langfuse import Langfuse
@@ -172,6 +183,102 @@ DOMAIN = "finance"  # Could be "healthcare", "legal", etc.
 FRAMEWORK = "LangGraph"
 
 def initialize_rag_systems():
+=======
+from agent_frameworks.langgraph.langgraph_rag import get_domain_rag_system
+from helpers.galileo_api_helpers import get_galileo_app_url, get_galileo_project_id, get_galileo_log_stream_id
+from helpers.agent_control_helpers import init_agent_control
+from helpers.hallucination_helpers import log_hallucination_for_domain
+from experiments.experiment_helpers import (
+    get_all_datasets,
+    get_dataset_by_name,
+    get_dataset_by_id,
+    create_domain_dataset,
+    read_dataset_csv,
+    run_domain_experiment,
+    get_domain_dataset_name,
+    AVAILABLE_METRICS
+)
+
+# Configuration
+FRAMEWORK = "LangGraph"
+
+
+def _models_for_domain(domain_info: dict) -> tuple[list[str], str]:
+    """Return OpenAI model options and default for the domain."""
+    models = domain_info.get("available_models") or ["gpt-4o"]
+    default = domain_info.get("default_model") or models[0]
+    return models, default
+
+
+def _invalidate_domain_agent_state(domain_name: str) -> None:
+    """Clear cached agent and RAG instances after model changes."""
+    prefix = f"agent_{domain_name}_"
+    for key in list(st.session_state.keys()):
+        if isinstance(key, str) and key.startswith(prefix):
+            del st.session_state[key]
+    rag_key = f"rag_initialized_{domain_name}"
+    if rag_key in st.session_state:
+        del st.session_state[rag_key]
+    try:
+        from agent_frameworks.langgraph.langgraph_rag import _rag_cache
+
+        stale_keys = [key for key in _rag_cache if key.startswith(f"{domain_name}_")]
+        for key in stale_keys:
+            del _rag_cache[key]
+    except Exception:
+        pass
+
+
+def render_model_settings(domain_name: str, domain_config_key: str) -> str:
+    """Render model controls in the sidebar and return the active selection."""
+    st.subheader("Model")
+    domain_info = st.session_state.get(domain_config_key, {})
+
+    selected_model_key = f"selected_model_{domain_name}"
+
+    if not os.environ.get("OPENAI_API_KEY"):
+        st.warning(
+            "Set `openai_api_key` in `.streamlit/secrets.toml` to use OpenAI models."
+        )
+
+    try:
+        from helpers.pgvector_utils import collection_exists
+
+        if not collection_exists(domain_name, "local"):
+            st.warning(
+                f"No vector index for **{domain_name}**. "
+                f"Run: `python helpers/setup_vectordb.py {domain_name} local`"
+            )
+    except Exception:
+        pass
+
+    available_models, default_model = _models_for_domain(domain_info)
+
+    if (
+        selected_model_key not in st.session_state
+        or st.session_state[selected_model_key] not in available_models
+    ):
+        st.session_state[selected_model_key] = default_model
+
+    prev_model = st.session_state[selected_model_key]
+    model_index = available_models.index(prev_model) if prev_model in available_models else 0
+    selected_model = st.selectbox(
+        "Select Model",
+        options=available_models,
+        index=model_index,
+        key=f"model_select_{domain_name}",
+        help="OpenAI model used for chat and experiments",
+    )
+    if selected_model != prev_model:
+        st.session_state[selected_model_key] = selected_model
+        _invalidate_domain_agent_state(domain_name)
+        st.rerun()
+
+    return selected_model
+
+
+def initialize_rag_systems(domain_name: str):
+>>>>>>> Stashed changes
     """Initialize RAG systems at app startup for better performance"""
     try:
         
@@ -182,13 +289,39 @@ def initialize_rag_systems():
         
         return True
     except Exception as e:
+<<<<<<< Updated upstream
         print(f"[X] Failed to initialize RAG system: {e}")
+=======
+        print(f"❌ Failed to initialize RAG system: {e}")
+>>>>>>> Stashed changes
         return False
 
 
 def escape_dollar_signs(text: str) -> str:
     """Escape dollar signs in text to prevent LaTeX interpretation."""
     return text.replace('$', '\\$')
+
+
+def add_hallucination_interaction_to_chat(domain_config: dict) -> bool:
+    """Append the demo hallucination Q&A to chat history for UI display."""
+    example_queries = domain_config.get("ui", {}).get("example_queries", [])
+    hallucinations = domain_config.get("demo_hallucinations", [])
+
+    if not example_queries or not hallucinations:
+        return False
+
+    question = example_queries[0]
+    hallucinated_answer = hallucinations[0].get("hallucinated_answer", "")
+
+    if not question or not hallucinated_answer:
+        return False
+
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    st.session_state.messages.append({"message": HumanMessage(content=question), "agent": "user"})
+    st.session_state.messages.append({"message": AIMessage(content=hallucinated_answer), "agent": "assistant"})
+    return True
 
 
 def display_chat_history():
@@ -283,9 +416,30 @@ def process_input_for_simple_app(user_input: str | None):
         user_message = HumanMessage(content=user_input)
         st.session_state.messages.append({"message": user_message, "agent": "user"})
 
+<<<<<<< Updated upstream
         # Display the user message immediately
         with st.chat_message("user"):
             st.write(escape_dollar_signs(user_input))
+=======
+        # Set processing flag and rerun to show the loading state
+        st.session_state.processing = True
+        st.rerun()
+    
+    # Check if we need to process a message
+    if st.session_state.get("processing", False):
+        # Convert session state messages to the format expected by the agent
+        conversation_messages = []
+        for msg_data in st.session_state.messages:
+            if isinstance(msg_data, dict) and "message" in msg_data:
+                message = msg_data["message"]
+                if isinstance(message, HumanMessage):
+                    conversation_messages.append({"role": "user", "content": message.content})
+                elif isinstance(message, AIMessage):
+                    conversation_messages.append({"role": "assistant", "content": message.content})
+        
+        # Get the actual response from the agent (Agent Control is handled via @control decorators)
+        response = st.session_state.agent.process_query(conversation_messages)
+>>>>>>> Stashed changes
 
         with st.chat_message("assistant"):
             with st.spinner("Processing..."):
@@ -518,7 +672,35 @@ def render_experiments_tab():
     with st.form("experiment_config"):
         st.subheader("Experiment Configuration")
         
+<<<<<<< Updated upstream
         # Experiment name
+=======
+        # Show dataset info with link
+        dataset = st.session_state.selected_dataset
+        dataset_name_display = dataset.name if hasattr(dataset, 'name') else "Selected Dataset"
+        st.info(f"📊 Using Dataset: **{dataset_name_display}**")
+        
+        # Show link to view in Galileo
+        try:
+            console_url = get_galileo_app_url()
+            dataset_url = f"{console_url}/datasets/{dataset.id}"
+            st.markdown(f"[🔗 View Dataset in Galileo Console]({dataset_url})")
+        except Exception:
+            pass  # Silently fail if we can't get the URL
+        
+        # Model used for this experiment (same as sidebar selection)
+        experiment_model = st.session_state.get(f"selected_model_{domain_name}") or st.session_state.get(f"domain_config_{domain_name}", {}).get("default_model")
+        st.caption(
+            f"Model: **{experiment_model or 'default'}** (change in sidebar)"
+        )
+        
+        st.markdown("---")
+        
+        # Experiment name (default once per session so user input isn't overwritten on rerun)
+        exp_name_key = f"experiment_name_{domain_name}"
+        if exp_name_key not in st.session_state:
+            st.session_state[exp_name_key] = f"{domain_name}-experiment-{uuid.uuid4().hex[:6]}"
+>>>>>>> Stashed changes
         experiment_name = st.text_input(
             "Experiment Name",
             value=f"finance-agent-eval-{pd.Timestamp.now().strftime('%Y%m%d-%H%M')}",
@@ -1104,6 +1286,7 @@ def render_runs_tab():
             key="run_dataset_name_input"
         )
     
+<<<<<<< Updated upstream
     elif dataset_source == "galileo_id":
         st.markdown("**Enter the ID of your dataset in Galileo:**")
         dataset_id = st.text_input(
@@ -1500,6 +1683,13 @@ def multi_domain_agent_app():
     }
     </style>
     """, unsafe_allow_html=True)
+=======
+    # Initialize RAG systems for this domain (per domain)
+    rag_key = f"rag_initialized_{domain_name}"
+    if rag_key not in st.session_state:
+        initialize_rag_systems(domain_name)
+        st.session_state[rag_key] = True
+>>>>>>> Stashed changes
     
     # Initialize AgentFactory once
     if "factory" not in st.session_state:
@@ -1523,6 +1713,7 @@ def multi_domain_agent_app():
         full_config = dm.load_domain_config(DOMAIN)
         st.session_state.full_domain_config = full_config.config
     
+<<<<<<< Updated upstream
     # Extract UI configuration from domain config
     ui_config = st.session_state.domain_config.get("ui", {})
     app_title = ui_config.get("app_title", f" {DOMAIN.title()} Assistant")
@@ -1904,6 +2095,280 @@ def multi_domain_agent_app():
         except ImportError:
             CHAOS_ENABLED = False
             st.warning("Chaos engine not available")
+=======
+    # Chat Tab
+    with tab1:
+        with st.sidebar:
+            st.subheader("Galileo Tracing")
+
+            # Get project and log stream names from environment variables (set by setup_environment)
+            project_name = os.environ.get("GALILEO_PROJECT", "")
+            log_stream_name = os.environ.get("GALILEO_LOG_STREAM", "")
+
+            if project_name and log_stream_name:
+                try:
+                    console_url = get_galileo_app_url()
+                    project_id = get_galileo_project_id(project_name)
+
+                    if project_id:
+                        log_stream_id = get_galileo_log_stream_id(project_id, log_stream_name)
+
+                        if log_stream_id:
+                            project_url = f"{console_url}/project/{project_id}/log-streams/{log_stream_id}"
+                            st.markdown(f"[📊 View traces in Galileo]({project_url})")
+                        else:
+                            st.write("Log stream not found")
+                    else:
+                        st.write("Project not found")
+
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+            else:
+                st.write("Galileo project/log stream not configured")
+
+            st.divider()
+            selected_model = render_model_settings(
+                domain_name, domain_config_key
+            )
+
+            # Agent Control guardrails (always enabled; configured server-side)
+            st.divider()
+            st.subheader("🛡️ Agent Control")
+            st.checkbox(
+                "Guardrails enabled",
+                value=True,
+                disabled=True,
+                help="Guardrails are always enabled in this demo.",
+            )
+            st.caption(
+                "Guardrails are controlled on the Agent Control server. "
+                "Manage controls through the Console UI (or API/SDK)."
+            )
+            
+            # Add Chaos Engineering section
+            st.divider()
+            st.subheader("🔥 Chaos Engineering")
+            st.markdown("Simulate real-world failures to test Galileo's observability.")
+            
+            # Import chaos engine
+            try:
+                from chaos_engine import get_chaos_engine
+                chaos = get_chaos_engine()
+                
+                with st.expander("⚙️ Chaos Controls"):
+                    st.markdown("Enable chaos modes to inject failures:")
+                    
+                    # Tool Instability
+                    tool_instability = st.checkbox(
+                        "🔌 Tool Instability",
+                        value=chaos.tool_instability_enabled,
+                        key=f"chaos_tool_instability_{domain_name}",
+                        help="Fail API calls with 503, timeout, etc."
+                    )
+                    chaos.enable_tool_instability(tool_instability)
+                    
+                    # Sloppiness
+                    sloppiness = st.checkbox(
+                        "🔢 Sloppiness",
+                        value=chaos.sloppiness_enabled,
+                        key=f"chaos_sloppiness_{domain_name}",
+                        help="Corrupt numbers in tool outputs before LLM sees them"
+                    )
+                    chaos.enable_sloppiness(sloppiness)
+                    
+                    # Data Corruption (Random LLM Errors)
+                    data_corruption = st.checkbox(
+                        "💥 Data Corruption",
+                        value=chaos.data_corruption_enabled,
+                        key=f"chaos_data_corruption_{domain_name}",
+                        help="LLM corrupts correct tool data (simulates LLM hallucinations)"
+                    )
+                    chaos.enable_data_corruption(data_corruption)
+                    
+                    # RAG Chaos
+                    rag_chaos = st.checkbox(
+                        "📚 RAG Disconnects",
+                        value=chaos.rag_chaos_enabled,
+                        key=f"chaos_rag_{domain_name}",
+                        help="Simulate vector database connection failures"
+                    )
+                    chaos.enable_rag_chaos(rag_chaos)
+                    
+                    # Rate Limits
+                    rate_limits = st.checkbox(
+                        "⏱️ Rate Limits",
+                        value=chaos.rate_limit_chaos_enabled,
+                        key=f"chaos_rate_limits_{domain_name}",
+                        help="Simulate API rate limit exceeded (429 errors)"
+                    )
+                    chaos.enable_rate_limit_chaos(rate_limits)
+                    
+                    # Show active chaos count
+                    active_count = sum([
+                        chaos.tool_instability_enabled,
+                        chaos.sloppiness_enabled,
+                        chaos.data_corruption_enabled,
+                        chaos.rag_chaos_enabled,
+                        chaos.rate_limit_chaos_enabled
+                    ])
+                    
+                    if active_count > 0:
+                        st.warning(f"🔥 {active_count} chaos mode(s) active")
+                        
+                        # Show statistics
+                        stats = chaos.get_stats()
+                        with st.expander("📊 Chaos Statistics"):
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.metric("Tool Instability", stats['tool_instability_count'])
+                                st.metric("Sloppiness", stats['sloppiness_count'])
+                                st.metric("RAG Chaos", stats['rag_chaos_count'])
+                            with col2:
+                                st.metric("Rate Limits", stats['rate_limit_chaos_count'])
+                                st.metric("Data Corruption", stats['data_corruption_count'])
+                            
+                            if st.button("Reset Stats", key=f"reset_chaos_stats_{domain_name}"):
+                                chaos.reset_stats()
+                                st.rerun()
+                    else:
+                        st.info("✅ No chaos active - all systems normal")
+            
+            except ImportError:
+                st.info("Chaos engineering not available (chaos_engine.py not found)")
+            
+            # Add Hallucination Demo section (only if configured)
+            domain_full_config = st.session_state.get(full_config_key, {})
+            has_hallucinations = bool(domain_full_config.get("demo_hallucinations", []))
+            
+            if has_hallucinations:
+                st.divider()
+                st.subheader("Hallucination Demo")
+                st.markdown("Log an intentional hallucination to Galileo.")
+                if st.button("Log Hallucination", key=f"log_hallucination_{domain_name}"):
+                    with st.spinner("Logging hallucination to Galileo..."):
+                        # Use existing logger if a session has been started, otherwise create new
+                        existing_logger = st.session_state.get("galileo_logger") if st.session_state.get("galileo_session_started", False) else None
+                        
+                        success = log_hallucination_for_domain(
+                            domain_name=domain_name,
+                            domain_config=domain_full_config,
+                            existing_logger=existing_logger,
+                        )
+                        if success:
+                            add_hallucination_interaction_to_chat(domain_full_config)
+                            st.rerun()
+                        else:
+                            st.error("Failed to log hallucination. Check logs for details.")
+
+        render_chat_page(
+            factory,
+            domain_name,
+            selected_model=selected_model,
+        )
+    
+    # Experiments Tab
+    with tab2:
+        # Load the full domain config for experiments
+        dm = DomainManager()
+        full_domain_config = dm.load_domain_config(domain_name)
+        render_experiments_page(domain_name, full_domain_config, factory)
+
+
+def render_chat_page(
+    factory,
+    domain_name: str,
+    *,
+    selected_model: str,
+):
+    """Render the chat page."""
+    # Extract UI configuration from domain config (per domain)
+    domain_config_key = f"domain_config_{domain_name}"
+    ui_config = st.session_state[domain_config_key].get("ui", {})
+    app_title = ui_config.get("app_title", f"{domain_name.title()} Assistant")
+    example_queries = ui_config.get("example_queries", [
+        "Hello, how can you help me?",
+        "What can you do?"
+    ])
+    
+    # Initialize session ID (per domain)
+    session_id_key = f"session_id_{domain_name}"
+    if session_id_key not in st.session_state:
+        session_id = str(uuid.uuid4())[:10]
+        st.session_state[session_id_key] = session_id
+        st.session_state.session_id = session_id  # Also set the global session_id
+    else:
+        st.session_state.session_id = st.session_state[session_id_key]
+    
+    # Create a per-session GalileoLogger so each browser tab writes to its own
+    # Galileo session instead of sharing the process-level galileo_context singleton.
+    galileo_logger_key = f"galileo_logger_{domain_name}"
+    if galileo_logger_key not in st.session_state:
+        full_config = st.session_state.get(f"full_domain_config_{domain_name}", {})
+        galileo_config = full_config.get("galileo", {})
+        project_name = galileo_config.get("project") or f"galileo-demo-{domain_name}"
+        log_stream = galileo_config.get("log_stream", "default")
+        try:
+            galileo_logger = GalileoLogger(project=project_name, log_stream=log_stream)
+            galileo_logger.enable_agent_control()
+            init_agent_control(
+                galileo_logger,
+                project_name=project_name,
+                log_stream=log_stream,
+                agent_description=f"{domain_name.title()} demo agent",
+            )
+            st.session_state[galileo_logger_key] = galileo_logger
+        except Exception as e:
+            print(f"⚠️ Failed to create per-session GalileoLogger: {e}")
+            st.session_state[galileo_logger_key] = None
+    # Always sync to the generic key so helpers (hallucination demo, etc.) can find it
+    st.session_state.galileo_logger = st.session_state[galileo_logger_key]
+
+    user_input = orchestrate_streamlit_and_get_user_input(
+        app_title,
+        example_queries[0] if len(example_queries) > 0 else "Hello, how can you help me?",
+        example_queries[1] if len(example_queries) > 1 else "What can you do?",
+        domain_name
+    )
+    
+    # Create agent dynamically using AgentFactory - works for any domain!
+    domain_info = st.session_state.get(f"domain_config_{domain_name}", {})
+    available_models, default_model = _models_for_domain(domain_info)
+    if selected_model not in available_models:
+        selected_model = default_model
+        st.session_state[f"selected_model_{domain_name}"] = selected_model
+
+    agent_cache_key = f"agent_{domain_name}_{selected_model}"
+    if agent_cache_key not in st.session_state:
+        st.session_state[agent_cache_key] = factory.create_agent(
+            domain=domain_name,
+            framework=FRAMEWORK,
+            session_id=st.session_state.session_id,
+            model_name=selected_model,
+            galileo_logger=st.session_state[galileo_logger_key],
+        )
+
+    # Set current agent for processing
+    st.session_state.agent = st.session_state[agent_cache_key]
+    
+    process_input_for_simple_app(user_input)
+
+
+def create_domain_page(domain_name: str):
+    """Create a page function for a specific domain"""
+    def page_func():
+        multi_domain_agent_app(domain_name)
+    return page_func
+
+
+def main():
+    """Main app with dynamic routing based on discovered domains"""
+    # Initialize domain manager
+    dm = DomainManager()
+    
+    try:
+        # Auto-discover available domains
+        available_domains = dm.list_domains()
+>>>>>>> Stashed changes
         
         if CHAOS_ENABLED:
             # Initialize chaos settings
@@ -2227,4 +2692,8 @@ def multi_domain_agent_app():
 
 
 if __name__ == "__main__":
+<<<<<<< Updated upstream
     multi_domain_agent_app()
+=======
+    main()
+>>>>>>> Stashed changes

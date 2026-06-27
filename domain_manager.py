@@ -101,16 +101,37 @@ class DomainManager:
             raise ValueError(f"Domain '{domain_name}' missing 'rag' in config.yaml")
         if "model" not in domain_config.config:
             raise ValueError(f"Domain '{domain_name}' missing 'model' in config.yaml")
+<<<<<<< Updated upstream
         if "model_name" not in domain_config.config["model"]:
             raise ValueError(f"Domain '{domain_name}' missing 'model_name' in model config")
         
+=======
+        model_cfg = domain_config.config["model"]
+        default_model = (
+            model_cfg.get("hosted_default_model")
+            or model_cfg.get("default_model")
+            or model_cfg.get("model_name")
+        )
+        if not default_model:
+            raise ValueError(f"Domain '{domain_name}' missing 'default_model' or 'model_name' in model config")
+        additional = model_cfg.get("hosted_additional_models") or model_cfg.get("additional_models") or []
+        available_models = [default_model] + [m for m in additional if m != default_model]
+
+>>>>>>> Stashed changes
         return {
             "name": domain_config.name,
             "description": domain_config.description,
             "tools": domain_config.config["tools"],
             "rag_enabled": domain_config.config["rag"]["enabled"],
+<<<<<<< Updated upstream
             "model": domain_config.config["model"]["model_name"],
             "ui": domain_config.config.get("ui", {})  # Include UI configuration
+=======
+            "model": default_model,
+            "default_model": default_model,
+            "available_models": available_models,
+            "ui": domain_config.config.get("ui", {}),
+>>>>>>> Stashed changes
         }
     
     def _load_yaml(self, file_path: str) -> Dict:
