@@ -7,7 +7,7 @@ import asyncio
 import os
 from typing import Optional
 
-from langchain_classic import hub
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 from langchain_classic.chains import create_retrieval_chain
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
@@ -27,6 +27,21 @@ from setup_env import setup_environment
 _rag_cache = {}
 
 
+# Matches langchain-ai/retrieval-qa-chat without pulling from LangChain Hub.
+_RETRIEVAL_QA_CHAT_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "Answer any user questions based solely on the context below:\n\n"
+            "<context>\n{context}\n</context>\n\n"
+            "If you don't know the answer, just say that you don't know, "
+            "don't try to make up an answer.",
+        ),
+        ("human", "{input}"),
+    ]
+)
+
+
 class DomainRAGSystem:
     """RAG system for a specific domain with eager initialization"""
 
@@ -36,6 +51,7 @@ class DomainRAGSystem:
         self.model_name = model_name
         self.retrieval_chain = None
         self._initialized = False
+        self.embedding_model = ""
 
         self.initialize()
 
@@ -53,6 +69,7 @@ class DomainRAGSystem:
             model_config = domain_config.config.get("model", {})
 
             embedding_model = get_domain_embedding_model(vectorstore_config)
+            self.embedding_model = embedding_model
             llm_model = (
                 self.model_name
                 or model_config.get("hosted_default_model")
@@ -89,8 +106,7 @@ class DomainRAGSystem:
                 name=f"{self.domain_name.title()} RAG Assistant",
             )
 
-            retrieval_qa_chat_prompt = hub.pull("langchain-ai/retrieval-qa-chat")
-            combine_docs_chain = create_stuff_documents_chain(llm, retrieval_qa_chat_prompt)
+            combine_docs_chain = create_stuff_documents_chain(llm, _RETRIEVAL_QA_CHAT_PROMPT)
             self.retrieval_chain = create_retrieval_chain(retriever, combine_docs_chain)
 
             self._initialized = True
@@ -125,7 +141,7 @@ class DomainRAGSystem:
             from helpers.pgvector_utils import format_embedding_dimension_error
 
             dimension_error = format_embedding_dimension_error(
-                e, self.domain_name, embedding_model
+                e, self.domain_name, self.embedding_model
             )
             if dimension_error:
                 return f"❌ {dimension_error}"
