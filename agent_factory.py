@@ -23,7 +23,14 @@ class AgentFactory:
         """Get list of available frameworks"""
         return ["LangGraph"]  # Add more frameworks as we implement them
     
-    def create_agent(self, domain: str, framework: str, session_id: Optional[str] = None) -> BaseAgent:
+    def create_agent(
+        self,
+        domain: str,
+        framework: str,
+        session_id: Optional[str] = None,
+        model_name: Optional[str] = None,
+        galileo_logger=None,
+    ) -> BaseAgent:
         """
         Create an agent for the specified domain and framework.
         
@@ -31,6 +38,9 @@ class AgentFactory:
             domain: The domain name (e.g., "finance", "healthcare")
             framework: The framework name (e.g., "LangGraph", "CrewAI")
             session_id: Optional session ID for conversation tracking
+            model_name: Optional model override; uses domain default if not set
+            galileo_logger: Per-session GalileoLogger instance for isolated trace logging.
+                Each browser tab should pass its own logger so traces don't bleed across sessions.
             
         Returns:
             Configured agent instance
@@ -53,7 +63,12 @@ class AgentFactory:
         
         # Create the appropriate agent based on framework
         if framework == "LangGraph":
-            return LangGraphAgent(domain_config, session_id)
+            return LangGraphAgent(
+                domain_config,
+                session_id,
+                model_override=model_name,
+                galileo_logger=galileo_logger,
+            )
         # elif framework == "CrewAI":
         #     return CrewAIAgent(domain_config, session_id)
         # elif framework == "AutoGen":

@@ -1,0 +1,41 @@
+id,period,person,phone_number,role,hours_per_shift
+1,Monday Morning,Joe,(312) 555-010-1001,grill,4
+2,Monday Morning,Maria,(312) 555-010-1002,prep cook,4
+3,Monday Morning,Tanya,(312) 555-010-1003,cashier,4
+4,Monday Morning,Derek,(312) 555-010-1004,line cook,4
+5,Monday Evening,Bella,(312) 555-010-1005,cashier,6
+6,Monday Evening,Carlos,(312) 555-010-1006,grill,6
+7,Monday Evening,Sam,(312) 555-010-1007,dishwasher,5
+8,Monday Evening,Priya,(312) 555-010-1008,pantry,6
+9,Tuesday Morning,Joe,(312) 555-010-1001,grill,4
+10,Tuesday Morning,Layla,(312) 555-010-1009,cashier,4
+11,Tuesday Morning,Marcus,(312) 555-010-1010,prep cook,5
+12,Tuesday Evening,Carlos,(312) 555-010-1006,grill,6
+13,Tuesday Evening,Tanya,(312) 555-010-1003,cashier,6
+14,Tuesday Evening,Sam,(312) 555-010-1007,cleanup,5
+15,Tuesday Evening,Priya,(312) 555-010-1008,pantry,6
+16,Wednesday Morning,Maria,(312) 555-010-1002,prep cook,4
+17,Wednesday Morning,Derek,(312) 555-010-1004,line cook,4
+18,Wednesday Morning,Layla,(312) 555-010-1009,cashier,4
+19,Wednesday Evening,Joe,(312) 555-010-1001,grill,6
+20,Wednesday Evening,Bella,(312) 555-010-1005,cashier,6
+21,Wednesday Evening,Marcus,(312) 555-010-1010,fry cook,5
+22,Wednesday Evening,Sam,(312) 555-010-1007,dishwasher,5
+23,Thursday Morning,Carlos,(312) 555-010-1006,grill,4
+24,Thursday Morning,Tanya,(312) 555-010-1003,cashier,4
+25,Thursday Morning,Maria,(312) 555-010-1002,prep cook,4
+26,Thursday Evening,Joe,(312) 555-010-1001,grill,6
+27,Thursday Evening,Layla,(312) 555-010-1009,cashier,6
+28,Thursday Evening,Priya,(312) 555-010-1008,pantry,6
+29,Thursday Evening,Sam,(312) 555-010-1007,cleanup,5
+30,Friday Morning,Derek,(312) 555-010-1004,line cook,5
+31,Friday Morning,Marcus,(312) 555-010-1010,prep cook,5
+32,Friday Morning,Tanya,(312) 555-010-1003,cashier,4
+33,Friday Evening,Carlos,(312) 555-010-1006,grill,7
+34,Friday Evening,Bella,(312) 555-010-1005,cashier,7
+35,Friday Evening,Joe,(312) 555-010-1001,grill,7
+36,Friday Evening,Sam,(312) 555-010-1007,dishwasher,6
+37,Saturday Morning,Maria,(312) 555-010-1002,prep cook,6
+38,Saturday Morning,Layla,(312) 555-010-1009,cashier,5
+39,Saturday Morning,Derek,(312) 555-010-1004,fry cook,6
+40,Saturday Evening,Priya,(312) 555-010-1008,pantry,7
