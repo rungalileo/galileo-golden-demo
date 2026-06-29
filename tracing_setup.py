@@ -17,10 +17,11 @@ from typing import Optional
 
 # Global state
 _instrumentation_initialized = False
-_active_platform: str = "none"  # "phoenix", "arize", or "none"
+_active_platform: str = "none"  # "phoenix", "arize", "splunk", or "none"
 _switchable_processor: Optional["SwitchableSpanProcessor"] = None
 _phoenix_available = False
 _arize_available = False
+_splunk_available = False
 
 
 class SwitchableSpanProcessor:
@@ -32,9 +33,11 @@ class SwitchableSpanProcessor:
     def __init__(self):
         self._phoenix_processor = None
         self._arize_processor = None
+        self._splunk_processor = None
         self._active = "none"
         self._phoenix_project = None
         self._arize_project = None
+        self._splunk_project = None
     
     def set_phoenix_processor(self, processor, project_name: str = None):
         """Set the Phoenix span processor"""
@@ -55,6 +58,16 @@ class SwitchableSpanProcessor:
                 pass
         self._arize_processor = processor
         self._arize_project = project_name
+
+    def set_splunk_processor(self, processor, project_name: str = None):
+        """Set the Splunk span processor"""
+        if hasattr(self, '_splunk_processor') and self._splunk_processor:
+            try:
+                self._splunk_processor.shutdown()
+            except Exception:
+                pass
+        self._splunk_processor = processor
+        self._splunk_project = project_name
     
     def switch_to(self, platform: str):
         """Switch which platform receives spans"""
@@ -69,29 +82,39 @@ class SwitchableSpanProcessor:
             span.set_attribute("openinference.project.name", self._phoenix_project)
         elif self._active == "arize" and self._arize_project:
             span.set_attribute("arize.project.name", self._arize_project)
-        
+        elif self._active == "splunk" and self._splunk_project:
+            span.set_attribute("deployment.environment", self._splunk_project)
+
         if self._active == "phoenix" and self._phoenix_processor:
             self._phoenix_processor.on_start(span, parent_context)
         elif self._active == "arize" and self._arize_processor:
             self._arize_processor.on_start(span, parent_context)
-    
+        elif self._active == "splunk" and self._splunk_processor:
+            self._splunk_processor.on_start(span, parent_context)
+
     def on_end(self, span):
         if self._active == "phoenix" and self._phoenix_processor:
             self._phoenix_processor.on_end(span)
         elif self._active == "arize" and self._arize_processor:
             self._arize_processor.on_end(span)
+        elif self._active == "splunk" and self._splunk_processor:
+            self._splunk_processor.on_end(span)
     
     def shutdown(self):
         if self._phoenix_processor:
             self._phoenix_processor.shutdown()
         if self._arize_processor:
             self._arize_processor.shutdown()
-    
+        if self._splunk_processor:
+            self._splunk_processor.shutdown()
+
     def force_flush(self, timeout_millis: int = 30000):
         if self._active == "phoenix" and self._phoenix_processor:
             self._phoenix_processor.force_flush(timeout_millis)
         elif self._active == "arize" and self._arize_processor:
             self._arize_processor.force_flush(timeout_millis)
+        elif self._active == "splunk" and self._splunk_processor:
+            self._splunk_processor.force_flush(timeout_millis)
 
 
 def _create_phoenix_processor():
@@ -156,6 +179,24 @@ def _create_arize_processor():
         return None, None
 
 
+def _create_splunk_processor():
+    """Create a Splunk OTel Collector processor. Returns (processor, project_name) tuple."""
+    endpoint = os.getenv("SPLUNK_OTEL_ENDPOINT", "http://localhost:4318/v1/traces")
+    project = os.getenv("GALILEO_PROJECT", "galileo-demo")
+    print(f"[OTLP] Creating Splunk processor -> {endpoint}")
+
+    try:
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+        exporter = OTLPSpanExporter(endpoint=endpoint)
+        print(f"[OTLP] Splunk processor created (service: {project})")
+        return BatchSpanProcessor(exporter), project
+    except Exception as e:
+        print(f"[OTLP] Failed to create Splunk processor: {e}")
+        return None, None
+
+
 def initialize_otlp_tracing():
     """
     Initialize OTLP tracing infrastructure. Call ONCE before LangChain imports.
@@ -182,6 +223,7 @@ def initialize_otlp_tracing():
         # Check credentials availability
         _phoenix_available = bool(os.getenv("PHOENIX_ENDPOINT") and os.getenv("PHOENIX_API_KEY"))
         _arize_available = bool(os.getenv("ARIZE_SPACE_ID") and os.getenv("ARIZE_API_KEY"))
+        _splunk_available = bool(os.getenv("SPLUNK_OTEL_ENDPOINT"))
         
         # Get project name for Phoenix (baked into resource, can't change at runtime)
         # Priority: PHOENIX_PROJECT_NAME > GALILEO_PROJECT > "galileo-demo"
@@ -207,6 +249,7 @@ def initialize_otlp_tracing():
         print(f"   Phoenix project (fixed): {project}")
         print(f"   Phoenix: {'available' if _phoenix_available else 'no credentials'}")
         print(f"   Arize: {'available' if _arize_available else 'no credentials'}")
+        print(f"   Splunk: {'available' if _splunk_available else 'no credentials'}")
         
         return "initialized"
         
@@ -230,6 +273,8 @@ def switch_otlp_platform(platform: str) -> bool:
     platform = platform.lower().strip()
     if platform in ["arize", "arize-ax", "arize_ax", "arize ax"]:
         platform = "arize"
+    if platform in ["splunk", "splunk-otel", "splunk_otel"]:
+        platform = "splunk"
     
     # Handle "none"
     if platform == "none":
@@ -244,7 +289,7 @@ def switch_otlp_platform(platform: str) -> bool:
     if platform == "arize" and not _arize_available:
         print(f"[OTLP] Arize not available (no credentials)")
         return False
-    
+
     # Create processor (reads GALILEO_PROJECT at creation time)
     if platform == "phoenix":
         processor, project_name = _create_phoenix_processor()
@@ -254,6 +299,10 @@ def switch_otlp_platform(platform: str) -> bool:
         processor, project_name = _create_arize_processor()
         if processor:
             _switchable_processor.set_arize_processor(processor, project_name)
+    elif platform == "splunk":
+        processor, project_name = _create_splunk_processor()
+        if processor:
+            _switchable_processor.set_splunk_processor(processor, project_name)
     
     _switchable_processor.switch_to(platform)
     _active_platform = platform
@@ -273,3 +322,8 @@ def is_phoenix_available() -> bool:
 def is_arize_available() -> bool:
     """Check if Arize credentials are configured."""
     return _arize_available
+
+
+def is_splunk_available() -> bool:
+    """Check if Splunk OTel endpoint is configured."""
+    return _splunk_available
