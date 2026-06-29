@@ -675,9 +675,67 @@ Each mode tests different observability capabilities and helps demonstrate how G
 - Demo tips and best practices
 - Common questions and troubleshooting
 
+## Splunk Observability Cloud Integration
+
+> **Roadmap note:** Galileo is moving into Splunk Observability Cloud as **Splunk Agent Observability**. This integration is an early preview of that direction — you can use it today to see Galileo agent traces alongside your infrastructure and application telemetry in a single pane of glass.
+
+This demo supports forwarding LangChain agent traces to [Splunk Observability Cloud](https://www.splunk.com/en_us/download/observability-cloud-free-edition.html) via the OpenTelemetry Collector. A **free edition** is available with no credit card required.
+
+### How it works
+
+```
+Galileo Demo App
+  → OpenTelemetry (LangChain instrumentation)
+    → Splunk OTel Collector (local)
+      → Splunk APM (us1 / your realm)
+```
+
+### Setup
+
+**1. Get free access to Splunk Observability Cloud**
+
+Sign up at **https://www.splunk.com/en_us/download/observability-cloud-free-edition.html** — no credit card required.
+
+Once logged in, find your **Access Token** and **Realm** (e.g. `us1`) under **Settings → Access Tokens**.
+
+**2. Run the Splunk OTel Collector**
+
+A reference collector config is provided at [`examples/splunk-otel/collector-config.yaml`](examples/splunk-otel/collector-config.yaml).
+
+```bash
+export SPLUNK_ACCESS_TOKEN=your_token_here
+export SPLUNK_REALM=us1
+
+docker run -d \
+  --name splunk-otel-collector \
+  -p 4317:4317 -p 4318:4318 -p 13133:13133 \
+  -e SPLUNK_ACCESS_TOKEN \
+  -e SPLUNK_REALM \
+  -v $(pwd)/examples/splunk-otel/collector-config.yaml:/etc/otel/config.yaml \
+  quay.io/signalfx/splunk-otel-collector:latest \
+  --config /etc/otel/config.yaml
+```
+
+**3. Add to `.streamlit/secrets.toml`**
+
+```toml
+splunk_otel_endpoint = "http://localhost:4318/v1/traces"
+```
+
+**4. Enable in the app**
+
+In the sidebar, toggle **"Send traces to Splunk APM"** under the **📡 Splunk Observability** section. Agent traces will appear in **Splunk APM** under the service name matching your Galileo project.
+
+### What you'll see in Splunk APM
+
+- End-to-end LangChain agent traces (LLM calls, tool calls, RAG retrieval)
+- Span-level latency and error rates
+- Service map showing agent dependencies
+
 ## What's Coming Next
 
 - **Live deployment URL** for easy demo access without local setup
+- **Splunk Agent Observability** — native Galileo integration within Splunk Observability Cloud
 
 ## Updates and Issues
 

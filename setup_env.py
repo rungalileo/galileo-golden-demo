@@ -90,7 +90,8 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
             "POSTGRES_USER": secrets.get("postgres_user", "postgres"),
             "POSTGRES_PASSWORD": secrets.get("postgres_password", ""),
             "POSTGRES_DB": secrets.get("postgres_db", "vectordb"),
-            "ENVIRONMENT": secrets.get("environment", "local")
+            "ENVIRONMENT": secrets.get("environment", "local"),
+            "SPLUNK_OTEL_ENDPOINT": secrets.get("splunk_otel_endpoint", "http://localhost:4318/v1/traces")
         }
         
         # If domain is specified, add domain-specific settings

@@ -835,6 +835,25 @@ def multi_domain_agent_app(domain_name: str):
                 st.write("Galileo project/log stream not configured")
 
             st.divider()
+            st.subheader("📡 Splunk Observability")
+            try:
+                from tracing_setup import initialize_otlp_tracing, switch_otlp_platform, get_active_platform
+                initialize_otlp_tracing()
+                splunk_enabled = st.toggle(
+                    "Send traces to Splunk APM",
+                    value=get_active_platform() == "splunk",
+                    help="Forwards LangChain spans to your local OTel Collector → Splunk Observability Cloud (us1).",
+                )
+                if splunk_enabled and get_active_platform() != "splunk":
+                    switch_otlp_platform("splunk")
+                    st.success("Splunk tracing enabled")
+                elif not splunk_enabled and get_active_platform() == "splunk":
+                    switch_otlp_platform("none")
+                    st.info("Splunk tracing disabled")
+            except Exception as _splunk_err:
+                st.caption(f"Splunk tracing unavailable: {_splunk_err}")
+
+            st.divider()
             selected_provider, selected_model = render_model_settings(
                 domain_name, domain_config_key
             )
