@@ -20,11 +20,11 @@ processors:
 
 exporters:
   sapm:
-    access_token: sVj15AgwXYTVaPE8Ml5eFA
-    endpoint: https://ingest.us1.signalfx.com/v2/trace
+    access_token: ${SPLUNK_ACCESS_TOKEN}
+    endpoint: https://ingest.${SPLUNK_REALM}.signalfx.com/v2/trace
   signalfx:
-    access_token: sVj15AgwXYTVaPE8Ml5eFA
-    realm: us1
+    access_token: ${SPLUNK_ACCESS_TOKEN}
+    realm: ${SPLUNK_REALM}
 
 service:
   extensions: [health_check]

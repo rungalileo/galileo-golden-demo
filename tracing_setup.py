@@ -61,7 +61,7 @@ class SwitchableSpanProcessor:
 
     def set_splunk_processor(self, processor, project_name: str = None):
         """Set the Splunk span processor"""
-        if hasattr(self, '_splunk_processor') and self._splunk_processor:
+        if self._splunk_processor:
             try:
                 self._splunk_processor.shutdown()
             except Exception:
@@ -107,6 +107,9 @@ class SwitchableSpanProcessor:
             self._arize_processor.shutdown()
         if self._splunk_processor:
             self._splunk_processor.shutdown()
+
+    def _on_ending(self, span):
+        self.on_end(span)
 
     def force_flush(self, timeout_millis: int = 30000):
         if self._active == "phoenix" and self._phoenix_processor:
@@ -221,6 +224,7 @@ def initialize_otlp_tracing():
         _switchable_processor = SwitchableSpanProcessor()
         
         # Check credentials availability
+        global _phoenix_available, _arize_available, _splunk_available
         _phoenix_available = bool(os.getenv("PHOENIX_ENDPOINT") and os.getenv("PHOENIX_API_KEY"))
         _arize_available = bool(os.getenv("ARIZE_SPACE_ID") and os.getenv("ARIZE_API_KEY"))
         _splunk_available = bool(os.getenv("SPLUNK_OTEL_ENDPOINT"))
