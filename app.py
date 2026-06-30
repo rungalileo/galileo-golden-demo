@@ -2,12 +2,13 @@
 Galileo Demo App
 """
 import uuid
-from typing import Optional
 import streamlit as st
 import os
 import io
 
-# Load environment from secrets before importing domain/agent modules.
+# ============================================================================
+# CRITICAL: Load environment variables BEFORE any LangChain imports!
+# ============================================================================
 from dotenv import load_dotenv
 from setup_env import setup_environment
 
@@ -19,14 +20,40 @@ if not os.getenv('_GALILEO_ENV_LOADED'):
     setup_environment()
     os.environ['_GALILEO_ENV_LOADED'] = 'true'
 
+# ============================================================================
+# CRITICAL: Initialize OTLP tracing BEFORE importing LangChain!
+# OpenTelemetry instrumentation must be set up before LangChain modules are loaded
+# 
+# The tracing infrastructure is initialized ONCE with a "switchable" processor.
+# Platform can be changed at runtime via switch_otlp_platform() - NO restart needed!
+# ============================================================================
+from tracing_setup import (
+    initialize_otlp_tracing,
+    switch_otlp_platform,
+    get_active_platform,
+    is_phoenix_available,
+    is_arize_available,
+)
+
+# Initialize OTLP tracing infrastructure (happens once at module load)
+# This sets up OpenTelemetry with a switchable processor - platforms can be changed at runtime
+initialize_otlp_tracing()
+
+# ============================================================================
+# NOW we can import LangChain - OTLP instrumentation is ready!
+# ============================================================================
 from galileo import galileo_context, GalileoLogger
 from agent_factory import AgentFactory
 from domain_manager import DomainManager
 from langchain_core.messages import AIMessage, HumanMessage
 from agent_frameworks.langgraph.langgraph_rag import get_domain_rag_system
 from helpers.galileo_api_helpers import get_galileo_app_url, get_galileo_project_id, get_galileo_log_stream_id
-from helpers.agent_control_helpers import init_agent_control
-from helpers.hallucination_helpers import log_hallucination_for_domain
+from helpers.protect_helpers import get_or_create_protect_stage
+from helpers.hallucination_helpers import (
+    log_hallucination_for_domain,
+    log_specific_hallucination,
+    match_hallucination_in_input,
+)
 from experiments.experiment_helpers import (
     get_all_datasets,
     get_dataset_by_name,
@@ -38,127 +65,27 @@ from experiments.experiment_helpers import (
     AVAILABLE_METRICS
 )
 
+# LangSmith imports
+try:
+    from langchain_classic.callbacks.tracers import LangChainTracer
+    from langsmith import Client
+    LANGSMITH_AVAILABLE = True
+except ImportError:
+    LANGSMITH_AVAILABLE = False
+    print("⚠️ LangSmith not available - install with: pip install langsmith langchain")
+
+# Braintrust imports
+try:
+    from braintrust import init_logger as braintrust_init_logger
+    from braintrust_langchain import BraintrustCallbackHandler, set_global_handler as braintrust_set_global_handler
+    BRAINTRUST_AVAILABLE = True
+except ImportError:
+    BRAINTRUST_AVAILABLE = False
+    print("⚠️ Braintrust not available - install with: pip install braintrust braintrust-langchain")
+
+
 # Configuration
 FRAMEWORK = "LangGraph"
-
-
-def _models_for_provider(domain_info: dict, provider: str) -> tuple[list[str], str]:
-    """Return model options and default for the selected provider."""
-    if provider == "hosted":
-        models = domain_info.get("hosted_models") or ["gpt-4o"]
-        default = domain_info.get("hosted_default_model") or models[0]
-    else:
-        models = domain_info.get("local_models") or domain_info.get("available_models") or ["gemma4"]
-        default = (
-            domain_info.get("local_default_model")
-            or domain_info.get("default_model")
-            or models[0]
-        )
-    return models, default
-
-
-def _invalidate_domain_agent_state(domain_name: str) -> None:
-    """Clear cached agent and RAG instances after provider/model changes."""
-    prefix = f"agent_{domain_name}_"
-    for key in list(st.session_state.keys()):
-        if isinstance(key, str) and key.startswith(prefix):
-            del st.session_state[key]
-    rag_key = f"rag_initialized_{domain_name}"
-    if rag_key in st.session_state:
-        del st.session_state[rag_key]
-    try:
-        from agent_frameworks.langgraph.langgraph_rag import _rag_cache
-
-        stale_keys = [key for key in _rag_cache if key.startswith(f"{domain_name}_")]
-        for key in stale_keys:
-            del _rag_cache[key]
-    except Exception:
-        pass
-
-
-def _normalize_provider(provider: Optional[str]) -> str:
-    """Normalize provider values to 'local' or 'hosted'."""
-    normalized = str(provider or "local").strip().lower()
-    if normalized in {"hosted", "openai"}:
-        return "hosted"
-    return "local"
-
-
-def render_model_settings(domain_name: str, domain_config_key: str) -> tuple[str, str]:
-    """Render provider/model controls in the sidebar and return the active selection."""
-    st.subheader("Model")
-    domain_info = st.session_state.get(domain_config_key, {})
-
-    provider_key = f"llm_provider_{domain_name}"
-    prev_provider_key = f"llm_provider_prev_{domain_name}"
-    selected_model_key = f"selected_model_{domain_name}"
-
-    if provider_key not in st.session_state:
-        st.session_state[provider_key] = "local"
-    if prev_provider_key not in st.session_state:
-        st.session_state[prev_provider_key] = st.session_state[provider_key]
-
-    prev_provider = st.session_state[prev_provider_key]
-    selected_provider = st.radio(
-        "Model provider",
-        options=["local", "hosted"],
-        format_func=lambda x: "Local (Ollama)" if x == "local" else "Hosted (OpenAI)",
-        index=0 if st.session_state[provider_key] == "local" else 1,
-        key=provider_key,
-        horizontal=True,
-    )
-    selected_provider = _normalize_provider(selected_provider)
-
-    if selected_provider == "hosted" and not os.environ.get("OPENAI_API_KEY"):
-        st.warning(
-            "Set `openai_api_key` in `.streamlit/secrets.toml` to use Hosted (OpenAI)."
-        )
-
-    try:
-        from helpers.pgvector_utils import collection_exists
-
-        if not collection_exists(domain_name, "local"):
-            st.warning(
-                f"No vector index for **{domain_name}**. "
-                f"Run: `python helpers/setup_vectordb.py {domain_name} local`"
-            )
-    except Exception:
-        pass
-
-    available_models, default_model = _models_for_provider(domain_info, selected_provider)
-
-    if selected_provider != _normalize_provider(prev_provider):
-        st.session_state[selected_model_key] = default_model
-        st.session_state[prev_provider_key] = selected_provider
-        _invalidate_domain_agent_state(domain_name)
-        st.rerun()
-
-    if (
-        selected_model_key not in st.session_state
-        or st.session_state[selected_model_key] not in available_models
-    ):
-        st.session_state[selected_model_key] = default_model
-
-    prev_model = st.session_state[selected_model_key]
-    model_index = available_models.index(prev_model) if prev_model in available_models else 0
-    selected_model = st.selectbox(
-        "Select Model",
-        options=available_models,
-        index=model_index,
-        key=f"model_select_{domain_name}",
-        help=(
-            "Ollama model used for chat and experiments"
-            if selected_provider == "local"
-            else "OpenAI model used for chat and experiments"
-        ),
-    )
-    if selected_model != prev_model:
-        st.session_state[selected_model_key] = selected_model
-        _invalidate_domain_agent_state(domain_name)
-        st.rerun()
-
-    st.session_state[prev_provider_key] = selected_provider
-    return selected_provider, selected_model
 
 
 def initialize_rag_systems(domain_name: str):
@@ -175,31 +102,129 @@ def initialize_rag_systems(domain_name: str):
         return False
 
 
+def initialize_langsmith_tracing(domain_name: str = None):
+    """Initialize LangSmith tracing if enabled and configured
+    
+    Uses the same project naming as Galileo:
+    - First checks galileo.project in domain config
+    - Falls back to galileo-demo-{domain_name}
+    
+    Args:
+        domain_name: Name of the domain to get project configuration from
+    """
+    if not LANGSMITH_AVAILABLE:
+        return False
+    
+    if not hasattr(st.session_state, 'logger_langsmith') or not st.session_state.logger_langsmith:
+        return False
+    
+    langsmith_api_key = os.getenv("LANGCHAIN_API_KEY")
+    
+    if not langsmith_api_key:
+        print("⚠️ LangSmith enabled but LANGCHAIN_API_KEY not found")
+        return False
+    
+    # Use the same project name as Galileo
+    langsmith_project = None
+    if domain_name:
+        full_config_key = f"full_domain_config_{domain_name}"
+        if full_config_key in st.session_state:
+            domain_config = st.session_state[full_config_key]
+            galileo_config = domain_config.get("galileo", {})
+            langsmith_project = galileo_config.get("project")
+    
+    # Fall back to default: galileo-demo-{domain_name}
+    if not langsmith_project and domain_name:
+        langsmith_project = f"galileo-demo-{domain_name}"
+    elif not langsmith_project:
+        langsmith_project = "galileo-demo"
+    
+    try:
+        # Create LangSmith client and tracer
+        langsmith_client = Client(api_key=langsmith_api_key)
+        langsmith_tracer = LangChainTracer(
+            project_name=langsmith_project,
+            client=langsmith_client
+        )
+        
+        st.session_state.langsmith_tracer = langsmith_tracer
+        st.session_state.langsmith_project = langsmith_project
+        print(f"✅ LangSmith tracing initialized")
+        print(f"   Project: {langsmith_project}")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to initialize LangSmith: {e}")
+        return False
+
+
+def initialize_braintrust_tracing(domain_name: str = None):
+    """Initialize Braintrust tracing if enabled and configured
+    
+    Uses the same project naming as Galileo:
+    - First checks galileo.project in domain config
+    - Falls back to galileo-demo-{domain_name}
+    
+    Args:
+        domain_name: Name of the domain to get project configuration from
+    """
+    if not BRAINTRUST_AVAILABLE:
+        return False
+    
+    if not hasattr(st.session_state, 'logger_braintrust') or not st.session_state.logger_braintrust:
+        return False
+    
+    braintrust_api_key = os.getenv("BRAINTRUST_API_KEY")
+    
+    if not braintrust_api_key:
+        print("⚠️ Braintrust enabled but BRAINTRUST_API_KEY not found")
+        return False
+    
+    # Use the same project name as Galileo
+    braintrust_project = None
+    if domain_name:
+        full_config_key = f"full_domain_config_{domain_name}"
+        if full_config_key in st.session_state:
+            domain_config = st.session_state[full_config_key]
+            galileo_config = domain_config.get("galileo", {})
+            braintrust_project = galileo_config.get("project")
+        else:
+            print(f"⚠️ Braintrust: domain config not found in session state for {domain_name}")
+    else:
+        print(f"⚠️ Braintrust: domain_name not provided")
+    
+    # Fall back to default: galileo-demo-{domain_name}
+    if not braintrust_project and domain_name:
+        braintrust_project = f"galileo-demo-{domain_name}"
+    elif not braintrust_project:
+        braintrust_project = "galileo-demo"
+    
+    try:
+        # Initialize Braintrust logger first - this returns a logger instance
+        print(f"🔧 Initializing Braintrust logger with project: {braintrust_project}")
+        logger = braintrust_init_logger(project=braintrust_project, api_key=braintrust_api_key)
+        print(f"🔧 Logger initialized: {logger}")
+        
+        # Create Braintrust callback handler with the logger
+        braintrust_handler = BraintrustCallbackHandler(logger=logger)
+        
+        # Set as global handler (recommended by Braintrust)
+        braintrust_set_global_handler(braintrust_handler)
+        
+        st.session_state.braintrust_handler = braintrust_handler
+        st.session_state.braintrust_project = braintrust_project
+        print(f"✅ Braintrust tracing initialized")
+        print(f"   Project: {braintrust_project}")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to initialize Braintrust: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def escape_dollar_signs(text: str) -> str:
     """Escape dollar signs in text to prevent LaTeX interpretation."""
     return text.replace('$', '\\$')
-
-
-def add_hallucination_interaction_to_chat(domain_config: dict) -> bool:
-    """Append the demo hallucination Q&A to chat history for UI display."""
-    example_queries = domain_config.get("ui", {}).get("example_queries", [])
-    hallucinations = domain_config.get("demo_hallucinations", [])
-
-    if not example_queries or not hallucinations:
-        return False
-
-    question = example_queries[0]
-    hallucinated_answer = hallucinations[0].get("hallucinated_answer", "")
-
-    if not question or not hallucinated_answer:
-        return False
-
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    st.session_state.messages.append({"message": HumanMessage(content=question), "agent": "user"})
-    st.session_state.messages.append({"message": AIMessage(content=hallucinated_answer), "agent": "assistant"})
-    return True
 
 
 def display_chat_history():
@@ -309,6 +334,17 @@ def process_input_for_simple_app(user_input: str | None):
     
     # Check if we need to process a message
     if st.session_state.get("processing", False):
+        # Set Protect on the agent if enabled
+        if st.session_state.get("protect_enabled", False):
+            stage_id = st.session_state.get("protect_stage_id")
+            output_stage_id = st.session_state.get("protect_output_stage_id")
+            if stage_id:
+                st.session_state.agent.set_protect(True, stage_id, output_stage_id)
+            else:
+                st.session_state.agent.set_protect(False)
+        else:
+            st.session_state.agent.set_protect(False)
+        
         # Convert session state messages to the format expected by the agent
         conversation_messages = []
         for msg_data in st.session_state.messages:
@@ -319,8 +355,42 @@ def process_input_for_simple_app(user_input: str | None):
                 elif isinstance(message, AIMessage):
                     conversation_messages.append({"role": "assistant", "content": message.content})
         
-        # Get the actual response from the agent (Agent Control is handled via @control decorators)
-        response = st.session_state.agent.process_query(conversation_messages)
+        # Check whether the latest user message matches a configured
+        # demo hallucination. If it does, short-circuit the agent and
+        # synthesize a trace with the canned wrong answer so Galileo's
+        # context-adherence / hallucination metric has a real (input,
+        # context, output) triple to score against — same trace shape
+        # as the sidebar "Log Hallucination" button.
+        response = None
+        latest_user_msg = next(
+            (m["content"] for m in reversed(conversation_messages) if m["role"] == "user"),
+            None,
+        )
+        domain_name = st.session_state.get("domain_name", "default")
+        domain_full_config = st.session_state.get(
+            f"full_domain_config_{domain_name}", {}
+        )
+        hallucinations = domain_full_config.get("demo_hallucinations", [])
+        matched = (
+            match_hallucination_in_input(latest_user_msg, hallucinations)
+            if latest_user_msg else None
+        )
+
+        if matched:
+            try:
+                log_specific_hallucination(
+                    domain_name=domain_name,
+                    domain_config=domain_full_config,
+                    hallucination=matched,
+                    user_question=latest_user_msg,
+                    existing_logger=st.session_state.get("galileo_logger"),
+                )
+            except Exception as e:
+                print(f"⚠️ Failed to log chat-triggered hallucination: {e}")
+            response = matched.get("hallucinated_answer", "")
+
+        if response is None:
+            response = st.session_state.agent.process_query(conversation_messages)
 
         # Create AI message and add to history
         ai_message = AIMessage(content=response)
@@ -396,11 +466,7 @@ def render_experiments_page(domain_name: str, domain_config, agent_factory):
         
         # Model used for this experiment (same as sidebar selection)
         experiment_model = st.session_state.get(f"selected_model_{domain_name}") or st.session_state.get(f"domain_config_{domain_name}", {}).get("default_model")
-        experiment_provider = st.session_state.get(f"llm_provider_{domain_name}", "local")
-        provider_label = "OpenAI" if experiment_provider == "hosted" else "Ollama"
-        st.caption(
-            f"Provider: **{provider_label}** | Model: **{experiment_model or 'default'}** (change in sidebar)"
-        )
+        st.caption(f"Model: **{experiment_model or 'default'}** (change in sidebar)")
         
         st.markdown("---")
         
@@ -452,7 +518,6 @@ def render_experiments_page(domain_name: str, domain_config, agent_factory):
                     metrics=metrics_to_run,
                     agent_factory=agent_factory,
                     model_name=experiment_model,  # from sidebar; set above in this block
-                    llm_provider=experiment_provider,
                 )
     else:
         st.info("👆 Please select or create a dataset to continue.")
@@ -686,7 +751,6 @@ def run_experiment_ui(
     metrics: list,
     agent_factory,
     model_name: str = None,
-    llm_provider: str = "local",
 ):
     """Run the experiment and display results."""
     st.session_state.experiment_running = True
@@ -700,7 +764,6 @@ def run_experiment_ui(
                 agent_factory=agent_factory,
                 metrics=metrics,
                 model_name=model_name,
-                llm_provider=llm_provider,
             )
             
             st.session_state.experiment_running = False
@@ -783,6 +846,12 @@ def multi_domain_agent_app(domain_name: str):
         )
         st.session_state[env_setup_key] = True
     
+    # If OTLP platform is active, recreate processor for new domain's project
+    # (GALILEO_PROJECT env var was just updated by setup_environment above)
+    current_platform = get_active_platform()
+    if current_platform != "none":
+        switch_otlp_platform(current_platform)  # Recreates with current GALILEO_PROJECT
+    
     # Initialize RAG systems for this domain (per domain)
     rag_key = f"rag_initialized_{domain_name}"
     if rag_key not in st.session_state:
@@ -806,21 +875,25 @@ def multi_domain_agent_app(domain_name: str):
     
     # Chat Tab
     with tab1:
+        render_chat_page(factory, domain_name)
+        
+        # Add Galileo Tracing link in sidebar when on Chat tab
         with st.sidebar:
             st.subheader("Galileo Tracing")
-
+            
             # Get project and log stream names from environment variables (set by setup_environment)
             project_name = os.environ.get("GALILEO_PROJECT", "")
             log_stream_name = os.environ.get("GALILEO_LOG_STREAM", "")
-
+            
             if project_name and log_stream_name:
                 try:
+                    # Get the console URL and project/log stream info
                     console_url = get_galileo_app_url()
                     project_id = get_galileo_project_id(project_name)
-
+                    
                     if project_id:
                         log_stream_id = get_galileo_log_stream_id(project_id, log_stream_name)
-
+                        
                         if log_stream_id:
                             project_url = f"{console_url}/project/{project_id}/log-streams/{log_stream_id}"
                             st.markdown(f"[📊 View traces in Galileo]({project_url})")
@@ -828,30 +901,109 @@ def multi_domain_agent_app(domain_name: str):
                             st.write("Log stream not found")
                     else:
                         st.write("Project not found")
-
+                        
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
             else:
                 st.write("Galileo project/log stream not configured")
-
+            
+            # Model selection (used for both Chat and Experiments)
             st.divider()
-            selected_provider, selected_model = render_model_settings(
-                domain_name, domain_config_key
+            st.subheader("Model")
+            domain_info = st.session_state.get(domain_config_key, {})
+            available_models = domain_info.get("available_models") or [domain_info.get("model", "gpt-4.1")]
+            default_model = domain_info.get("default_model") or domain_info.get("model") or available_models[0]
+            selected_model_key = f"selected_model_{domain_name}"
+            if selected_model_key not in st.session_state:
+                st.session_state[selected_model_key] = default_model
+            prev_model = st.session_state[selected_model_key]
+            model_index = available_models.index(prev_model) if prev_model in available_models else 0
+            selected_model = st.selectbox(
+                "Select Model",
+                options=available_models,
+                index=model_index,
+                key=f"model_select_{domain_name}",
+                help="OpenAI model used for chat and experiments"
             )
-
-            # Agent Control guardrails (always enabled; configured server-side)
+            if selected_model != prev_model:
+                st.session_state[selected_model_key] = selected_model
+                agent_key = f"agent_{domain_name}"
+                if agent_key in st.session_state:
+                    del st.session_state[agent_key]
+                st.rerun()
+            
+            # Add Galileo Protect toggle
             st.divider()
-            st.subheader("🛡️ Agent Control")
-            st.checkbox(
-                "Guardrails enabled",
-                value=True,
-                disabled=True,
-                help="Guardrails are always enabled in this demo.",
+            st.subheader("🛡️ Galileo Protect")
+            
+            # Initialize protect_enabled in session state (default to False, per domain)
+            protect_key = f"protect_enabled_{domain_name}"
+            if protect_key not in st.session_state:
+                st.session_state[protect_key] = False
+            
+            # Toggle for Protect
+            protect_enabled = st.checkbox(
+                "Enable Prompt Runtime Protection",
+                value=st.session_state[protect_key],
+                help="Enable Galileo Protect"
             )
-            st.caption(
-                "Guardrails are controlled on the Agent Control server. "
-                "Manage controls through the Console UI (or API/SDK)."
-            )
+            st.session_state[protect_key] = protect_enabled
+            
+            # Show current Protect configuration from domain config
+            if protect_enabled:
+                protect_config = st.session_state.get(full_config_key, {}).get("protect", {})
+                if protect_config:
+                    metrics = protect_config.get("metrics", [])
+                    if metrics:
+                        with st.expander("Protect Configuration"):
+                            st.write("**Active Metrics:**")
+                            for metric in metrics:
+                                metric_name = metric.get("name", "Unknown")
+                                operator = metric.get("operator", "")
+                                
+                                # Display based on metric type
+                                if "target_values" in metric:
+                                    target_values = metric["target_values"]
+                                    st.write(f"- **{metric_name}** ({operator}): {', '.join(target_values)}")
+                                elif "threshold" in metric:
+                                    threshold = metric["threshold"]
+                                    st.write(f"- **{metric_name}** ({operator}): {threshold}")
+                                else:
+                                    st.write(f"- **{metric_name}** ({operator})")
+                            
+                            messages = protect_config.get("messages", [])
+                            if messages:
+                                st.write("")
+                                st.write("**Custom Messages:**")
+                                for i, msg in enumerate(messages, 1):
+                                    st.write(f"{i}. {msg}")
+            
+            if protect_enabled:
+                st.info("🛡️ Protect is active. Prompt injection attempts will be blocked.")
+                
+                # Initialize input stage if needed (per domain)
+                stage_key = f"protect_stage_id_{domain_name}"
+                if stage_key not in st.session_state and project_name:
+                    try:
+                        with st.spinner("Setting up Protect input stage..."):
+                            stage_id = get_or_create_protect_stage(project_name, stage_name="protect-input-stage")
+                            st.session_state[stage_key] = stage_id
+                    except Exception as e:
+                        st.error(f"Failed to setup Protect input stage: {str(e)}")
+                        st.session_state[protect_key] = False
+
+                # Initialize output stage if needed (separate stage for output metrics)
+                output_stage_key = f"protect_output_stage_id_{domain_name}"
+                if output_stage_key not in st.session_state and project_name:
+                    try:
+                        with st.spinner("Setting up Protect output stage..."):
+                            output_stage_id = get_or_create_protect_stage(project_name, stage_name="protect-output-stage")
+                            st.session_state[output_stage_key] = output_stage_id
+                    except Exception as e:
+                        st.error(f"Failed to setup Protect output stage: {str(e)}")
+                        st.session_state[protect_key] = False
+            else:
+                st.info("Protect is disabled. All queries will be processed normally.")
             
             # Add Chaos Engineering section
             st.divider()
@@ -963,17 +1115,179 @@ def multi_domain_agent_app(domain_name: str):
                             existing_logger=existing_logger,
                         )
                         if success:
-                            add_hallucination_interaction_to_chat(domain_full_config)
-                            st.rerun()
+                            session_context = " in current session" if existing_logger else " in new session"
+                            st.success(f"Hallucination logged{session_context}! Check Galileo console.")
                         else:
                             st.error("Failed to log hallucination. Check logs for details.")
-
-        render_chat_page(
-            factory,
-            domain_name,
-            selected_provider=selected_provider,
-            selected_model=selected_model,
-        )
+            
+            # Add Observability Platforms section
+            st.divider()
+            st.subheader("Observability Platforms")
+            st.caption("Galileo is always enabled")
+            
+            with st.expander("Settings: Configure Loggers"):
+                # ============================================================================
+                # OTLP Platform Selection (Phoenix / Arize AX)
+                # ============================================================================
+                st.markdown("### OpenTelemetry Platforms")
+                st.caption("Click to switch instantly - no restart needed")
+                
+                current_platform = get_active_platform()
+                phoenix_available = is_phoenix_available()
+                arize_available = is_arize_available()
+                project_name = os.environ.get("GALILEO_PROJECT", "galileo-demo")
+                
+                # None button
+                if current_platform == "none":
+                    st.button("✓ None", disabled=True, use_container_width=True)
+                else:
+                    if st.button("None", use_container_width=True, key=f"otlp_none_{domain_name}"):
+                        switch_otlp_platform("none")
+                        st.rerun()
+                
+                # Phoenix button
+                if phoenix_available:
+                    if current_platform == "phoenix":
+                        st.button("✓ Phoenix", disabled=True, use_container_width=True)
+                    else:
+                        if st.button("Phoenix", use_container_width=True, key=f"otlp_phoenix_{domain_name}"):
+                            switch_otlp_platform("phoenix")
+                            st.rerun()
+                else:
+                    st.button("Phoenix (no credentials)", disabled=True, use_container_width=True)
+                
+                # Arize AX button
+                if arize_available:
+                    if current_platform == "arize":
+                        st.button("✓ Arize AX", disabled=True, use_container_width=True)
+                    else:
+                        if st.button("Arize AX", use_container_width=True, key=f"otlp_arize_{domain_name}"):
+                            switch_otlp_platform("arize")
+                            st.rerun()
+                else:
+                    st.button("Arize AX (no credentials)", disabled=True, use_container_width=True)
+                
+                # Show active platform details
+                if current_platform == "phoenix":
+                    st.success(f"✅ **Phoenix** is active")
+                    st.caption(f"📊 Project: {project_name} | [View Traces →](https://app.phoenix.arize.com)")
+                elif current_platform == "arize":
+                    st.success(f"✅ **Arize AX** is active")
+                    st.caption(f"📊 Model ID: {project_name} | [View Traces →](https://app.arize.com)")
+                else:
+                    st.info("ℹ️ No OpenTelemetry platform active")
+                
+                # Brief help
+                if not phoenix_available and not arize_available:
+                    st.caption("⚠️ Configure credentials in `.streamlit/secrets.toml` first")
+                
+                st.caption("📚 [Full documentation](documentation/observability_platforms/)")
+                
+                st.divider()
+                st.markdown("### Callback-based Platforms")
+                st.caption("Toggle instantly - no refresh required")
+                
+                # Initialize LangSmith toggle (per domain)
+                langsmith_key = f"logger_langsmith_{domain_name}"
+                if langsmith_key not in st.session_state:
+                    # Default to disabled
+                    st.session_state[langsmith_key] = False
+                
+                if LANGSMITH_AVAILABLE:
+                    langsmith_enabled = st.checkbox(
+                        "LangSmith",
+                        value=st.session_state.get(langsmith_key, False),
+                        help="LangChain LangSmith tracing",
+                        disabled=not bool(os.getenv("LANGCHAIN_API_KEY")),
+                        key=f"langsmith_toggle_{domain_name}"
+                    )
+                    
+                    # Update session state and reinitialize if changed
+                    if langsmith_enabled != st.session_state.get(langsmith_key, False):
+                        st.session_state[langsmith_key] = langsmith_enabled
+                        st.session_state.logger_langsmith = langsmith_enabled
+                        
+                        # Reinitialize LangSmith tracing
+                        if langsmith_enabled:
+                            if initialize_langsmith_tracing(domain_name):
+                                st.success("✅ LangSmith tracing enabled!")
+                            else:
+                                st.error("❌ Failed to enable LangSmith")
+                        else:
+                            # Remove tracer from session state
+                            if 'langsmith_tracer' in st.session_state:
+                                del st.session_state.langsmith_tracer
+                            if 'langsmith_project' in st.session_state:
+                                del st.session_state.langsmith_project
+                            st.info("LangSmith tracing disabled")
+                        
+                        # Force agent to reinitialize with new callbacks (on next message)
+                        agent_key = f"agent_{domain_name}"
+                        if agent_key in st.session_state:
+                            del st.session_state[agent_key]
+                    
+                    # Initialize on first load if enabled
+                    if langsmith_enabled and 'langsmith_tracer' not in st.session_state:
+                        st.session_state.logger_langsmith = True
+                        initialize_langsmith_tracing(domain_name)
+                    
+                    if langsmith_enabled:
+                        langsmith_project = st.session_state.get('langsmith_project', 'galileo-demo')
+                        st.caption(f"📊 Project: {langsmith_project}")
+                else:
+                    st.warning("⚠️ LangSmith not installed")
+                    st.caption("Install with: `pip install langsmith`")
+                
+                # Initialize Braintrust toggle (per domain)
+                braintrust_key = f"logger_braintrust_{domain_name}"
+                if braintrust_key not in st.session_state:
+                    # Default to disabled
+                    st.session_state[braintrust_key] = False
+                
+                if BRAINTRUST_AVAILABLE:
+                    braintrust_enabled = st.checkbox(
+                        "Braintrust",
+                        value=st.session_state.get(braintrust_key, False),
+                        help="Braintrust AI evaluation and observability",
+                        disabled=not bool(os.getenv("BRAINTRUST_API_KEY")),
+                        key=f"braintrust_toggle_{domain_name}"
+                    )
+                    
+                    # Update session state and reinitialize if changed
+                    if braintrust_enabled != st.session_state.get(braintrust_key, False):
+                        st.session_state[braintrust_key] = braintrust_enabled
+                        st.session_state.logger_braintrust = braintrust_enabled
+                        
+                        # Reinitialize Braintrust tracing
+                        if braintrust_enabled:
+                            if initialize_braintrust_tracing(domain_name):
+                                st.success("✅ Braintrust tracing enabled!")
+                            else:
+                                st.error("❌ Failed to enable Braintrust")
+                        else:
+                            # Remove handler from session state
+                            if 'braintrust_handler' in st.session_state:
+                                del st.session_state.braintrust_handler
+                            if 'braintrust_project' in st.session_state:
+                                del st.session_state.braintrust_project
+                            st.info("Braintrust tracing disabled")
+                        
+                        # Force agent to reinitialize with new callbacks (on next message)
+                        agent_key = f"agent_{domain_name}"
+                        if agent_key in st.session_state:
+                            del st.session_state[agent_key]
+                    
+                    # Initialize on first load if enabled
+                    if braintrust_enabled and 'braintrust_handler' not in st.session_state:
+                        st.session_state.logger_braintrust = True
+                        initialize_braintrust_tracing(domain_name)
+                    
+                    if braintrust_enabled:
+                        braintrust_project = st.session_state.get('braintrust_project', 'galileo-demo')
+                        st.caption(f"📊 Project: {braintrust_project}")
+                else:
+                    st.warning("⚠️ Braintrust not installed")
+                    st.caption("Install with: `pip install braintrust braintrust-langchain`")
     
     # Experiments Tab
     with tab2:
@@ -983,15 +1297,8 @@ def multi_domain_agent_app(domain_name: str):
         render_experiments_page(domain_name, full_domain_config, factory)
 
 
-def render_chat_page(
-    factory,
-    domain_name: str,
-    *,
-    selected_provider: str,
-    selected_model: str,
-):
+def render_chat_page(factory, domain_name: str):
     """Render the chat page."""
-    selected_provider = _normalize_provider(selected_provider)
     # Extract UI configuration from domain config (per domain)
     domain_config_key = f"domain_config_{domain_name}"
     ui_config = st.session_state[domain_config_key].get("ui", {})
@@ -1019,15 +1326,7 @@ def render_chat_page(
         project_name = galileo_config.get("project") or f"galileo-demo-{domain_name}"
         log_stream = galileo_config.get("log_stream", "default")
         try:
-            galileo_logger = GalileoLogger(project=project_name, log_stream=log_stream)
-            galileo_logger.enable_agent_control()
-            init_agent_control(
-                galileo_logger,
-                project_name=project_name,
-                log_stream=log_stream,
-                agent_description=f"{domain_name.title()} demo agent",
-            )
-            st.session_state[galileo_logger_key] = galileo_logger
+            st.session_state[galileo_logger_key] = GalileoLogger(project=project_name, log_stream=log_stream)
         except Exception as e:
             print(f"⚠️ Failed to create per-session GalileoLogger: {e}")
             st.session_state[galileo_logger_key] = None
@@ -1042,25 +1341,31 @@ def render_chat_page(
     )
     
     # Create agent dynamically using AgentFactory - works for any domain!
-    domain_info = st.session_state.get(f"domain_config_{domain_name}", {})
-    available_models, default_model = _models_for_provider(domain_info, selected_provider)
-    if selected_model not in available_models:
-        selected_model = default_model
-        st.session_state[f"selected_model_{domain_name}"] = selected_model
-
-    agent_cache_key = f"agent_{domain_name}_{selected_provider}_{selected_model}"
-    if agent_cache_key not in st.session_state:
-        st.session_state[agent_cache_key] = factory.create_agent(
+    agent_key = f"agent_{domain_name}"
+    selected_model = st.session_state.get(f"selected_model_{domain_name}")
+    if agent_key not in st.session_state:
+        st.session_state[agent_key] = factory.create_agent(
             domain=domain_name,
             framework=FRAMEWORK,
             session_id=st.session_state.session_id,
             model_name=selected_model,
             galileo_logger=st.session_state[galileo_logger_key],
-            llm_provider=selected_provider,
         )
-
+    
     # Set current agent for processing
-    st.session_state.agent = st.session_state[agent_cache_key]
+    st.session_state.agent = st.session_state[agent_key]
+    
+    # Update protect_enabled for the current domain
+    protect_key = f"protect_enabled_{domain_name}"
+    st.session_state.protect_enabled = st.session_state.get(protect_key, False)
+    
+    # Update protect stage IDs for the current domain
+    stage_key = f"protect_stage_id_{domain_name}"
+    if stage_key in st.session_state:
+        st.session_state.protect_stage_id = st.session_state[stage_key]
+    output_stage_key = f"protect_output_stage_id_{domain_name}"
+    if output_stage_key in st.session_state:
+        st.session_state.protect_output_stage_id = st.session_state[output_stage_key]
     
     process_input_for_simple_app(user_input)
 
@@ -1131,18 +1436,22 @@ def main():
             st.stop()
         
         # Create navigation with list of pages - hide navigation for clean demo
+        # NOTE: do NOT wrap nav.run() in a broad try/except — Streamlit calls
+        # the selected page function inline inside nav.run(), so any user-code
+        # exception (including transient ones during widget creation) gets
+        # swallowed here and then the fallback re-renders the page on top of
+        # the already-rendered output, causing duplicate widget keys.
+        # If we ever need to debug navigation specifically, log the full
+        # exception (repr, not str — many streamlit/internal exceptions have
+        # empty str()).
         try:
-            # uncomment this to show the navigation with different pages per domain
             nav = st.navigation(pages, position="hidden")
             nav.run()
         except Exception as nav_error:
-            st.error(f"Navigation error: {str(nav_error)}")
-            st.info(f"Available domains: {available_domains}")
-            st.info(f"Number of pages created: {len(pages)}")
-            # Fallback to default domain
-            if available_domains:
-                st.warning("Falling back to direct domain execution...")
-                multi_domain_agent_app(default_domain)
+            import traceback
+            print("Navigation error:", repr(nav_error))
+            traceback.print_exc()
+            st.error(f"Navigation error: {repr(nav_error)}")
         
     except Exception as e:
         st.error(f"Error initializing app: {str(e)}")

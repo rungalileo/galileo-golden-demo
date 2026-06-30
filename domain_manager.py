@@ -107,17 +107,9 @@ class DomainManager:
         if not default_model:
             raise ValueError(f"Domain '{domain_name}' missing 'default_model' or 'model_name' in model config")
         additional = model_cfg.get("additional_models") or []
-        local_models = [default_model] + [m for m in additional if m != default_model]
-
-        hosted_default = model_cfg.get("hosted_default_model") or "gpt-4o"
-        hosted_additional = model_cfg.get("hosted_additional_models") or [
-            "gpt-4o-mini",
-            "gpt-4.1",
-        ]
-        hosted_models = [hosted_default] + [
-            m for m in hosted_additional if m != hosted_default
-        ]
-
+        # Available models: default first, then rest, deduped
+        available_models = [default_model] + [m for m in additional if m != default_model]
+        
         return {
             "name": domain_config.name,
             "description": domain_config.description,
@@ -125,12 +117,8 @@ class DomainManager:
             "rag_enabled": domain_config.config["rag"]["enabled"],
             "model": default_model,
             "default_model": default_model,
-            "available_models": local_models,
-            "local_models": local_models,
-            "local_default_model": default_model,
-            "hosted_models": hosted_models,
-            "hosted_default_model": hosted_default,
-            "ui": domain_config.config.get("ui", {}),
+            "available_models": available_models,
+            "ui": domain_config.config.get("ui", {})  # Include UI configuration
         }
     
     def _load_yaml(self, file_path: str) -> Dict:

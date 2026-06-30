@@ -15,8 +15,6 @@ Usage:
 import json
 import time
 import functools
-import inspect
-import asyncio
 from chaos_engine import get_chaos_engine
 
 
@@ -51,72 +49,6 @@ def _extract_status_code(error_msg: str) -> str:
     return "500"
 
 
-def _build_chaos_wrappers(tool, display_name, func_name):
-    """Return sync and async wrappers that inject chaos before calling the tool."""
-    chaos = get_chaos_engine()
-
-    def _maybe_fail(*args):
-        if chaos.tool_instability_enabled:
-            should_fail, error_msg = chaos.should_fail_api_call(display_name)
-            if should_fail:
-                status_code = _extract_status_code(error_msg)
-                identifier = args[0] if args else "unknown"
-                return json.dumps(
-                    {
-                        "error": error_msg,
-                        "status_code": status_code,
-                        "error_type": "network_failure",
-                        "tool": func_name,
-                        "identifier": str(identifier),
-                        "chaos_injected": True,
-                    }
-                )
-
-        if chaos.rate_limit_chaos_enabled:
-            should_rate_limit, error_msg = chaos.should_fail_rate_limit(display_name)
-            if should_rate_limit:
-                identifier = args[0] if args else "unknown"
-                return json.dumps(
-                    {
-                        "error": error_msg,
-                        "status_code": "429",
-                        "error_type": "rate_limit",
-                        "tool": func_name,
-                        "identifier": str(identifier),
-                        "chaos_injected": True,
-                    }
-                )
-        return None
-
-    @functools.wraps(tool)
-    async def async_wrapper(*args, __original_func=tool, **kwargs):
-        failure = _maybe_fail(*args)
-        if failure is not None:
-            return failure
-
-        if chaos.tool_instability_enabled:
-            delay = chaos.inject_latency()
-            if delay > 0:
-                await asyncio.sleep(delay)
-
-        return await __original_func(*args, **kwargs)
-
-    @functools.wraps(tool)
-    def sync_wrapper(*args, __original_func=tool, **kwargs):
-        failure = _maybe_fail(*args)
-        if failure is not None:
-            return failure
-
-        if chaos.tool_instability_enabled:
-            delay = chaos.inject_latency()
-            if delay > 0:
-                time.sleep(delay)
-
-        return __original_func(*args, **kwargs)
-
-    return async_wrapper, sync_wrapper
-
-
 def wrap_tools_with_chaos(tools: list) -> list:
     """ Wrap all tools with chaos injection.
     
@@ -126,6 +58,7 @@ def wrap_tools_with_chaos(tools: list) -> list:
     Returns:
         List of wrapped tool functions
     """
+    chaos = get_chaos_engine()
     wrapped = []
     
     for tool in tools:
@@ -135,12 +68,56 @@ def wrap_tools_with_chaos(tools: list) -> list:
         
         func_name = tool.__name__
         display_name = func_name.replace("_", " ").title()
-        async_wrapper, sync_wrapper = _build_chaos_wrappers(tool, display_name, func_name)
-
-        if inspect.iscoroutinefunction(tool):
-            wrapped.append(async_wrapper)
-        else:
-            wrapped.append(sync_wrapper)
+        
+        @functools.wraps(tool)
+        def wrapper(*args, __original_func=tool, __display_name=display_name, __func_name=func_name, **kwargs):
+            # 1. API Failures - Return error as JSON instead of raising
+            if chaos.tool_instability_enabled:
+                should_fail, error_msg = chaos.should_fail_api_call(__display_name)
+                if should_fail:
+                    status_code = _extract_status_code(error_msg)
+                    identifier = args[0] if args else 'unknown'
+                    # Return error as structured response so Galileo logs it
+                    error_response = {
+                        "error": error_msg,
+                        "status_code": status_code,
+                        "error_type": "network_failure",
+                        "tool": __func_name,
+                        "identifier": str(identifier),
+                        "chaos_injected": True
+                    }
+                    return json.dumps(error_response)
+            
+            # 2. Rate Limits - Return error as JSON instead of raising
+            if chaos.rate_limit_chaos_enabled:
+                should_rate_limit, error_msg = chaos.should_fail_rate_limit(__display_name)
+                if should_rate_limit:
+                    identifier = args[0] if args else 'unknown'
+                    # Return error as structured response so Galileo logs it
+                    error_response = {
+                        "error": error_msg,
+                        "status_code": "429",
+                        "error_type": "rate_limit",
+                        "tool": __func_name,
+                        "identifier": str(identifier),
+                        "chaos_injected": True
+                    }
+                    return json.dumps(error_response)
+            
+            # 3. Latency
+            if chaos.tool_instability_enabled:
+                delay = chaos.inject_latency()
+                if delay > 0:
+                    time.sleep(delay)
+            
+            # 4. Execute the tool and return result
+            # NOTE: Data Corruption chaos is now handled at LLM level via system prompt injection
+            # (see agent.py invoke_chatbot function)
+            result = __original_func(*args, **kwargs)
+            
+            return result
+        
+        wrapped.append(wrapper)
     
     return wrapped
 
@@ -158,91 +135,52 @@ def wrap_rag_tool_with_chaos(rag_tool):
     
     # Check if it's a LangChain BaseTool (like StructuredTool)
     if isinstance(rag_tool, BaseTool):
-        original_func = rag_tool.coroutine or rag_tool.func
-        is_async = inspect.iscoroutinefunction(original_func)
-
-        if is_async:
-            @functools.wraps(original_func)
-            async def async_wrapper(*args, **kwargs):
-                if chaos.rag_chaos_enabled:
-                    should_fail, error_msg = chaos.should_disconnect_rag()
-                    if should_fail:
-                        return json.dumps(
-                            {
-                                "error": error_msg,
-                                "error_type": "rag_failure",
-                                "chaos_injected": True,
-                                "retrieved_documents": [],
-                            }
-                        )
-                return await original_func(*args, **kwargs)
-
-            wrapped_tool = type(rag_tool)(
-                name=rag_tool.name,
-                description=rag_tool.description,
-                coroutine=async_wrapper,
-                args_schema=rag_tool.args_schema,
-            )
-            return wrapped_tool
-
+        # Get the original function
+        original_func = rag_tool.func
+        
         @functools.wraps(original_func)
-        def sync_wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs):
+            # Check if RAG should fail THIS query (runtime check)
             if chaos.rag_chaos_enabled:
                 should_fail, error_msg = chaos.should_disconnect_rag()
                 if should_fail:
-                    return json.dumps(
-                        {
-                            "error": error_msg,
-                            "error_type": "rag_failure",
-                            "chaos_injected": True,
-                            "retrieved_documents": [],
-                        }
-                    )
+                    # Return error as structured response so Galileo logs it
+                    error_response = {
+                        "error": error_msg,
+                        "error_type": "rag_failure",
+                        "chaos_injected": True,
+                        "retrieved_documents": []  # Empty results
+                    }
+                    return json.dumps(error_response)
+            
+            # Normal RAG execution
             return original_func(*args, **kwargs)
-
+        
+        # Create a new BaseTool instance with the wrapped function
         wrapped_tool = type(rag_tool)(
             name=rag_tool.name,
             description=rag_tool.description,
-            func=sync_wrapper,
-            args_schema=rag_tool.args_schema,
+            func=wrapper,
+            args_schema=rag_tool.args_schema
         )
         return wrapped_tool
     else:
-        is_async = inspect.iscoroutinefunction(rag_tool)
-        if is_async:
-            @functools.wraps(rag_tool)
-            async def async_wrapper(*args, **kwargs):
-                if chaos.rag_chaos_enabled:
-                    should_fail, error_msg = chaos.should_disconnect_rag()
-                    if should_fail:
-                        return json.dumps(
-                            {
-                                "error": error_msg,
-                                "error_type": "rag_failure",
-                                "chaos_injected": True,
-                                "retrieved_documents": [],
-                            }
-                        )
-                return await rag_tool(*args, **kwargs)
-
-            return async_wrapper
-
+        # It's a plain function - wrap it directly
         @functools.wraps(rag_tool)
-        def sync_wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs):
             if chaos.rag_chaos_enabled:
                 should_fail, error_msg = chaos.should_disconnect_rag()
                 if should_fail:
-                    return json.dumps(
-                        {
-                            "error": error_msg,
-                            "error_type": "rag_failure",
-                            "chaos_injected": True,
-                            "retrieved_documents": [],
-                        }
-                    )
+                    error_response = {
+                        "error": error_msg,
+                        "error_type": "rag_failure",
+                        "chaos_injected": True,
+                        "retrieved_documents": []
+                    }
+                    return json.dumps(error_response)
             return rag_tool(*args, **kwargs)
-
-        return sync_wrapper
+        
+        return wrapper
 
 
 # Backwards compatibility aliases

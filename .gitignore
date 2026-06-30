@@ -66,25 +66,11 @@ Thumbs.db
 
 # Streamlit
 .streamlit/secrets.toml
-# Ignore any secrets files even if copied elsewhere
-**/secrets.toml
 
 # Environment variables
 .env
-.env.*
 .env.local
 .env.*.local
-
-# Dataset env files
-**/datasets/.env
-
-# Credentials / keys
-*.pem
-*.key
-*.p12
-*.pfx
-*.crt
-*.cer
 
 # Logs
 *.log
@@ -94,10 +80,6 @@ logs/
 data/
 *.db
 *.sqlite
-
-# Domain docs that are typically generated locally (can contain sensitive/example data)
-domains/**/docs/qa.csv
-domains/**/docs/relational_*.csv
 
 # Jupyter Notebook
 .ipynb_checkpoints

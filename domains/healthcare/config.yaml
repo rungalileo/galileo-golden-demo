@@ -1,56 +1,85 @@
 domain:
   name: "healthcare"
-  description: "Healthcare assistant for online help and patient information support"
+  description: "Medical assistant for patient information and appointment management"
 
-galileo:
-  project: "denisd-project"
-  log_stream: "healthcare"
+# Galileo Configuration
+# Specify the Galileo project name for this domain
+# If not specified, defaults to: "galileo-demo-{domain_name}" (e.g., "galileo-demo-healthcare")
+# galileo:
+#   project: "galileo-demo-healthcare"     # Galileo project name
+#   log_stream: "default"                  # Log stream name (optional, defaults to "default")
 
 # UI configuration
 ui:
-  app_title: "🩻 Online Healthcare Assistant"
-  icon: "🩻"
+  app_title: "Healthcare Assistant"
+  icon: "🏥"  # Icon for navigation
   example_queries:
-    - "What is the dosage and common side effects of Lisinopril?"
-    - "Show me data for patient P001."
-
-# Model configuration
+    # Note: the second query is intentionally crafted to trigger the
+    # demo_hallucinations entry below (matches its trigger_keywords).
+    - "Get patient information for patient ID 12345"
+    - "What is the recommended Lisinopril dosage?"
+    - "Schedule an appointment with Dr. Smith for next Monday at 2pm"
+  
+# Model configuration (OpenAI family)
 model:
-  default_model: "gemma4"
+  default_model: "gpt-4.1"
   temperature: 0.1
   additional_models:
-    - "llama3.1"
-    - "deepseek-r1"
-    - "llama3.2"
-    - "mistral"
-    - "qwen2.5"
-  hosted_default_model: "gpt-4o"
-  hosted_additional_models:
+    - "gpt-4o"
     - "gpt-4o-mini"
     - "gpt-4.1"
     - "gpt-5.2"
+    - "gpt-5.1"
+    - "gpt-5-mini"
 
 # RAG configuration
 rag:
   enabled: true
   chunk_size: 1000
   chunk_overlap: 200
-  top_k: 3
+  top_k: 5
 
 # Available tools for this domain
 tools:
   - "get_patient_info"
-  - "delete_patient_record"
-  - "search_medicine_qa"
+  - "schedule_appointment"
+  - "get_medication_info"
+  - "check_drug_interactions"
+  - "get_lab_results"
 
 # Vector store configuration
 vectorstore:
-  embedding_model: "nomic-embed-text"
+  embedding_model: "text-embedding-3-large"
+
+# Protect configuration
+# Note: Protect is controlled via the UI toggle in the sidebar
+# This config defines which metrics to use and what messages to show when Protect is enabled
+protect:
+  metrics:
+    - name: "input_toxicity"
+      operator: "gt"
+      threshold: 0.5
+    - name: "pii"
+      operator: "any"
+      target_values:
+        - "ssn"
+        - "credit_card"
+  messages:
+    - "I'm sorry, but I cannot process that request as it appears to contain potentially harmful or sensitive information."
+    - "For patient privacy and security, I cannot process requests with personally identifiable information in this format."
 
 # Demo hallucinations for Galileo observability demos
+# These are intentionally wrong answers that contradict the retrieved context
 demo_hallucinations:
-  - question: "What is the dosage and common side effects of Lisinopril?"
-    hallucinated_answer: "Common dosage is 100mg daily. Common side effects are rashes, itching, and swelling."
-    # NOTE: Real answer is unlimited data 
+  - question: "What is the recommended dosage for Lisinopril and what are its serious side effects?"
+    # Chat-trigger: if ALL of these words appear in the user's message
+    # (case-insensitive), the chat will respond with the hallucinated answer
+    # and log the trace to Galileo. Keep these short and intuitive.
+    trigger_keywords: ["lisinopril", "dosage"]
+    hallucinated_answer: "Lisinopril is typically prescribed at 50-100 mg twice daily. The most common serious side effect is liver damage, which occurs in about 15% of patients."
+    # NOTE: The real dosage is 10-40 mg once daily. Serious side effects are angioedema, hyperkalemia, acute kidney injury - NOT liver damage.
     context:
-      - "Common Dosage: 10-40 mg once daily | Administration: Oral; take with or without food | Common Side Effects: Dry cough (10-15%); dizziness; headache; fatigue"
+      - "Lisinopril is an ACE Inhibitor used for Hypertension and Heart Failure. Common dosage is 10-40 mg once daily, taken orally with or without food."
+      - "Serious side effects of Lisinopril include: Angioedema, hyperkalemia, acute kidney injury, and hypotension. Common side effects include dry cough (10-15%), dizziness, headache, and fatigue."
+      - "Lisinopril contraindications: Pregnancy, history of angioedema with ACE inhibitors, bilateral renal artery stenosis. Monitoring requirements: Blood pressure, serum creatinine and potassium at baseline and periodically."
+

@@ -112,12 +112,7 @@ def get_all_datasets() -> List[Any]:
     return list_datasets()
 
 
-def create_experiment_function(
-    domain_name: str,
-    agent_factory,
-    model_name: Optional[str] = None,
-    llm_provider: str = "local",
-):
+def create_experiment_function(domain_name: str, agent_factory, model_name: Optional[str] = None):
     """
     Create a function that can be used in experiments.
     This function will use the existing agent from AgentFactory.
@@ -140,12 +135,7 @@ def create_experiment_function(
         is_in_experiment = galileo_logger.current_parent() is not None
         
         # Create the agent using the existing factory (with optional model override)
-        agent = agent_factory.create_agent(
-            domain_name,
-            "LangGraph",
-            model_name=model_name,
-            llm_provider=llm_provider,
-        )
+        agent = agent_factory.create_agent(domain_name, "LangGraph", model_name=model_name)
         
         # Override the agent's config to use the proper callback for experiments
         if is_in_experiment:
@@ -185,7 +175,6 @@ def run_domain_experiment(
     metrics: Optional[List] = None,
     project: Optional[str] = None,
     model_name: Optional[str] = None,
-    llm_provider: str = "local",
 ) -> Any:
     """
     Run an experiment for a domain.
@@ -209,12 +198,7 @@ def run_domain_experiment(
         project = os.environ.get("GALILEO_PROJECT", "default")
     
     # Create the experiment function (with optional model override)
-    experiment_function = create_experiment_function(
-        domain_name,
-        agent_factory,
-        model_name=model_name,
-        llm_provider=llm_provider,
-    )
+    experiment_function = create_experiment_function(domain_name, agent_factory, model_name=model_name)
     
     # Run the experiment. The SDK returns immediately; metric scoring continues
     # server-side, so callers that want metric values should follow up with
