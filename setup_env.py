@@ -8,6 +8,28 @@ from pathlib import Path
 from typing import Optional
 
 
+def _derive_galileo_api_url(console_url: str, explicit_url: str = "") -> str:
+    """Derive Galileo API URL from console URL when not set explicitly."""
+    if explicit_url:
+        return explicit_url.rstrip("/")
+    console_url = (console_url or "").rstrip("/")
+    if not console_url:
+        return ""
+    if "console." in console_url:
+        return console_url.replace("console.", "api.", 1)
+    return ""
+
+
+def _derive_agent_control_url(console_url: str, explicit_url: str = "") -> str:
+    """Derive hosted Agent Control proxy URL from Galileo console URL."""
+    if explicit_url:
+        return explicit_url.rstrip("/")
+    console_url = (console_url or "").rstrip("/")
+    if not console_url:
+        return ""
+    return f"{console_url}/api/agent-control"
+
+
 def get_domain_project_name(domain_name: str, domain_config: Optional[dict] = None) -> str:
     """
     Get the Galileo project name for a domain.
@@ -59,6 +81,15 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
     try:
         # Load secrets
         secrets = toml.load(secrets_path)
+
+        console_url = secrets.get("galileo_console_url", "https://app.galileo.ai")
+        galileo_api_url = _derive_galileo_api_url(
+            console_url, secrets.get("galileo_api_url", "")
+        )
+        agent_control_url = _derive_agent_control_url(
+            console_url, secrets.get("agent_control_url", "")
+        )
+        galileo_api_key = secrets.get("galileo_api_key", "")
         
         # Base environment variables (always set)
         env_vars = {
@@ -76,10 +107,11 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
             "OPENAI_EMBEDDING_MODEL": secrets.get(
                 "openai_embedding_model", "text-embedding-3-large"
             ),
-            "GALILEO_API_KEY": secrets.get("galileo_api_key", ""),
-            "GALILEO_API_URL": secrets.get("galileo_api_url", ""),
-            "GALILEO_CONSOLE_URL": secrets.get("galileo_console_url", "https://app.galileo.ai"),
-            "AGENT_CONTROL_URL": secrets.get("agent_control_url", ""),
+            "GALILEO_API_KEY": galileo_api_key,
+            "GALILEO_API_URL": galileo_api_url,
+            "GALILEO_CONSOLE_URL": console_url,
+            "AGENT_CONTROL_URL": agent_control_url,
+            "AGENT_CONTROL_API_KEY": galileo_api_key,
             "AGENT_CONTROL_AGENT_NAME": secrets.get("agent_control_agent_name", ""),
             "AGENT_CONTROL_API_KEY_HEADER": secrets.get("agent_control_api_key_header", "Galileo-API-Key"),
             "AGENT_CONTROL_RUNTIME_AUTH_MODE": secrets.get("agent_control_runtime_auth_mode", "jwt"),

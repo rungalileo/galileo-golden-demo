@@ -10,6 +10,7 @@ import uuid
 import logging
 from typing import Optional, List, Dict, Any, Union
 from galileo import GalileoLogger
+from helpers.galileo_api_helpers import create_galileo_logger
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ def log_hallucination(
         else:
             logger.info("Creating new Galileo session for hallucination demo")
             # Initialize Galileo logger
-            galileo_logger = GalileoLogger(project=project_name, log_stream=log_stream)
+            galileo_logger = create_galileo_logger(project_name, log_stream)
             galileo_logger.enable_agent_control()
             # Start a named session for easy identification
             session_id = str(uuid.uuid4())[:10]

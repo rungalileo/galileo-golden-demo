@@ -24,7 +24,12 @@ from agent_factory import AgentFactory
 from domain_manager import DomainManager
 from langchain_core.messages import AIMessage, HumanMessage
 from agent_frameworks.langgraph.langgraph_rag import get_domain_rag_system
-from helpers.galileo_api_helpers import get_galileo_app_url, get_galileo_project_id, get_galileo_log_stream_id
+from helpers.galileo_api_helpers import (
+    create_galileo_logger,
+    get_galileo_app_url,
+    get_galileo_project_id,
+    get_galileo_log_stream_id,
+)
 from helpers.agent_control_helpers import init_agent_control
 from helpers.hallucination_helpers import log_hallucination_for_domain
 from experiments.experiment_helpers import (
@@ -1019,7 +1024,7 @@ def render_chat_page(
         project_name = galileo_config.get("project") or f"galileo-demo-{domain_name}"
         log_stream = galileo_config.get("log_stream", "default")
         try:
-            galileo_logger = GalileoLogger(project=project_name, log_stream=log_stream)
+            galileo_logger = create_galileo_logger(project_name, log_stream)
             galileo_logger.enable_agent_control()
             init_agent_control(
                 galileo_logger,
