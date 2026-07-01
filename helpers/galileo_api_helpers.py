@@ -152,6 +152,25 @@ def get_galileo_project_id(project_name: str, starting_token: int = 0, limit: in
     return None
 
 
+def create_galileo_logger(project_name: str, log_stream: str):
+    """
+    Create a GalileoLogger for an existing project/log stream.
+
+    Resolves project and log stream IDs first when possible so the SDK does not
+    attempt to create a project that already exists but is not returned by lookup
+    (e.g. a project in the org you do not have collaborator access to).
+    """
+    from galileo import GalileoLogger
+
+    project_id = get_galileo_project_id(project_name)
+    if project_id:
+        log_stream_id = get_galileo_log_stream_id(project_id, log_stream)
+        if log_stream_id:
+            return GalileoLogger(project_id=project_id, log_stream_id=log_stream_id)
+        return GalileoLogger(project_id=project_id, log_stream=log_stream)
+    return GalileoLogger(project=project_name, log_stream=log_stream)
+
+
 def get_galileo_log_stream_id(project_id: str, log_stream_name: str) -> str:
     """
     Fetches the Galileo log stream ID for a given project ID and log stream name.

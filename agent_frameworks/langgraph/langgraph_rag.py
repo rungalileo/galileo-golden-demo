@@ -7,7 +7,7 @@ import asyncio
 import os
 from typing import Optional
 
-from langchain_classic import hub
+from langsmith import Client as LangSmithClient
 from langchain_core.tools import tool
 from langchain_classic.chains import create_retrieval_chain
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
@@ -96,7 +96,10 @@ class DomainRAGSystem:
                 provider=provider,
             )
 
-            retrieval_qa_chat_prompt = hub.pull("langchain-ai/retrieval-qa-chat")
+            retrieval_qa_chat_prompt = LangSmithClient().pull_prompt(
+                "langchain-ai/retrieval-qa-chat",
+                dangerously_pull_public_prompt=True,
+            )
             combine_docs_chain = create_stuff_documents_chain(llm, retrieval_qa_chat_prompt)
             self.retrieval_chain = create_retrieval_chain(retriever, combine_docs_chain)
 

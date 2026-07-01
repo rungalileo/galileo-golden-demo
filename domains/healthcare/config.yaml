@@ -3,7 +3,7 @@ domain:
   description: "Healthcare assistant for online help and patient information support"
 
 galileo:
-  project: "denisd-project"
+  project: "galileo-demo"
   log_stream: "healthcare"
 
 # UI configuration

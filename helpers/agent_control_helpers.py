@@ -9,6 +9,7 @@ from typing import Any, Callable, Optional
 
 import agent_control
 from agent_control import ControlSteerError, ControlViolationError, control
+from agent_control.settings import configure_settings
 from galileo.log_streams import get_log_stream
 
 _initialized = False
@@ -427,6 +428,12 @@ def init_agent_control(
         return False
 
     control_steps = steps or STANDARD_AGENT_CONTROL_STEPS
+
+    configure_settings(
+        url=server_url,
+        api_key=api_key,
+        api_key_header=api_key_header,
+    )
 
     agent_control.init(
         agent_name=agent_name,
