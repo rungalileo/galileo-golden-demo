@@ -1,0 +1,56 @@
+domain:
+  name: "insurance"
+  description: "insurance assistant for online help and customer account support"
+
+galileo:
+  project: "denisd-project"
+  log_stream: "insurance"
+
+# UI configuration
+ui:
+  app_title: "🚗 Online Insurance Assistant"
+  icon: "🚗"
+  example_queries:
+    - "How will my claim affect my premium?"
+    - "Show me data for customer C001."
+
+# Model configuration
+model:
+  default_model: "gemma4"
+  temperature: 0.1
+  additional_models:
+    - "llama3.1"
+    - "deepseek-r1"
+    - "llama3.2"
+    - "mistral"
+    - "qwen2.5"
+  hosted_default_model: "gpt-4o"
+  hosted_additional_models:
+    - "gpt-4o-mini"
+    - "gpt-4.1"
+    - "gpt-5.2"
+
+# RAG configuration
+rag:
+  enabled: true
+  chunk_size: 1000
+  chunk_overlap: 200
+  top_k: 3
+
+# Available tools for this domain
+tools:
+  - "get_customer_info"
+  - "delete_customer_record"
+  - "search_insurance_qa"
+
+# Vector store configuration
+vectorstore:
+  embedding_model: "nomic-embed-text"
+
+# Demo hallucinations for Galileo observability demos
+demo_hallucinations:
+  - question: "How will my claim affect my premium?"
+    hallucinated_answer: "Your premium may go up by 15% immediately, and it will be revised at renewal time. At that time, it may stay the same or go down."
+    # NOTE: Real answer is unlimited data 
+    context:
+      - "Your claim will not impact your current rate. But when you renew your policy, your rate may increase. We'll typically send you your new rate 30 days before your policy renewal date."
