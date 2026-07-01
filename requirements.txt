@@ -102,7 +102,7 @@ Jinja2==3.1.6
 jiter==0.15.0
 jmespath==1.1.0
 joblib==1.5.3
-joserfc==1.6.5
+joserfc==1.6.7
 jsonpatch==1.33
 jsonpath-ng==1.8.0
 jsonpointer==3.1.1
