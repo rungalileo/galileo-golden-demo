@@ -1,0 +1,31 @@
+customer_id,customer_name,phone_number,address,account_type,balance
+"C001", "Rivera & Sons Auto Repair",    "+1-213-555-0142", "4821 Sunset Blvd, Los Angeles, CA 90027",       "Checking",   109.99
+"C002", "Greenleaf Organic Cafe",       "+1-312-555-0278", "1103 W Armitage Ave, Chicago, IL 60614",        "Checking",   79.99
+"C003", "NextStep Consulting LLC",      "+1-512-555-0391", "800 Congress Ave, Suite 300, Austin, TX 78701", "Savings",    159.99
+"C004", "Harbor View Dental",           "+1-206-555-0467", "2250 Harbor Ave SW, Seattle, WA 98126",         "Checking",   109.99
+"C005", "Bright Minds Tutoring Center", "+1-404-555-0583", "3340 Peachtree Rd NE, Atlanta, GA 30326",       "Savings",    49.99
+"C006", "Golden Gate Florist",          "+1-415-555-0619", "598 Castro St, San Francisco, CA 94114",        "Checking",   79.99
+"C007", "Lakewood Physical Therapy",    "+1-303-555-0734", "1720 S Bellaire St, Denver, CO 80222",          "Investment", 109.99
+"C008", "Atlantic Bookkeeping Services","+1-617-555-0852", "200 State St, Boston, MA 02109",                "Checking",   159.99
+"C009", "Sunrise Yoga Studio",          "+1-602-555-0971", "4520 N Central Ave, Phoenix, AZ 85012",         "Savings",    79.99
+"C010", "Maple Street Bakery",          "+1-503-555-1088", "2847 SE Hawthorne Blvd, Portland, OR 97214",    "Checking",   109.99
+"C011", "Precision Auto Detailing",     "+1-702-555-1194", "3900 S Las Vegas Blvd, Las Vegas, NV 89119",    "Checking",   49.99
+"C012", "Coastal Pet Grooming",         "+1-858-555-1207", "1250 Prospect St, La Jolla, CA 92037",          "Savings",    159.99
+"C013", "Midwest Electric Supply",      "+1-816-555-1323", "1800 Main St, Kansas City, MO 64108",           "Investment", 109.99
+"C014", "Blue Ridge Coffee Roasters",   "+1-828-555-1439", "55 College St, Asheville, NC 28801",            "Checking",   79.99
+"C015", "Summit Legal Partners",        "+1-801-555-1556", "222 S Main St, Suite 500, Salt Lake City, UT 84101", "Savings", 159.99
+"C016", "Heritage Home Inspections",    "+1-615-555-1672", "410 Broadway, Nashville, TN 37203",             "Checking",   109.99
+"C017", "Pioneer Landscaping Co",       "+1-503-555-1788", "8900 NE Halsey St, Portland, OR 97220",           "Checking",   49.99
+"C018", "Metro Fitness Club",           "+1-214-555-1904", "3200 Mockingbird Ln, Dallas, TX 75205",         "Investment", 79.99
+"C019", "Willow Creek Daycare",         "+1-503-555-2019", "1450 NW 23rd Ave, Portland, OR 97210",          "Savings",    109.99
+"C020", "Redwood Printing Services",    "+1-707-555-2135", "1200 Fourth St, Santa Rosa, CA 95404",          "Checking",   159.99
+"C021", "Capitol Hill Tax Advisors",    "+1-202-555-2251", "1600 Pennsylvania Ave NW, Washington, DC 20500", "Savings",   79.99
+"C022", "Lone Star BBQ Supply",         "+1-713-555-2367", "5500 Kirby Dr, Houston, TX 77005",              "Checking",   109.99
+"C023", "Evergreen HVAC Solutions",     "+1-503-555-2483", "7800 SW Barbur Blvd, Portland, OR 97219",       "Investment", 49.99
+"C024", "Crystal Clear Window Cleaning","+1-305-555-2599", "1000 Brickell Ave, Miami, FL 33131",              "Checking",   79.99
+"C025", "Northstar Accounting Group",   "+1-612-555-2715", "225 South 6th St, Minneapolis, MN 55402",       "Savings",    159.99
+"C026", "Desert Bloom Nursery",         "+1-480-555-2831", "3400 E Camelback Rd, Phoenix, AZ 85018",        "Checking",   109.99
+"C027", "Ironclad Security Systems",    "+1-404-555-2947", "191 Peachtree St NE, Atlanta, GA 30303",        "Investment", 79.99
+"C028", "Harbor Freight Logistics",     "+1-410-555-3063", "100 Light St, Baltimore, MD 21202",             "Checking",   49.99
+"C029", "Silver Lake Photography",      "+1-323-555-3179", "2400 Sunset Blvd, Los Angeles, CA 90026",       "Savings",    109.99
+"C030", "Prairie Wind Renewable Energy","+1-402-555-3295", "1200 Farnam St, Omaha, NE 68102",               "Investment", 159.99

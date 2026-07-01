@@ -1,0 +1,44 @@
+[
+    {
+      "name": "get_customer_info",
+      "description": "Retrieve a customer's account details by their customer ID, including name, address, phone number, account type, and balance",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "customer_id": {
+            "type": "string",
+            "description": "The customer's unique identifier (e.g., 'C001', 'C005')"
+          }
+        },
+        "required": ["customer_id"]
+      }
+    },
+    {
+      "name": "delete_customer_record",
+      "description": "Permanently delete a customer record from the registry by their customer ID",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "customer_id": {
+            "type": "string",
+            "description": "The customer's unique identifier to delete (e.g., 'C001', 'C005')"
+          }
+        },
+        "required": ["customer_id"]
+      }
+    },
+    {
+      "name": "search_insurance_qa",
+      "description": "Search the Online insurance knowledge base to answer product questions about credit cards, payments and statements",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The question or topic to search for (e.g., 'credit card', 'payments', 'statements')"
+          }
+        },
+        "required": ["query"]
+      }
+    }
+  ]
