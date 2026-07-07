@@ -15,7 +15,9 @@ Not a production reference architecture or replacement for customer-specific POC
 ### Prerequisites
 
 - Python 3.8+
-- [Ollama](https://ollama.com/) running locally (default: `http://localhost:11434`)
+- Access to a Large Language Model
+   - [Ollama](https://ollama.com/) running locally (default: `http://localhost:11434`); or
+   - OpenAI API Key
 - Galileo API key
 - PostgreSQL with pgvector (local Docker container or hosted instance)
 
@@ -79,8 +81,6 @@ Not a production reference architecture or replacement for customer-specific POC
    These appear in the sidebar **Select Model** dropdown under **Local (Ollama)**:
 
    ```bash
-   ollama pull llama3.1
-   ollama pull llama3.2
    ollama pull deepseek-r1
    ollama pull mistral
    ollama pull qwen2.5
@@ -147,23 +147,24 @@ Not a production reference architecture or replacement for customer-specific POC
    postgres_password = "mypassword"
    postgres_db = "vectordb"
    
-   # Environment: "local" for development, "hosted" for production
-   environment = "local"
+   # Agent Control configuration
+   galileo_api_url = "https://api.galileo.ai" 
+   agent_control_url = "https://console.galileo.ai/api/agent-control"
    ```
    
    **Note:** Galileo project names are configured per-domain in `domains/{domain}/config.yaml`
 
 7. **Set up vector databases**
-   Ollama and OpenAI embeddings can't share one index — different embedding models produce different vector spaces even at the same dimension count, so searching across them silently returns wrong results. Instead, the setup script builds a **separate index per provider** (`{domain}_local_index` for Ollama, `{domain}_hosted_index` for OpenAI). Build both up front so switching the sidebar **Model provider** toggle needs no extra setup — the app just queries whichever prebuilt index matches the active provider:
+   Ollama and OpenAI embeddings can't share one index — different embedding models produce different vector spaces even at the same dimension count, so searching across them silently returns wrong results. Because of that, the script creates 2 indexes for each domain, automatically. The index is chosen at runtime based on what LLM service is being used (Ollama or OpenAI)
 
    ```bash
-   python helpers/setup_vectordb.py bank both
-   python helpers/setup_vectordb.py healthcare both
-   python helpers/setup_vectordb.py insurance both
-   python helpers/setup_vectordb.py restaurant both
+   python helpers/setup_vectordb.py bank
+   python helpers/setup_vectordb.py healthcare
+   python helpers/setup_vectordb.py insurance
+   python helpers/setup_vectordb.py restaurant
    ```
 
-   `both` is the default, so `python helpers/setup_vectordb.py bank` does the same thing. The script **auto-detects what's available at run time** and builds accordingly — if both Ollama and a real `openai_api_key` are present it builds both indexes; if only one backend is available it builds just that index (skipping the other with a warning). So you don't need to know or configure which backends you have — just run it. To build only one on purpose, pass `ollama` or `openai` instead of `both` (this fails if that specific backend isn't available).
+   The script **auto-detects if Ollama and OpenAI (if the openai_api_key variable is set on the secrets.toml file) are available at run time** and builds accordingly. If only one backend is available, it builds just that index (skipping the other with a warning). Make sure to have the right service available before running the script.
 
    Switching the **Model provider** toggle in the UI then automatically uses the matching index (Local → Ollama index, Hosted → OpenAI index). If only one index was built, RAG falls back to it regardless of the toggle, so search always works. (Advanced: set `embedding_provider` in `secrets.toml` to pin RAG to one backend regardless of the chat toggle.)
 
