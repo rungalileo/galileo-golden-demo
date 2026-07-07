@@ -71,6 +71,9 @@ def _invalidate_domain_agent_state(domain_name: str) -> None:
     rag_key = f"rag_initialized_{domain_name}"
     if rag_key in st.session_state:
         del st.session_state[rag_key]
+    for key in list(st.session_state.keys()):
+        if isinstance(key, str) and key.startswith(f"rag_initialized_{domain_name}_"):
+            del st.session_state[key]
     try:
         from agent_frameworks.langgraph.langgraph_rag import _rag_cache
 
@@ -122,10 +125,15 @@ def render_model_settings(domain_name: str, domain_config_key: str) -> tuple[str
     try:
         from helpers.pgvector_utils import collection_exists
 
-        if not collection_exists(domain_name, "local"):
+        # The app can query whichever provider's index exists, so only warn
+        # when neither has been built. `both` builds Ollama + OpenAI indexes.
+        has_any_index = collection_exists(domain_name, "local") or collection_exists(
+            domain_name, "hosted"
+        )
+        if not has_any_index:
             st.warning(
-                f"No vector index for **{domain_name}**. "
-                f"Run: `python helpers/setup_vectordb.py {domain_name} local`"
+                f"No vector index for **{domain_name}**. Run: "
+                f"`python helpers/setup_vectordb.py {domain_name} both`"
             )
     except Exception:
         pass
@@ -166,18 +174,22 @@ def render_model_settings(domain_name: str, domain_config_key: str) -> tuple[str
     return selected_provider, selected_model
 
 
-def initialize_rag_systems(domain_name: str):
-    """Initialize RAG systems at app startup for better performance"""
+def initialize_rag_systems(domain_name: str, llm_provider: str = "local"):
+    """Initialize RAG systems for the selected provider."""
+    from helpers.llm_utils import reset_llm_provider, set_llm_provider
+
+    provider = _normalize_provider(llm_provider)
+    token = set_llm_provider(provider)
     try:
-        # Initialize RAG system for the specified domain
-        print(f"🔧 Initializing RAG system for domain: {domain_name}")
-        rag_system = get_domain_rag_system(domain_name)
-        print(f"✅ RAG system initialized successfully")
-        
+        print(f"🔧 Initializing RAG system for domain: {domain_name} ({provider})")
+        get_domain_rag_system(domain_name)
+        print("✅ RAG system initialized successfully")
         return True
     except Exception as e:
         print(f"❌ Failed to initialize RAG system: {e}")
         return False
+    finally:
+        reset_llm_provider(token)
 
 
 def escape_dollar_signs(text: str) -> str:
@@ -787,13 +799,7 @@ def multi_domain_agent_app(domain_name: str):
             domain_config=st.session_state[full_config_key]
         )
         st.session_state[env_setup_key] = True
-    
-    # Initialize RAG systems for this domain (per domain)
-    rag_key = f"rag_initialized_{domain_name}"
-    if rag_key not in st.session_state:
-        initialize_rag_systems(domain_name)
-        st.session_state[rag_key] = True
-    
+
     # Initialize AgentFactory once
     if "factory" not in st.session_state:
         st.session_state.factory = AgentFactory()
@@ -1045,7 +1051,12 @@ def render_chat_page(
         example_queries[1] if len(example_queries) > 1 else "What can you do?",
         domain_name
     )
-    
+
+    rag_key = f"rag_initialized_{domain_name}_{selected_provider}"
+    if rag_key not in st.session_state:
+        initialize_rag_systems(domain_name, selected_provider)
+        st.session_state[rag_key] = True
+
     # Create agent dynamically using AgentFactory - works for any domain!
     domain_info = st.session_state.get(f"domain_config_{domain_name}", {})
     available_models, default_model = _models_for_provider(domain_info, selected_provider)

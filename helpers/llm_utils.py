@@ -18,6 +18,8 @@ DEFAULT_LOCAL_CHAT_MODEL = "gemma4"
 DEFAULT_HOSTED_CHAT_MODEL = "gpt-4o"
 DEFAULT_LOCAL_EMBEDDING_MODEL = "nomic-embed-text"
 DEFAULT_HOSTED_EMBEDDING_MODEL = "text-embedding-3-large"
+# nomic-embed-text (Ollama) produces 768-dim vectors; OpenAI must match for pgvector.
+DEFAULT_EMBEDDING_DIMENSIONS = 768
 
 _llm_provider_ctx: ContextVar[LLMProvider] = ContextVar("llm_provider", default="local")
 
@@ -50,12 +52,109 @@ def get_default_chat_model(*, provider: Optional[LLMProvider] = None) -> str:
     return os.environ.get("OLLAMA_DEFAULT_CHAT_MODEL", DEFAULT_LOCAL_CHAT_MODEL)
 
 
-def get_default_embedding_model(*, provider: Optional[LLMProvider] = None) -> str:
-    """Return the default embedding model for the given or active provider."""
-    resolved = provider or get_llm_provider()
-    if resolved == "hosted":
-        return os.environ.get("OPENAI_EMBEDDING_MODEL", DEFAULT_HOSTED_EMBEDDING_MODEL)
-    return os.environ.get("OLLAMA_EMBEDDING_MODEL", DEFAULT_LOCAL_EMBEDDING_MODEL)
+def get_embedding_dimensions() -> int:
+    """Return embedding vector size for the single pgvector index."""
+    raw = os.environ.get(
+        "OPENAI_EMBEDDING_DIMENSIONS",
+        os.environ.get("EMBEDDING_DIMENSIONS", str(DEFAULT_EMBEDDING_DIMENSIONS)),
+    )
+    return int(raw)
+
+
+def is_ollama_available(*, timeout: float = 3) -> bool:
+    """Return True if the Ollama server responds at the configured base URL."""
+    url = f"{get_ollama_base_url().rstrip('/')}/api/tags"
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            response.read()
+        return True
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return False
+
+
+def get_configured_embedding_provider() -> Optional[LLMProvider]:
+    """Optional embedding-provider override from config (EMBEDDING_PROVIDER).
+
+    Returns None when unset, in which case the embedding provider follows the
+    chat provider selected in the UI. Set it only to pin RAG to one backend
+    regardless of the chat toggle.
+    """
+    raw = os.environ.get("EMBEDDING_PROVIDER", "").strip().lower()
+    if raw in ("hosted", "openai"):
+        return "hosted"
+    if raw in ("local", "ollama"):
+        return "local"
+    return None
+
+
+# Placeholder values shipped in secrets.toml.template — treated as "not set".
+_OPENAI_KEY_PLACEHOLDERS = {
+    "",
+    "...",
+    "sk-...",
+    "your_openai_api_key_here",
+    "your-openai-api-key",
+    "your-openai-api-key-here",
+}
+
+
+def openai_api_key_configured() -> bool:
+    """True only if a real OpenAI key is set (not empty and not a template placeholder)."""
+    key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if key in _OPENAI_KEY_PLACEHOLDERS:
+        return False
+    if "..." in key:  # any leftover ellipsis from the template
+        return False
+    return bool(key)
+
+
+def embedding_backend_available(provider: LLMProvider) -> bool:
+    """Return True if the given embedding backend can actually be used right now.
+
+    Checks live availability at call time: for local, whether the Ollama server
+    responds; for hosted, whether a real OpenAI key is configured.
+    """
+    if provider == "hosted":
+        return openai_api_key_configured()
+    return is_ollama_available()
+
+
+def resolve_embedding_provider(
+    provider: Optional[LLMProvider] = None,
+) -> LLMProvider:
+    """
+    Resolve the *desired* embedding backend for RAG.
+
+    Follows the chat provider selected in the UI (get_llm_provider()) so RAG
+    embeds queries with the same provider as chat. This is safe because the
+    setup script builds a separate pgvector index per provider
+    ({domain}_local_index for Ollama, {domain}_hosted_index for OpenAI) and
+    each index is only ever queried with the backend that built it — so
+    flipping the UI toggle just switches which prebuilt index is searched,
+    never compares vectors across incompatible embedding spaces.
+
+    Precedence: explicit `provider` arg > EMBEDDING_PROVIDER override > chat
+    radio (get_llm_provider()). If the desired backend's service is
+    unreachable (Ollama down / no OpenAI key), falls back to the other
+    reachable backend so RAG keeps working.
+    """
+    requested: LLMProvider = provider or get_configured_embedding_provider() or get_llm_provider()
+
+    if embedding_backend_available(requested):
+        return requested
+
+    fallback: LLMProvider = "local" if requested == "hosted" else "hosted"
+    if embedding_backend_available(fallback):
+        print(
+            f"ℹ️  '{requested}' embedding backend unavailable; "
+            f"falling back to '{fallback}'."
+        )
+        return fallback
+
+    raise ConnectionError(
+        f"No embedding backend available. Start Ollama at {get_ollama_base_url()} "
+        "or set openai_api_key in .streamlit/secrets.toml."
+    )
 
 
 def get_domain_embedding_model(
@@ -63,20 +162,26 @@ def get_domain_embedding_model(
     *,
     provider: Optional[LLMProvider] = None,
 ) -> str:
-    """Return the Ollama embedding model used for pgvector retrieval."""
+    """Return the embedding model for the active or specified provider."""
+    resolved = resolve_embedding_provider(provider)
+    if resolved == "hosted":
+        return (
+            vectorstore_config.get("hosted_embedding_model")
+            or os.environ.get("OPENAI_EMBEDDING_MODEL", DEFAULT_HOSTED_EMBEDDING_MODEL)
+        )
     return (
         vectorstore_config.get("embedding_model")
-        or get_default_embedding_model(provider="local")
+        or os.environ.get("OLLAMA_EMBEDDING_MODEL", DEFAULT_LOCAL_EMBEDDING_MODEL)
     )
 
 
 def ensure_openai_api_key() -> str:
     """Return OPENAI_API_KEY or raise with setup instructions."""
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-    if not api_key:
+    if not openai_api_key_configured():
         raise ValueError(
-            "OPENAI_API_KEY is not set. Add openai_api_key to .streamlit/secrets.toml "
-            "to use the Hosted (OpenAI) provider."
+            "OPENAI_API_KEY is not set (or still a placeholder). Add a real "
+            "openai_api_key to .streamlit/secrets.toml to use the Hosted (OpenAI) provider."
         )
     return api_key
 
@@ -164,15 +269,44 @@ def get_embeddings(
     *,
     provider: Optional[LLMProvider] = None,
 ) -> Embeddings:
-    """Create embeddings for the active or specified provider."""
-    resolved_provider = provider or get_llm_provider()
-    embedding_model = model or get_default_embedding_model(provider=resolved_provider)
+    """Create embeddings for the UI-selected provider (with Ollama→OpenAI fallback)."""
+    resolved_provider = resolve_embedding_provider(provider)
+    config: dict = {}
+    embedding_model = model or get_domain_embedding_model(config, provider=resolved_provider)
 
     if resolved_provider == "hosted":
         from langchain_openai import OpenAIEmbeddings
 
         ensure_openai_api_key()
-        return OpenAIEmbeddings(model=embedding_model)
+        kwargs = {"model": embedding_model}
+        if embedding_model.startswith("text-embedding-3"):
+            kwargs["dimensions"] = get_embedding_dimensions()
+        return OpenAIEmbeddings(**kwargs)
 
     ensure_ollama_model_available(embedding_model, model_kind="embedding model")
     return OllamaEmbeddings(model=embedding_model, base_url=get_ollama_base_url())
+
+
+def get_index_embeddings(
+    vectorstore_config: Optional[dict] = None,
+    *,
+    provider: Optional[LLMProvider] = None,
+) -> Embeddings:
+    """Embeddings for pgvector. Pass `provider` to pin the backend (e.g. the
+    index the caller has already selected); otherwise follows the UI selection.
+    """
+    config = vectorstore_config or {}
+    resolved = resolve_embedding_provider(provider)
+    model = get_domain_embedding_model(config, provider=resolved)
+    return get_embeddings(model, provider=resolved)
+
+
+# Backward-compatible aliases
+get_index_embedding_provider = get_llm_provider
+get_vector_embeddings = get_index_embeddings
+get_vector_embedding_provider = get_llm_provider
+
+
+def get_index_embedding_model(vectorstore_config: Optional[dict] = None) -> str:
+    """Return the embedding model for the UI-selected provider."""
+    return get_domain_embedding_model(vectorstore_config or {})

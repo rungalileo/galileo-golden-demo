@@ -15,7 +15,9 @@ Not a production reference architecture or replacement for customer-specific POC
 ### Prerequisites
 
 - Python 3.8+
-- [Ollama](https://ollama.com/) running locally (default: `http://localhost:11434`)
+- Access to a Large Language Model
+   - [Ollama](https://ollama.com/) running locally (default: `http://localhost:11434`); or
+   - OpenAI API Key
 - Galileo API key
 - PostgreSQL with pgvector (local Docker container or hosted instance)
 
@@ -79,8 +81,6 @@ Not a production reference architecture or replacement for customer-specific POC
    These appear in the sidebar **Select Model** dropdown under **Local (Ollama)**:
 
    ```bash
-   ollama pull llama3.1
-   ollama pull llama3.2
    ollama pull deepseek-r1
    ollama pull mistral
    ollama pull qwen2.5
@@ -147,23 +147,28 @@ Not a production reference architecture or replacement for customer-specific POC
    postgres_password = "mypassword"
    postgres_db = "vectordb"
    
-   # Environment: "local" for development, "hosted" for production
-   environment = "local"
+   # Agent Control configuration
+   galileo_api_url = "https://api.galileo.ai" 
+   agent_control_url = "https://console.galileo.ai/api/agent-control"
    ```
    
    **Note:** Galileo project names are configured per-domain in `domains/{domain}/config.yaml`
 
 7. **Set up vector databases**
-   RAG always uses the local Ollama embedding index (`{domain}_local_index`), even when chat runs on Hosted (OpenAI). Load documents for each domain you plan to use:
+   Ollama and OpenAI embeddings can't share one index — different embedding models produce different vector spaces even at the same dimension count, so searching across them silently returns wrong results. Because of that, the script creates 2 indexes for each domain, automatically. The index is chosen at runtime based on what LLM service is being used (Ollama or OpenAI)
 
    ```bash
-   python helpers/setup_vectordb.py bank local
-   python helpers/setup_vectordb.py healthcare local
-   python helpers/setup_vectordb.py insurance local
-   python helpers/setup_vectordb.py restaurant local      
+   python helpers/setup_vectordb.py bank
+   python helpers/setup_vectordb.py healthcare
+   python helpers/setup_vectordb.py insurance
+   python helpers/setup_vectordb.py restaurant
    ```
 
-PS: Make sure to run the setup script even if you are upgrading from a previous version of the demo, as the vector size was changed to work with Ollama.
+   The script **auto-detects if Ollama and OpenAI (if the openai_api_key variable is set on the secrets.toml file) are available at run time** and builds accordingly. If only one backend is available, it builds just that index (skipping the other with a warning). Make sure to have the right service available before running the script.
+
+   Switching the **Model provider** toggle in the UI then automatically uses the matching index (Local → Ollama index, Hosted → OpenAI index). If only one index was built, RAG falls back to it regardless of the toggle, so search always works. (Advanced: set `embedding_provider` in `secrets.toml` to pin RAG to one backend regardless of the chat toggle.)
+
+PS: Make sure to run the setup script even if you are upgrading from a previous version of the demo, as the index layout changed (one index per provider).
 
 &nbsp;
 
@@ -183,6 +188,8 @@ Use the **sidebar → Model** section to choose how the app runs:
 - **Hosted (OpenAI)** — uses OpenAI models via `openai_api_key` in `.streamlit/secrets.toml`.
 
 The **Select Model** dropdown lists provider-specific models from each domain's `config.yaml`. The selection applies to both **Chat** and **Experiments**, and you can change it mid-session without losing conversation history.
+
+Switching this toggle also switches which prebuilt RAG index is queried (Local → the Ollama index, Hosted → the OpenAI index), so make sure you've built both — see Setup step 7. Each index is queried only with the embedding model that built it, so search is always internally consistent within a provider.
 
 Keep in mind that reloading the page creates a new session and resets all controls to default value, including the model selection. If you're demoing with OpenAI, you will want to change the default value to prevent issues during the demo.
 
@@ -409,7 +416,7 @@ vectorstore:
 ### 6. Load data into PostgreSQL
 
 ```bash
-python helpers/setup_vectordb.py your_domain local
+python helpers/setup_vectordb.py your_domain both
 ```
 
 This script:

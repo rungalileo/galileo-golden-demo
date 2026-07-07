@@ -107,6 +107,9 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
             "OPENAI_EMBEDDING_MODEL": secrets.get(
                 "openai_embedding_model", "text-embedding-3-large"
             ),
+            "OPENAI_EMBEDDING_DIMENSIONS": str(
+                secrets.get("openai_embedding_dimensions", 768)
+            ),
             "GALILEO_API_KEY": galileo_api_key,
             "GALILEO_API_URL": galileo_api_url,
             "GALILEO_CONSOLE_URL": console_url,
@@ -141,7 +144,14 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
                 # print(f"✅ Set {key}")
             else:
                 print(f"⚠️  {key} not set (empty value)")
-        
+
+        # Optional: pin RAG embeddings to one backend regardless of the chat
+        # provider toggle. Left unset by default so embeddings follow the UI
+        # selection (each provider has its own prebuilt pgvector index).
+        embedding_provider = secrets.get("embedding_provider", "")
+        if embedding_provider:
+            os.environ["EMBEDDING_PROVIDER"] = embedding_provider
+
         if domain_name:
             project_name = get_domain_project_name(domain_name, domain_config)
             print(f"🔧 Environment setup complete for domain: {domain_name} (project: {project_name})")
