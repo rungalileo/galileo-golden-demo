@@ -154,16 +154,20 @@ Not a production reference architecture or replacement for customer-specific POC
    **Note:** Galileo project names are configured per-domain in `domains/{domain}/config.yaml`
 
 7. **Set up vector databases**
-   RAG always uses the local Ollama embedding index (`{domain}_local_index`), even when chat runs on Hosted (OpenAI). Load documents for each domain you plan to use:
+   Ollama and OpenAI embeddings can't share one index — different embedding models produce different vector spaces even at the same dimension count, so searching across them silently returns wrong results. Instead, the setup script builds a **separate index per provider** (`{domain}_local_index` for Ollama, `{domain}_hosted_index` for OpenAI). Build both up front so switching the sidebar **Model provider** toggle needs no extra setup — the app just queries whichever prebuilt index matches the active provider:
 
    ```bash
-   python helpers/setup_vectordb.py bank local
-   python helpers/setup_vectordb.py healthcare local
-   python helpers/setup_vectordb.py insurance local
-   python helpers/setup_vectordb.py restaurant local      
+   python helpers/setup_vectordb.py bank both
+   python helpers/setup_vectordb.py healthcare both
+   python helpers/setup_vectordb.py insurance both
+   python helpers/setup_vectordb.py restaurant both
    ```
 
-PS: Make sure to run the setup script even if you are upgrading from a previous version of the demo, as the vector size was changed to work with Ollama.
+   `both` is the default, so `python helpers/setup_vectordb.py bank` does the same thing. The script **auto-detects what's available at run time** and builds accordingly — if both Ollama and a real `openai_api_key` are present it builds both indexes; if only one backend is available it builds just that index (skipping the other with a warning). So you don't need to know or configure which backends you have — just run it. To build only one on purpose, pass `ollama` or `openai` instead of `both` (this fails if that specific backend isn't available).
+
+   Switching the **Model provider** toggle in the UI then automatically uses the matching index (Local → Ollama index, Hosted → OpenAI index). If only one index was built, RAG falls back to it regardless of the toggle, so search always works. (Advanced: set `embedding_provider` in `secrets.toml` to pin RAG to one backend regardless of the chat toggle.)
+
+PS: Make sure to run the setup script even if you are upgrading from a previous version of the demo, as the index layout changed (one index per provider).
 
 &nbsp;
 
@@ -183,6 +187,8 @@ Use the **sidebar → Model** section to choose how the app runs:
 - **Hosted (OpenAI)** — uses OpenAI models via `openai_api_key` in `.streamlit/secrets.toml`.
 
 The **Select Model** dropdown lists provider-specific models from each domain's `config.yaml`. The selection applies to both **Chat** and **Experiments**, and you can change it mid-session without losing conversation history.
+
+Switching this toggle also switches which prebuilt RAG index is queried (Local → the Ollama index, Hosted → the OpenAI index), so make sure you've built both — see Setup step 7. Each index is queried only with the embedding model that built it, so search is always internally consistent within a provider.
 
 Keep in mind that reloading the page creates a new session and resets all controls to default value, including the model selection. If you're demoing with OpenAI, you will want to change the default value to prevent issues during the demo.
 
@@ -409,7 +415,7 @@ vectorstore:
 ### 6. Load data into PostgreSQL
 
 ```bash
-python helpers/setup_vectordb.py your_domain local
+python helpers/setup_vectordb.py your_domain both
 ```
 
 This script:

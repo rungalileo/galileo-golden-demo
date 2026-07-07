@@ -7,18 +7,16 @@ import asyncio
 import os
 from typing import Optional
 
-from langsmith import Client as LangSmithClient
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 from langchain_classic.chains import create_retrieval_chain
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from helpers.llm_utils import (
     get_chat_model,
     get_default_chat_model,
-    get_domain_embedding_model,
-    get_embeddings,
     get_llm_provider,
 )
-from helpers.pgvector_utils import VECTOR_INDEX_ENV, collection_exists, create_pgvector_store
+from helpers.pgvector_utils import get_pgvector_store
 from domain_manager import DomainManager
 from helpers.agent_control_helpers import domain_controlled_tool
 from setup_env import setup_environment
@@ -26,6 +24,21 @@ from setup_env import setup_environment
 
 # Global cache for RAG instances
 _rag_cache = {}
+
+
+# Matches langchain-ai/retrieval-qa-chat without pulling from LangChain Hub.
+_RETRIEVAL_QA_CHAT_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "Answer any user questions based solely on the context below:\n\n"
+            "<context>\n{context}\n</context>\n\n"
+            "If you don't know the answer, just say that you don't know, "
+            "don't try to make up an answer.",
+        ),
+        ("human", "{input}"),
+    ]
+)
 
 
 class DomainRAGSystem:
@@ -53,38 +66,33 @@ class DomainRAGSystem:
             vectorstore_config = domain_config.config.get("vectorstore", {})
             model_config = domain_config.config.get("model", {})
 
-            provider = get_llm_provider()
-            embedding_model = get_domain_embedding_model(vectorstore_config)
+            chat_provider = get_llm_provider()
+
             llm_model = (
                 self.model_name
                 or (
                     model_config.get("hosted_default_model")
-                    if provider == "hosted"
+                    if chat_provider == "hosted"
                     else model_config.get("default_model")
                 )
                 or model_config.get("default_model")
-                or model_config.get("model_name", get_default_chat_model(provider=provider))
+                or model_config.get(
+                    "model_name", get_default_chat_model(provider=chat_provider)
+                )
             )
 
             setup_environment(self.domain_name, domain_config.config)
-
-            environment = VECTOR_INDEX_ENV
 
             if not os.environ.get("POSTGRES_PASSWORD"):
                 raise ValueError(
                     "POSTGRES_PASSWORD not found. Please add it to .streamlit/secrets.toml"
                 )
 
-            if not collection_exists(self.domain_name, environment):
-                collection_name = f"{self.domain_name}_{environment}_index"
-                raise ValueError(
-                    f"PostgreSQL collection not found: {collection_name}. "
-                    f"Please run: python helpers/setup_vectordb.py {self.domain_name} local"
-                )
-
-            embeddings = get_embeddings(embedding_model, provider="local")
-            vector_store, _ = create_pgvector_store(
-                embeddings, self.domain_name, environment
+            # Selects the prebuilt index matching the active provider (Ollama or
+            # OpenAI), falling back to whichever index exists. Raises a clear
+            # error pointing at setup_vectordb.py if neither has been built.
+            vector_store, _ = get_pgvector_store(
+                self.domain_name, vectorstore_config=vectorstore_config
             )
 
             retriever = vector_store.as_retriever(search_kwargs={"k": self.top_k})
@@ -93,14 +101,10 @@ class DomainRAGSystem:
                 llm_model,
                 temperature=0.1,
                 name=f"{self.domain_name.title()} RAG Assistant",
-                provider=provider,
+                provider=chat_provider,
             )
 
-            retrieval_qa_chat_prompt = LangSmithClient().pull_prompt(
-                "langchain-ai/retrieval-qa-chat",
-                dangerously_pull_public_prompt=True,
-            )
-            combine_docs_chain = create_stuff_documents_chain(llm, retrieval_qa_chat_prompt)
+            combine_docs_chain = create_stuff_documents_chain(llm, _RETRIEVAL_QA_CHAT_PROMPT)
             self.retrieval_chain = create_retrieval_chain(retriever, combine_docs_chain)
 
             self._initialized = True
