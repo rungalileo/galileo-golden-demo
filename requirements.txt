@@ -11,6 +11,8 @@ langchain
 langchain-core
 langchain-ollama
 langchain-openai
+langchain-aws
+boto3
 openai
 langgraph
 langchain-postgres

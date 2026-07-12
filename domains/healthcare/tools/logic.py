@@ -32,7 +32,7 @@ if _root not in sys.path:
     sys.path.insert(0, _root)
 
 from helpers.agent_control_helpers import domain_controlled_tool
-from helpers.llm_utils import get_domain_chat_model, get_domain_embedding_model
+from helpers.llm_utils import get_domain_chat_model, get_domain_embedding_model, resolve_embedding_provider
 from helpers.sql_utils import execute_sql, relational_table_name
 from helpers.text_to_sql_utils import generate_sql
 from langgraph_rag import get_domain_rag_system
@@ -40,6 +40,7 @@ from langgraph_rag import get_domain_rag_system
 _vector_store: Optional[PGVector] = None
 _embedding_model: Optional[str] = None
 _collection_name_cached: Optional[str] = None
+_provider_cached: Optional[str] = None
 
 galileo_logger_key = "galileo_logger_healthcare"
 if st.session_state.get(galileo_logger_key):
@@ -68,10 +69,12 @@ def _load_domain_config():
 
 
 def _get_vector_store() -> Tuple[PGVector, str]:
-    global _vector_store, _embedding_model, _collection_name_cached
+    global _vector_store, _embedding_model, _collection_name_cached, _provider_cached
 
     dcfg = _load_domain_config()
-    embedding_model = get_domain_embedding_model(dcfg.config.get("vectorstore", {}))
+    vectorstore_config = dcfg.config.get("vectorstore", {})
+    provider = resolve_embedding_provider()
+    embedding_model = get_domain_embedding_model(vectorstore_config)
 
     _ensure_project_path()
     from helpers.pgvector_utils import get_pgvector_store
@@ -80,12 +83,17 @@ def _get_vector_store() -> Tuple[PGVector, str]:
         _vector_store is not None
         and _collection_name_cached is not None
         and _embedding_model == embedding_model
+        and _provider_cached == provider
     ):
         return _vector_store, _collection_name_cached
 
-    _vector_store, collection_name = get_pgvector_store(_DOMAIN_NAME, embedding_model)
+    _vector_store, collection_name = get_pgvector_store(
+        _DOMAIN_NAME,
+        vectorstore_config=vectorstore_config,
+    )
     _embedding_model = embedding_model
     _collection_name_cached = collection_name
+    _provider_cached = provider
     return _vector_store, collection_name
 
 

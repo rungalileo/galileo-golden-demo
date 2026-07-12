@@ -14,7 +14,12 @@ from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
 from langchain_core.tools import StructuredTool
 from langchain_core.messages import AIMessage, ToolMessage
-from helpers.llm_utils import get_chat_model, reset_llm_provider, set_llm_provider
+from helpers.llm_utils import (
+    get_chat_model,
+    message_content_to_text,
+    reset_llm_provider,
+    set_llm_provider,
+)
 from langgraph.graph import START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -214,7 +219,7 @@ class LangGraphAgent(BaseAgent):
         self.graph = None
         self.model_override = model_override
         self.galileo_logger = galileo_logger
-        self.llm_provider = llm_provider if llm_provider in ("local", "hosted") else "local"
+        self.llm_provider = llm_provider if llm_provider in ("local", "hosted", "bedrock") else "local"
         
         # Build callbacks list with Galileo (always enabled).
         # Pass the per-session logger so each browser tab writes to its own Galileo session.
@@ -312,6 +317,12 @@ class LangGraphAgent(BaseAgent):
                         or model_config.get("default_model")
                         or model_config.get("model_name")
                     )
+                elif self.llm_provider == "bedrock":
+                    effective_model = (
+                        model_config.get("bedrock_default_model")
+                        or model_config.get("default_model")
+                        or model_config.get("model_name")
+                    )
                 else:
                     effective_model = (
                         model_config.get("default_model")
@@ -362,6 +373,12 @@ class LangGraphAgent(BaseAgent):
         elif self.llm_provider == "hosted":
             effective_model = (
                 model_config.get("hosted_default_model")
+                or model_config.get("default_model")
+                or model_config.get("model_name")
+            )
+        elif self.llm_provider == "bedrock":
+            effective_model = (
+                model_config.get("bedrock_default_model")
                 or model_config.get("default_model")
                 or model_config.get("model_name")
             )
@@ -497,7 +514,9 @@ class LangGraphAgent(BaseAgent):
 
             result = await self.graph.ainvoke(initial_state, self.config)
             if result["messages"]:
-                response = result["messages"][-1].content
+                # ChatBedrockConverse returns .content as a list of blocks;
+                # normalize to a string so downstream (UI/tracing) stays str-based.
+                response = message_content_to_text(result["messages"][-1].content)
             return response
         finally:
             reset_llm_provider(provider_token)

@@ -1,5 +1,5 @@
 """
-LLM and embedding helpers for local (Ollama) and hosted (OpenAI) inference.
+LLM and embedding helpers for local (Ollama), hosted (OpenAI), and AWS Bedrock inference.
 """
 import json
 import os
@@ -12,12 +12,17 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 
-LLMProvider = Literal["local", "hosted"]
+LLMProvider = Literal["local", "hosted", "bedrock"]
 
 DEFAULT_LOCAL_CHAT_MODEL = "gemma4"
 DEFAULT_HOSTED_CHAT_MODEL = "gpt-4o"
+DEFAULT_BEDROCK_CHAT_MODEL = "mistral.ministral-3-14b-instruct"
 DEFAULT_LOCAL_EMBEDDING_MODEL = "nomic-embed-text"
 DEFAULT_HOSTED_EMBEDDING_MODEL = "text-embedding-3-large"
+DEFAULT_BEDROCK_EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0"
+DEFAULT_BEDROCK_REGION = "us-east-1"
+# nomic-embed-text (Ollama) produces 768-dim vectors; OpenAI must match for pgvector.
+DEFAULT_EMBEDDING_DIMENSIONS = 768
 
 _llm_provider_ctx: ContextVar[LLMProvider] = ContextVar("llm_provider", default="local")
 
@@ -33,7 +38,7 @@ def reset_llm_provider(token: Token) -> None:
 
 
 def get_llm_provider() -> LLMProvider:
-    """Return the active LLM provider ('local' for Ollama, 'hosted' for OpenAI)."""
+    """Return the active LLM provider ('local'=Ollama, 'hosted'=OpenAI, 'bedrock'=AWS)."""
     return _llm_provider_ctx.get()
 
 
@@ -42,20 +47,222 @@ def get_ollama_base_url() -> str:
     return os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
 
+def get_bedrock_region() -> str:
+    """Return the AWS region for Bedrock calls (default: us-east-1)."""
+    return (
+        os.environ.get("AWS_REGION")
+        or os.environ.get("BEDROCK_REGION")
+        or DEFAULT_BEDROCK_REGION
+    )
+
+
+def message_content_to_text(content) -> str:
+    """Flatten a LangChain message's ``.content`` to plain text.
+
+    ChatOpenAI / ChatOllama return ``.content`` as a ``str``, but
+    ChatBedrockConverse (and other Bedrock Converse / Anthropic-style models)
+    return a list of content blocks, e.g. ``[{"type": "text", "text": "..."}]``.
+    Callers that expect a string (UI rendering, tracing, history) must normalize
+    through this so Bedrock responses don't break ``str`` operations like
+    ``.replace()``.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: List[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                text = block.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "".join(parts)
+    if content is None:
+        return ""
+    return str(content)
+
+
 def get_default_chat_model(*, provider: Optional[LLMProvider] = None) -> str:
     """Return the default chat model for the given or active provider."""
     resolved = provider or get_llm_provider()
     if resolved == "hosted":
         return os.environ.get("OPENAI_DEFAULT_CHAT_MODEL", DEFAULT_HOSTED_CHAT_MODEL)
+    if resolved == "bedrock":
+        return os.environ.get("BEDROCK_DEFAULT_CHAT_MODEL", DEFAULT_BEDROCK_CHAT_MODEL)
     return os.environ.get("OLLAMA_DEFAULT_CHAT_MODEL", DEFAULT_LOCAL_CHAT_MODEL)
 
 
-def get_default_embedding_model(*, provider: Optional[LLMProvider] = None) -> str:
-    """Return the default embedding model for the given or active provider."""
-    resolved = provider or get_llm_provider()
-    if resolved == "hosted":
-        return os.environ.get("OPENAI_EMBEDDING_MODEL", DEFAULT_HOSTED_EMBEDDING_MODEL)
-    return os.environ.get("OLLAMA_EMBEDDING_MODEL", DEFAULT_LOCAL_EMBEDDING_MODEL)
+def get_embedding_dimensions() -> int:
+    """Return embedding vector size for the single pgvector index."""
+    raw = os.environ.get(
+        "OPENAI_EMBEDDING_DIMENSIONS",
+        os.environ.get("EMBEDDING_DIMENSIONS", str(DEFAULT_EMBEDDING_DIMENSIONS)),
+    )
+    return int(raw)
+
+
+def is_ollama_available(*, timeout: float = 3) -> bool:
+    """Return True if the Ollama server responds at the configured base URL."""
+    url = f"{get_ollama_base_url().rstrip('/')}/api/tags"
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            response.read()
+        return True
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return False
+
+
+def get_configured_embedding_provider() -> Optional[LLMProvider]:
+    """Optional embedding-provider override from config (EMBEDDING_PROVIDER).
+
+    Returns None when unset, in which case the embedding provider follows the
+    chat provider selected in the UI. Set it only to pin RAG to one backend
+    regardless of the chat toggle.
+    """
+    raw = os.environ.get("EMBEDDING_PROVIDER", "").strip().lower()
+    if raw in ("hosted", "openai"):
+        return "hosted"
+    if raw in ("bedrock", "aws"):
+        return "bedrock"
+    if raw in ("local", "ollama"):
+        return "local"
+    return None
+
+
+# Placeholder values shipped in secrets.toml.template — treated as "not set".
+_OPENAI_KEY_PLACEHOLDERS = {
+    "",
+    "...",
+    "sk-...",
+    "your_openai_api_key_here",
+    "your-openai-api-key",
+    "your-openai-api-key-here",
+}
+
+
+def openai_api_key_configured() -> bool:
+    """True only if a real OpenAI key is set (not empty and not a template placeholder)."""
+    key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if key in _OPENAI_KEY_PLACEHOLDERS:
+        return False
+    if "..." in key:  # any leftover ellipsis from the template
+        return False
+    return bool(key)
+
+
+def bedrock_configured() -> bool:
+    """True if a Bedrock API key (bearer token) is set (a region always resolves)."""
+    return bool(os.environ.get("AWS_BEARER_TOKEN_BEDROCK", "").strip())
+
+
+def ensure_bedrock_credentials() -> None:
+    """Raise with setup instructions if the Bedrock bearer token is not configured."""
+    if not bedrock_configured():
+        raise ValueError(
+            "AWS_BEARER_TOKEN_BEDROCK is not set. Add a real bedrock_api_key to "
+            ".streamlit/secrets.toml (and optionally aws_region, default us-east-1) "
+            "to use the Bedrock (AWS) provider."
+        )
+
+
+def ollama_configured() -> bool:
+    """True if an Ollama base URL is configured (ollama_base_url in secrets.toml)."""
+    return bool(os.environ.get("OLLAMA_BASE_URL", "").strip())
+
+
+# Provider ordering for the UI. Display order is how options appear in the
+# radio; priority order decides which configured provider is preselected.
+_PROVIDER_DISPLAY_ORDER: tuple = ("local", "hosted", "bedrock")
+_PROVIDER_PRIORITY: tuple = ("local", "bedrock", "hosted")
+
+
+def provider_configured(provider: LLMProvider) -> bool:
+    """True if the given provider's credential is set in secrets.toml.
+
+    "Configured" means the credential is present — it does NOT check live
+    reachability (e.g. whether the Ollama server is actually running).
+    """
+    if provider == "hosted":
+        return openai_api_key_configured()
+    if provider == "bedrock":
+        return bedrock_configured()
+    return ollama_configured()
+
+
+def configured_providers() -> List[LLMProvider]:
+    """Return providers whose credential is set, in UI display order."""
+    return [p for p in _PROVIDER_DISPLAY_ORDER if provider_configured(p)]
+
+
+def default_provider() -> Optional[LLMProvider]:
+    """Return the provider to preselect: first configured in priority order.
+
+    Priority is local > bedrock > hosted. Returns None if none are configured.
+    """
+    for provider in _PROVIDER_PRIORITY:
+        if provider_configured(provider):
+            return provider
+    return None
+
+
+def embedding_backend_available(provider: LLMProvider) -> bool:
+    """Return True if the given embedding backend can actually be used right now.
+
+    Checks live availability at call time: for local, whether the Ollama server
+    responds; for hosted, whether a real OpenAI key is configured; for bedrock,
+    whether a Bedrock API key is configured.
+    """
+    if provider == "hosted":
+        return openai_api_key_configured()
+    if provider == "bedrock":
+        return bedrock_configured()
+    return is_ollama_available()
+
+
+# Order in which to try other backends when the desired one is unavailable.
+_EMBEDDING_FALLBACK_ORDER: tuple[LLMProvider, ...] = ("local", "hosted", "bedrock")
+
+
+def resolve_embedding_provider(
+    provider: Optional[LLMProvider] = None,
+) -> LLMProvider:
+    """
+    Resolve the *desired* embedding backend for RAG.
+
+    Follows the chat provider selected in the UI (get_llm_provider()) so RAG
+    embeds queries with the same provider as chat. This is safe because the
+    setup script builds a separate pgvector index per provider
+    ({domain}_local_index for Ollama, {domain}_hosted_index for OpenAI,
+    {domain}_bedrock_index for Bedrock) and each index is only ever queried
+    with the backend that built it — so flipping the UI toggle just switches
+    which prebuilt index is searched, never compares vectors across
+    incompatible embedding spaces.
+
+    Precedence: explicit `provider` arg > EMBEDDING_PROVIDER override > chat
+    radio (get_llm_provider()). If the desired backend's service is
+    unreachable, falls back to the first other reachable backend so RAG keeps
+    working.
+    """
+    requested: LLMProvider = provider or get_configured_embedding_provider() or get_llm_provider()
+
+    if embedding_backend_available(requested):
+        return requested
+
+    for fallback in _EMBEDDING_FALLBACK_ORDER:
+        if fallback == requested:
+            continue
+        if embedding_backend_available(fallback):
+            print(
+                f"ℹ️  '{requested}' embedding backend unavailable; "
+                f"falling back to '{fallback}'."
+            )
+            return fallback
+
+    raise ConnectionError(
+        f"No embedding backend available. Start Ollama at {get_ollama_base_url()}, "
+        "set openai_api_key, or set bedrock_api_key in .streamlit/secrets.toml."
+    )
 
 
 def get_domain_embedding_model(
@@ -63,20 +270,31 @@ def get_domain_embedding_model(
     *,
     provider: Optional[LLMProvider] = None,
 ) -> str:
-    """Return the Ollama embedding model used for pgvector retrieval."""
+    """Return the embedding model for the active or specified provider."""
+    resolved = resolve_embedding_provider(provider)
+    if resolved == "hosted":
+        return (
+            vectorstore_config.get("hosted_embedding_model")
+            or os.environ.get("OPENAI_EMBEDDING_MODEL", DEFAULT_HOSTED_EMBEDDING_MODEL)
+        )
+    if resolved == "bedrock":
+        return (
+            vectorstore_config.get("bedrock_embedding_model")
+            or os.environ.get("BEDROCK_EMBEDDING_MODEL", DEFAULT_BEDROCK_EMBEDDING_MODEL)
+        )
     return (
         vectorstore_config.get("embedding_model")
-        or get_default_embedding_model(provider="local")
+        or os.environ.get("OLLAMA_EMBEDDING_MODEL", DEFAULT_LOCAL_EMBEDDING_MODEL)
     )
 
 
 def ensure_openai_api_key() -> str:
     """Return OPENAI_API_KEY or raise with setup instructions."""
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-    if not api_key:
+    if not openai_api_key_configured():
         raise ValueError(
-            "OPENAI_API_KEY is not set. Add openai_api_key to .streamlit/secrets.toml "
-            "to use the Hosted (OpenAI) provider."
+            "OPENAI_API_KEY is not set (or still a placeholder). Add a real "
+            "openai_api_key to .streamlit/secrets.toml to use the Hosted (OpenAI) provider."
         )
     return api_key
 
@@ -122,6 +340,11 @@ def get_domain_chat_model(domain_config: dict, *, override: Optional[str] = None
             model_cfg.get("hosted_default_model")
             or get_default_chat_model(provider="hosted")
         )
+    if provider == "bedrock":
+        return (
+            model_cfg.get("bedrock_default_model")
+            or get_default_chat_model(provider="bedrock")
+        )
     return model_cfg.get("default_model") or get_default_chat_model(provider="local")
 
 
@@ -147,6 +370,19 @@ def get_chat_model(
             kwargs["name"] = name
         return ChatOpenAI(**kwargs)
 
+    if resolved_provider == "bedrock":
+        from langchain_aws import ChatBedrockConverse
+
+        ensure_bedrock_credentials()
+        kwargs = {
+            "model": model,
+            "temperature": temperature,
+            "region_name": get_bedrock_region(),
+        }
+        if name:
+            kwargs["name"] = name
+        return ChatBedrockConverse(**kwargs)
+
     ensure_ollama_model_available(model, model_kind="chat model")
     kwargs = {
         "model": model,
@@ -164,15 +400,56 @@ def get_embeddings(
     *,
     provider: Optional[LLMProvider] = None,
 ) -> Embeddings:
-    """Create embeddings for the active or specified provider."""
-    resolved_provider = provider or get_llm_provider()
-    embedding_model = model or get_default_embedding_model(provider=resolved_provider)
+    """Create embeddings for the UI-selected provider (with Ollama→OpenAI fallback)."""
+    resolved_provider = resolve_embedding_provider(provider)
+    config: dict = {}
+    embedding_model = model or get_domain_embedding_model(config, provider=resolved_provider)
 
     if resolved_provider == "hosted":
         from langchain_openai import OpenAIEmbeddings
 
         ensure_openai_api_key()
-        return OpenAIEmbeddings(model=embedding_model)
+        kwargs = {"model": embedding_model}
+        if embedding_model.startswith("text-embedding-3"):
+            kwargs["dimensions"] = get_embedding_dimensions()
+        return OpenAIEmbeddings(**kwargs)
+
+    if resolved_provider == "bedrock":
+        from langchain_aws import BedrockEmbeddings
+
+        ensure_bedrock_credentials()
+        # Bedrock embedding models emit their own native dimensionality (e.g.
+        # Titan v2 = 1024); this index is a separate collection, so we do NOT
+        # apply the OpenAI-only get_embedding_dimensions() (768) here.
+        return BedrockEmbeddings(
+            model_id=embedding_model,
+            region_name=get_bedrock_region(),
+        )
 
     ensure_ollama_model_available(embedding_model, model_kind="embedding model")
     return OllamaEmbeddings(model=embedding_model, base_url=get_ollama_base_url())
+
+
+def get_index_embeddings(
+    vectorstore_config: Optional[dict] = None,
+    *,
+    provider: Optional[LLMProvider] = None,
+) -> Embeddings:
+    """Embeddings for pgvector. Pass `provider` to pin the backend (e.g. the
+    index the caller has already selected); otherwise follows the UI selection.
+    """
+    config = vectorstore_config or {}
+    resolved = resolve_embedding_provider(provider)
+    model = get_domain_embedding_model(config, provider=resolved)
+    return get_embeddings(model, provider=resolved)
+
+
+# Backward-compatible aliases
+get_index_embedding_provider = get_llm_provider
+get_vector_embeddings = get_index_embeddings
+get_vector_embedding_provider = get_llm_provider
+
+
+def get_index_embedding_model(vectorstore_config: Optional[dict] = None) -> str:
+    """Return the embedding model for the UI-selected provider."""
+    return get_domain_embedding_model(vectorstore_config or {})
