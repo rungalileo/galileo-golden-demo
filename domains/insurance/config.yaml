@@ -19,12 +19,11 @@ model:
   default_model: "gemma4"
   temperature: 0.1
   additional_models:
-    - "llama3.1"
-    - "deepseek-r1"
-    - "llama3.2"
     - "mistral"
-    - "qwen2.5"
   hosted_default_model: "gpt-4o"
+  bedrock_default_model: "mistral.ministral-3-14b-instruct"
+  bedrock_additional_models:
+    - "mistral.ministral-3-8b-instruct"
   hosted_additional_models:
     - "gpt-4o-mini"
     - "gpt-4.1"
@@ -46,6 +45,7 @@ tools:
 # Vector store configuration
 vectorstore:
   embedding_model: "nomic-embed-text"
+  bedrock_embedding_model: "amazon.titan-embed-text-v2:0"
 
 # Demo hallucinations for Galileo observability demos
 demo_hallucinations:

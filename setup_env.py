@@ -2,10 +2,26 @@
 Environment Setup - Load secrets and set environment variables
 """
 import os
+import warnings
 import toml
 import yaml
 from pathlib import Path
 from typing import Optional
+
+# Silence Galileo SDK span-serialization noise. The Galileo ingestion models
+# subclass the core span types and hold child spans in a discriminated union,
+# which makes Pydantic 2.12 emit "PydanticSerializationUnexpectedValue" /
+# "Pydantic serializer warnings" (field_name='spans') on every trace upload.
+# It's cosmetic — traces still serialize and upload correctly, and it's provider
+# independent (not related to Ollama/OpenAI/Bedrock). Registered here (imported
+# before `galileo`) so it applies process-wide. Remove this filter if it ever
+# masks a real serialization problem.
+warnings.filterwarnings(
+    "ignore",
+    message="Pydantic serializer warnings",
+    category=UserWarning,
+    module="pydantic",
+)
 
 
 def _derive_galileo_api_url(console_url: str, explicit_url: str = "") -> str:
@@ -93,7 +109,9 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
         
         # Base environment variables (always set)
         env_vars = {
-            "OLLAMA_BASE_URL": secrets.get("ollama_base_url", "http://localhost:11434"),
+            # No default: an unset ollama_base_url means "Local not configured".
+            # Connections still fall back to localhost via get_ollama_base_url().
+            "OLLAMA_BASE_URL": secrets.get("ollama_base_url", ""),
             "OLLAMA_DEFAULT_CHAT_MODEL": secrets.get(
                 "ollama_default_chat_model", "gemma4"
             ),
@@ -109,6 +127,14 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
             ),
             "OPENAI_EMBEDDING_DIMENSIONS": str(
                 secrets.get("openai_embedding_dimensions", 768)
+            ),
+            "AWS_BEARER_TOKEN_BEDROCK": secrets.get("bedrock_api_key", ""),
+            "AWS_REGION": secrets.get("aws_region", "us-east-1"),
+            "BEDROCK_DEFAULT_CHAT_MODEL": secrets.get(
+                "bedrock_default_chat_model", "mistral.ministral-3-14b-instruct"
+            ),
+            "BEDROCK_EMBEDDING_MODEL": secrets.get(
+                "bedrock_embedding_model", "amazon.titan-embed-text-v2:0"
             ),
             "GALILEO_API_KEY": galileo_api_key,
             "GALILEO_API_URL": galileo_api_url,
@@ -138,10 +164,23 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
             env_vars["GALILEO_PROJECT"] = project_name
             env_vars["GALILEO_LOG_STREAM"] = log_stream
         
+        # Provider credentials must reflect secrets.toml exactly. If a value is
+        # empty, clear any ambient/leftover env var (exported in the shell, or
+        # set by a previous run) so a provider can't appear "configured" — and
+        # thus selectable in the UI — just because the variable exists in the
+        # environment. Other empty keys are left as-is (only warned about).
+        _AUTHORITATIVE_KEYS = {
+            "OLLAMA_BASE_URL",
+            "OPENAI_API_KEY",
+            "AWS_BEARER_TOKEN_BEDROCK",
+        }
         for key, value in env_vars.items():
             if value:  # Only set if value is not empty
                 os.environ[key] = value
                 # print(f"✅ Set {key}")
+            elif key in _AUTHORITATIVE_KEYS:
+                os.environ.pop(key, None)
+                print(f"ℹ️  {key} not configured in secrets.toml (cleared)")
             else:
                 print(f"⚠️  {key} not set (empty value)")
 

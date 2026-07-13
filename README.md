@@ -1,5 +1,7 @@
 # Galileo Golden Demo
 
+***2026-07-13 Release: Now with support for AWS Bedrock models***
+
 A multi-turn agentic system that showcases Galileo across multiple domains and agent frameworks, designed to be used for product demos. The code itself is reusable and configurable for a variety of use cases.
 
 ## What This Repo Is
@@ -17,6 +19,7 @@ Not a production reference architecture or replacement for customer-specific POC
 - Python 3.8+
 - Access to a Large Language Model
    - [Ollama](https://ollama.com/) running locally (default: `http://localhost:11434`); or
+   - AWS Bedrock LLM (via `AWS_BEARER_TOKEN_BEDROCK` token)
    - OpenAI API Key
 - Galileo API key
 - PostgreSQL with pgvector (local Docker container or hosted instance)
@@ -29,9 +32,11 @@ Not a production reference architecture or replacement for customer-specific POC
    cd new-golden-demo
    ```
 
-2. **Install Ollama on Mac and pull models**
+2. **[Optional] Install Ollama on Mac and pull models**
 
-   This demo uses **Ollama** for local inference when the sidebar **Model provider** is set to **Local (Ollama)**. The default chat model is **`gemma4`**.
+   This demo can use **Ollama** for local inference when the sidebar **Model provider** is set to **Local (Ollama)**. The default chat model is **`gemma4`**.
+
+   This is the best option, though it requires more hardware to ensure performance.
 
    #### Install Ollama (macOS)
 
@@ -81,9 +86,8 @@ Not a production reference architecture or replacement for customer-specific POC
    These appear in the sidebar **Select Model** dropdown under **Local (Ollama)**:
 
    ```bash
-   ollama pull deepseek-r1
    ollama pull mistral
-   ollama pull qwen2.5
+   ...
    ```
 
    Do keep in mind that you will need to download any other models you want to test with; also, the model needs to have tool and reasoning capabilities. Gemma4 was the only model to work consistently during testing, so make sure to test any other models thoroughly.
@@ -135,18 +139,23 @@ Not a production reference architecture or replacement for customer-specific POC
    # OpenAI (optional — for sidebar "Hosted (OpenAI)" provider)
    openai_api_key = "your_openai_api_key_here"
 
-   galileo_api_key = "your_galileo_api_key_here"
-   
-   # Galileo Configuration
-   galileo_console_url = "https://console.galileo.ai"  # or your custom URL
-   
+   # AWS Bedrock Configuration
+   bedrock_api_key = "..." # Amazon Bedrock API key
+   aws_region = "us-east-1" # AWS region for Bedrock inference
+   bedrock_default_chat_model = "mistral.ministral-3-14b-instruct"
+   bedrock_embedding_model = "amazon.titan-embed-text-v2:0"
+ 
    # PostgreSQL Configuration (pgvector)
    postgres_host = "localhost"
    postgres_port = "5432"
    postgres_user = "postgres"
    postgres_password = "mypassword"
    postgres_db = "vectordb"
-   
+
+   # Galileo Configuration
+   galileo_api_key = "your_galileo_api_key_here"
+   galileo_console_url = "https://console.galileo.ai"  # or your custom URL
+    
    # Agent Control configuration
    galileo_api_url = "https://api.galileo.ai" 
    agent_control_url = "https://console.galileo.ai/api/agent-control"
@@ -155,7 +164,7 @@ Not a production reference architecture or replacement for customer-specific POC
    **Note:** Galileo project names are configured per-domain in `domains/{domain}/config.yaml`
 
 7. **Set up vector databases**
-   Ollama and OpenAI embeddings can't share one index — different embedding models produce different vector spaces even at the same dimension count, so searching across them silently returns wrong results. Because of that, the script creates 2 indexes for each domain, automatically. The index is chosen at runtime based on what LLM service is being used (Ollama or OpenAI)
+   Ollama, OpenAI, and Bedrock embeddings can't share one index — different embedding models produce different vector spaces even at the same dimension count, so searching across them silently returns wrong results. Because of that, the script creates one index per configured provider for each domain, automatically. The index is chosen at runtime based on what LLM service is being used (Ollama, OpenAI, or Bedrock).
 
    ```bash
    python helpers/setup_vectordb.py bank
@@ -164,9 +173,15 @@ Not a production reference architecture or replacement for customer-specific POC
    python helpers/setup_vectordb.py restaurant
    ```
 
-   The script **auto-detects if Ollama and OpenAI (if the openai_api_key variable is set on the secrets.toml file) are available at run time** and builds accordingly. If only one backend is available, it builds just that index (skipping the other with a warning). Make sure to have the right service available before running the script.
+   The script takes **no provider arguments** — it reads `.streamlit/secrets.toml` and builds an index for each provider whose credential is set:
 
-   Switching the **Model provider** toggle in the UI then automatically uses the matching index (Local → Ollama index, Hosted → OpenAI index). If only one index was built, RAG falls back to it regardless of the toggle, so search always works. (Advanced: set `embedding_provider` in `secrets.toml` to pin RAG to one backend regardless of the chat toggle.)
+   - if `ollama_base_url` is set **and the Ollama server reachable** → `{domain}_local_index` (Ollama)
+   - if `openai_api_key` is set → `{domain}_hosted_index` (OpenAI)
+   - if `bedrock_api_key` is set → `{domain}_bedrock_index` (Bedrock)
+
+   Providers whose credential isn't set are skipped with a note (Ollama is also skipped if `ollama serve` isn't running). Each configured provider is built independently, so a failure in one is reported but doesn't abort the others.
+
+   Switching the **Model provider** toggle in the UI then automatically uses the matching index (Local → Ollama index, Hosted → OpenAI index, Bedrock → Bedrock index). If the matching index wasn't built, RAG falls back to another prebuilt index so search always works. (Advanced: set `embedding_provider` in `secrets.toml` to `local`, `hosted`, or `bedrock` to pin RAG to one backend regardless of the chat toggle.)
 
 PS: Make sure to run the setup script even if you are upgrading from a previous version of the demo, as the index layout changed (one index per provider).
 
@@ -182,14 +197,29 @@ The app will be available at `http://localhost:8501`
 
 ## Model Selection
 
+The behavior of the application has changed in this version. The Model Provider list will be defined dynamically; only the providers enabled and configured in the `secrets.toml` file will be shown in the UI: Local (Ollama), Hosted (OpenAI) and Bedrock (AWS). If you don't see one of these options in the running app, check the `secrets.toml` configuration.
+
+Also, the priority of the default provider will be:
+- Ollama
+- Bedrock
+- OpenAI
+
 Use the **sidebar → Model** section to choose how the app runs:
 
 - **Local (Ollama)** — uses models pulled locally (default: `gemma4`). See step 2 above for Mac install and `ollama pull gemma4`.
 - **Hosted (OpenAI)** — uses OpenAI models via `openai_api_key` in `.streamlit/secrets.toml`.
+- **Bedrock (AWS)** — uses AWS Bedrock models via `bedrock_api_key` (and `aws_region`, default `us-east-1`) in `.streamlit/secrets.toml`. Auth uses a Bedrock API key (bearer token) — no SigV4 access keys needed.
+
+PS: to hide the provider options from the UI:
+- Ollama: comment the `ollama_base_url` parameter in `secrets.toml`
+- Bedrock: comment the `bedrock_api_key` parameter in `secrets.toml`
+- OpenAI: comment the `openai_api_key` parameter in `secrets.toml`
+
+&nbsp;
 
 The **Select Model** dropdown lists provider-specific models from each domain's `config.yaml`. The selection applies to both **Chat** and **Experiments**, and you can change it mid-session without losing conversation history.
 
-Switching this toggle also switches which prebuilt RAG index is queried (Local → the Ollama index, Hosted → the OpenAI index), so make sure you've built both — see Setup step 7. Each index is queried only with the embedding model that built it, so search is always internally consistent within a provider.
+Switching this toggle also switches which prebuilt RAG index is queried (Local → the Ollama index, Hosted → the OpenAI index, Bedrock → the Bedrock index), so make sure you've built the ones you'll use — see Setup step 7. Each index is queried only with the embedding model that built it, so search is always internally consistent within a provider.
 
 Keep in mind that reloading the page creates a new session and resets all controls to default value, including the model selection. If you're demoing with OpenAI, you will want to change the default value to prevent issues during the demo.
 
@@ -254,7 +284,7 @@ Do keep in mind that this is a simple model out-of-the-box: one table. If you wa
 One tip is to find some kind of Q&A in your prospect's web site and prepare a list of 10 or so questions and answers. Choose one of them to be the example question in the main web UI.
 
 **RAG / FAQ data**:
-- `qa.csv` with `question` and `answer` columns (healthcare/bank pattern)
+- `qa.csv` with `question` and `answer` columns.
 
 Try to keep the number of questions low, around 10 or so.
 
@@ -268,13 +298,15 @@ Do keep in mind that only very basic text-to-sql was used for the demo ("show me
 
 **IMPORTANT**
 
-**Note:** `helpers/setup_vectordb.py` has custom ingestion for `healthcare` and `bank` (structured `qa.csv` embedding plus relational table load). If your new domain uses the same `qa.csv` + relational CSV pattern, add a similar branch in `setup_vectordb.py`, or call `load_domain_relational_csvs()` after generic doc embedding.
+**Note:** `helpers/setup_vectordb.py` has custom ingestion for each domain (structured `qa.csv` embedding plus relational table load). If your new domain uses the same `qa.csv` + relational CSV pattern, add a similar branch in `setup_vectordb.py`, or call `load_domain_relational_csvs()` after generic doc embedding.
 
 &nbsp;
 
 PS: This is implemented like this in case you decide to create a new domain with completely different tools. In this case, you can add custom logic to the `setup_vectordb.py` so the Database structure can be created in the exact format that you need. Otherwise, you can copy the same `if` block used by one of the existing domains (or just change to something like `if domain in [list]`).
 
 &nbsp;
+
+Finally, as noted above, `helpers/setup_vectordb.py` will create the index for the providers that are configured in the `secrets.toml` file. Make sure that configuration is correct before running this script.
 
 ### 3. Define tools
 
@@ -389,9 +421,6 @@ model:
   default_model: "gemma4"
   temperature: 0.1
   additional_models:
-    - "llama3.1"
-    - "deepseek-r1"
-    - "llama3.2"
     - "mistral"
 
 rag:
@@ -416,12 +445,12 @@ vectorstore:
 ### 6. Load data into PostgreSQL
 
 ```bash
-python helpers/setup_vectordb.py your_domain both
+python helpers/setup_vectordb.py your_domain
 ```
 
 This script:
 
-- Embeds `qa.csv` RAG documents into pgvector (`{domain}_{environment}_index`)
+- Embeds `qa.csv` RAG documents into pgvector, building one index per configured provider (`{domain}_local_index` / `{domain}_hosted_index` / `{domain}_bedrock_index`)
 - Loads `relational_*.csv` files into SQL tables (for healthcare/bank; extend for new domains as noted above)
 
 PostgreSQL with pgvector must be running before you run this. Re-running the script drops and recreates the vector collection for a clean state.

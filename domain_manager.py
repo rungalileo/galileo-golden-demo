@@ -118,6 +118,12 @@ class DomainManager:
             m for m in hosted_additional if m != hosted_default
         ]
 
+        bedrock_default = model_cfg.get("bedrock_default_model") or "mistral.ministral-3-14b-instruct"
+        bedrock_additional = model_cfg.get("bedrock_additional_models") or ["mistral.ministral-3-8b-instruct"]
+        bedrock_models = [bedrock_default] + [
+            m for m in bedrock_additional if m != bedrock_default
+        ]
+
         return {
             "name": domain_config.name,
             "description": domain_config.description,
@@ -130,6 +136,8 @@ class DomainManager:
             "local_default_model": default_model,
             "hosted_models": hosted_models,
             "hosted_default_model": hosted_default,
+            "bedrock_models": bedrock_models,
+            "bedrock_default_model": bedrock_default,
             "ui": domain_config.config.get("ui", {}),
         }
     

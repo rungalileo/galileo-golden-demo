@@ -16,15 +16,16 @@ from helpers.llm_utils import (
 )
 
 # Default embedding provider / collection suffix. Each domain has one pgvector
-# collection per provider: {domain}_local_index (Ollama) and
-# {domain}_hosted_index (OpenAI). Kept named VECTOR_INDEX_ENV for backward compat.
+# collection per provider: {domain}_local_index (Ollama), {domain}_hosted_index
+# (OpenAI), and {domain}_bedrock_index (Bedrock). Kept named VECTOR_INDEX_ENV
+# for backward compat.
 VECTOR_INDEX_ENV = "local"
-_PROVIDERS = ("local", "hosted")
+_PROVIDERS = ("local", "hosted", "bedrock")
 
 
 def _cli_name(provider: str) -> str:
     """Map internal provider id to the setup_vectordb.py CLI name."""
-    return "openai" if provider == "hosted" else "ollama"
+    return {"hosted": "openai", "bedrock": "bedrock"}.get(provider, "ollama")
 
 
 def get_postgres_connection_string() -> str:
@@ -40,7 +41,8 @@ def get_postgres_connection_string() -> str:
 def get_collection_name(domain_name: str, provider: Optional[str] = None) -> str:
     """SQL-safe collection name per provider: {domain}_{provider}_index.
 
-    provider is 'local' (Ollama) or 'hosted' (OpenAI); defaults to 'local'.
+    provider is 'local' (Ollama), 'hosted' (OpenAI), or 'bedrock' (AWS);
+    defaults to 'local'.
     """
     prov = provider or VECTOR_INDEX_ENV
     return f"{domain_name}_{prov}_index"
@@ -88,13 +90,15 @@ def select_embedding_provider_for_domain(domain_name: str) -> str:
     if collection_exists(domain_name, desired) and embedding_backend_available(desired):
         return desired
 
-    other = "local" if desired == "hosted" else "hosted"
-    if collection_exists(domain_name, other) and embedding_backend_available(other):
-        print(
-            f"ℹ️  No usable '{desired}' index for {domain_name}; "
-            f"querying the '{other}' index instead."
-        )
-        return other
+    for other in _PROVIDERS:
+        if other == desired:
+            continue
+        if collection_exists(domain_name, other) and embedding_backend_available(other):
+            print(
+                f"ℹ️  No usable '{desired}' index for {domain_name}; "
+                f"querying the '{other}' index instead."
+            )
+            return other
 
     built = [p for p in _PROVIDERS if collection_exists(domain_name, p)]
     if not built:

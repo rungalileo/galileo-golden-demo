@@ -4,32 +4,26 @@ Supports any domain by reading configuration from domain config files.
 Uses PostgreSQL with pgvector for vector storage.
 
 Usage:
-    python setup_vectordb.py <domain_name> [ollama|openai|both]
+    python setup_vectordb.py <domain_name>
 
 Example:
-    python setup_vectordb.py finance          # builds BOTH indexes (default)
-    python setup_vectordb.py finance both
-    python setup_vectordb.py finance ollama   # only the Ollama index
-    python setup_vectordb.py finance openai   # only the OpenAI index
+    python setup_vectordb.py finance
 
-Ollama and OpenAI embeddings can't share a single index — different embedding
-models produce different vector spaces even at the same dimension count, so
-similarity search across them silently returns wrong results. Instead this
-script builds ONE index per provider:
-    {domain}_local_index   (Ollama)
-    {domain}_hosted_index  (OpenAI)
-so the app can switch between providers via the UI toggle without any extra
-setup — it just queries whichever prebuilt index matches the active provider.
+Which indexes get built is derived entirely from the credentials present in
+.streamlit/secrets.toml — there are no provider arguments. For each provider
+whose credential is set, one index is built:
+    - ollama_base_url set AND Ollama reachable -> {domain}_local_index    (Ollama)
+    - openai_api_key set                       -> {domain}_hosted_index   (OpenAI)
+    - bedrock_api_key set                      -> {domain}_bedrock_index  (Bedrock)
 
-By default (no argument, or `both`) it auto-detects what's available at run
-time and builds accordingly:
-    - Ollama running AND a real OPENAI_API_KEY set -> builds BOTH indexes
-    - only Ollama available                        -> builds the Ollama index
-    - only OpenAI available                        -> builds the OpenAI index
-    - neither available                            -> builds nothing, errors
-Unavailable backends are skipped with a warning rather than failing the whole
-run. Requesting a single backend explicitly (`ollama`/`openai`) still fails
-if that one backend isn't available.
+Different embedding models can't share a single index — they produce different
+vector spaces even at the same dimension count, so similarity search across them
+silently returns wrong results. Building ONE index per configured provider lets
+the app switch between providers via the UI toggle without any extra setup — it
+just queries whichever prebuilt index matches the active provider.
+
+Each provider is built independently, so a runtime failure in one (e.g. Ollama
+not running, or an invalid key) is reported but doesn't abort the others.
 """
 import argparse
 import sys
@@ -46,11 +40,13 @@ from langchain_community.document_loaders.csv_loader import CSVLoader
 from langchain_community.document_loaders import DirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from helpers.llm_utils import (
-    embedding_backend_available,
+    bedrock_configured,
     get_domain_embedding_model,
     get_embedding_dimensions,
     get_embeddings,
     get_ollama_base_url,
+    is_ollama_available,
+    openai_api_key_configured,
 )
 from langchain_core.documents import Document
 from helpers.pgvector_utils import create_pgvector_store, get_collection_name
@@ -59,14 +55,9 @@ import getpass
 import uuid
 import pandas as pd
 
-# CLI-facing names -> the list of internal providers to build for.
-_CLI_TO_PROVIDERS = {
-    "both": ["local", "hosted"],
-    "ollama": ["local"],
-    "local": ["local"],
-    "openai": ["hosted"],
-    "hosted": ["hosted"],
-}
+# All providers, in build order. Which ones are actually built is decided at
+# run time from the credentials present in secrets.toml (see _configured_providers).
+_ALL_PROVIDERS = ("local", "hosted", "bedrock")
 
 # Domains whose docs are a structured qa.csv (embedded as FAQ Q&A) plus
 # relational CSVs loaded into SQL. Value: (FAQ title, question label, answer label).
@@ -80,14 +71,37 @@ _QA_DOMAINS = {
 
 def _cli_name(provider: str) -> str:
     """Map internal provider id to the CLI-facing backend name."""
-    return "openai" if provider == "hosted" else "ollama"
+    return {"hosted": "openai", "bedrock": "bedrock"}.get(provider, "ollama")
 
 
-def _backend_unavailable_reason(provider: str) -> str:
-    """Human-readable reason a backend can't be used for index building."""
+def _not_configured_reason(provider: str) -> str:
+    """Human-readable reason a provider's index won't be built."""
     if provider == "local":
-        return f"Ollama not reachable at {get_ollama_base_url()}"
-    return "OPENAI_API_KEY not configured in .streamlit/secrets.toml (missing or placeholder)"
+        if not os.environ.get("OLLAMA_BASE_URL", "").strip():
+            return "ollama_base_url not set in .streamlit/secrets.toml"
+        # base_url is set but the server didn't respond.
+        return f"Ollama not reachable at {get_ollama_base_url()} (is `ollama serve` running?)"
+    return {
+        "hosted": "openai_api_key not set in .streamlit/secrets.toml (missing or placeholder)",
+        "bedrock": "bedrock_api_key not set in .streamlit/secrets.toml",
+    }.get(provider, "not configured")
+
+
+def _configured_providers() -> List[str]:
+    """Return the providers to build for, based on credentials in secrets.toml.
+
+    setup_environment() must have been called first so the secrets are loaded
+    into the environment. A provider is built when its credential is present:
+      - local:   ollama_base_url set AND the Ollama server is reachable
+      - hosted:  openai_api_key set (and not a placeholder)
+      - bedrock: bedrock_api_key set
+    """
+    configured = {
+        "local": bool(os.environ.get("OLLAMA_BASE_URL", "").strip()) and is_ollama_available(),
+        "hosted": openai_api_key_configured(),
+        "bedrock": bedrock_configured(),
+    }
+    return [p for p in _ALL_PROVIDERS if configured[p]]
 
 
 def _build_qa_documents(domain_name: str, docs_dir: str) -> List[Document]:
@@ -138,23 +152,19 @@ def _load_and_split_generic(
     return all_docs
 
 
-def setup_vectordb_for_domain(domain_name: str, providers: List[str]):
+def setup_vectordb_for_domain(domain_name: str):
     """
-    Build one pgvector index per requested provider for a domain.
+    Build one pgvector index per configured provider for a domain.
 
-    The same documents are embedded once per provider into a separate
-    collection ({domain}_local_index / {domain}_hosted_index), so the app can
-    switch providers at query time with no extra setup.
+    Which providers are built is derived from the credentials in secrets.toml
+    (see _configured_providers). The same documents are embedded once per
+    provider into a separate collection ({domain}_local_index /
+    {domain}_hosted_index / {domain}_bedrock_index), so the app can switch
+    providers at query time with no extra setup.
 
     Args:
         domain_name: Name of the domain (e.g., 'finance')
-        providers: Internal provider ids to build for — any of {'local','hosted'}.
     """
-    invalid = [p for p in providers if p not in ("local", "hosted")]
-    if invalid:
-        print(f"❌ Invalid provider(s): {invalid}. Use 'ollama', 'openai', or 'both'.")
-        return False
-
     # Load domain configuration and secrets.
     domain_manager = DomainManager()
     try:
@@ -167,32 +177,23 @@ def setup_vectordb_for_domain(domain_name: str, providers: List[str]):
 
     setup_environment(domain_name, domain_config.config)
 
-    # Detect which embedding backends are actually available right now, and
-    # build indexes only for those. With the default 'both', this means:
-    # both available -> both indexes; only one available -> just that one.
-    print("Detecting available embedding backends...")
-    ollama_ok = embedding_backend_available("local")
-    openai_ok = embedding_backend_available("hosted")
-    print(f"  • Ollama (local):  {'available' if ollama_ok else 'not available'}")
-    print(f"  • OpenAI (hosted): {'available' if openai_ok else 'not available'}")
-
-    explicit_single = len(providers) == 1
-    available: List[str] = []
-    for provider in providers:
-        if embedding_backend_available(provider):
-            available.append(provider)
+    # Decide which indexes to build from the credentials in secrets.toml.
+    print("Detecting configured providers from secrets.toml...")
+    available = _configured_providers()
+    for provider in _ALL_PROVIDERS:
+        if provider in available:
+            print(
+                f"  • {_cli_name(provider)}: configured -> will build "
+                f"{get_collection_name(domain_name, provider)}"
+            )
         else:
-            reason = _backend_unavailable_reason(provider)
-            if explicit_single:
-                # User explicitly asked for exactly this backend — respect it.
-                print(f"❌ Cannot build the {_cli_name(provider)} index: {reason}.")
-                return False
-            print(f"⚠️  Skipping {_cli_name(provider)} index: {reason}.")
+            print(f"  • {_cli_name(provider)}: skipped ({_not_configured_reason(provider)})")
 
     if not available:
         print(
-            "❌ No embedding backend available; nothing was built. Start Ollama "
-            "or set a real openai_api_key in .streamlit/secrets.toml, then re-run."
+            "❌ No provider credentials found in .streamlit/secrets.toml; nothing "
+            "was built. Set ollama_base_url, openai_api_key, and/or bedrock_api_key, "
+            "then re-run."
         )
         return False
 
@@ -248,8 +249,10 @@ def setup_vectordb_for_domain(domain_name: str, providers: List[str]):
         print(f"\n▶ Building {collection_name} with {_cli_name(provider)} embeddings (model: {model})")
         if provider == "local":
             print(f"   If the model is missing, run: ollama pull {model}")
-        else:
+        elif provider == "hosted":
             print(f"   Using OpenAI embeddings ({get_embedding_dimensions()} dimensions).")
+        else:
+            print("   Using Bedrock embeddings (native model dimensionality).")
 
         try:
             embeddings = get_embeddings(model, provider=provider)
@@ -300,17 +303,6 @@ def main():
         help="Domain name (e.g., 'finance')"
     )
     parser.add_argument(
-        "provider",
-        nargs="?",
-        choices=sorted(_CLI_TO_PROVIDERS),
-        default="both",
-        help=(
-            "Which index(es) to build: 'both' (default), 'ollama' (local), or "
-            "'openai' (hosted). Unavailable backends are skipped with a warning "
-            "when building 'both'."
-        ),
-    )
-    parser.add_argument(
         "--list-domains",
         action="store_true",
         help="List available domains"
@@ -326,8 +318,7 @@ def main():
             print(f"  - {domain}")
         return
 
-    providers = _CLI_TO_PROVIDERS[args.provider]
-    success = setup_vectordb_for_domain(args.domain, providers)
+    success = setup_vectordb_for_domain(args.domain)
     if not success:
         sys.exit(1)
 

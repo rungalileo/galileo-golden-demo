@@ -173,12 +173,14 @@ async def _execute_schedule_delete_sql(sql: str) -> str:
         return json.dumps({"error": str(e), "sql": sql})
 
 
-async def get_schedule_info(period_name: str, user_prompt: str = "") -> str:
+async def get_schedule_info(period_name: str, user_prompt: str = "", userPrompt: str = "") -> str:
     """
     Retrieve schedule information by their period name.
 
     Returns period name, person, role, and hours per shift.
     """
+    if userPrompt != "":
+        user_prompt = userPrompt
     print(f"get_schedule_info: period_name: {period_name}, user_prompt: {user_prompt}", flush=True)
     start_time = time.time()
     period_name = period_name.strip().upper()

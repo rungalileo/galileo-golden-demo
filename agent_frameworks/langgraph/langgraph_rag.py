@@ -68,13 +68,14 @@ class DomainRAGSystem:
 
             chat_provider = get_llm_provider()
 
+            _provider_default_model = {
+                "hosted": model_config.get("hosted_default_model"),
+                "bedrock": model_config.get("bedrock_default_model"),
+            }.get(chat_provider, model_config.get("default_model"))
+
             llm_model = (
                 self.model_name
-                or (
-                    model_config.get("hosted_default_model")
-                    if chat_provider == "hosted"
-                    else model_config.get("default_model")
-                )
+                or _provider_default_model
                 or model_config.get("default_model")
                 or model_config.get(
                     "model_name", get_default_chat_model(provider=chat_provider)
@@ -88,9 +89,9 @@ class DomainRAGSystem:
                     "POSTGRES_PASSWORD not found. Please add it to .streamlit/secrets.toml"
                 )
 
-            # Selects the prebuilt index matching the active provider (Ollama or
-            # OpenAI), falling back to whichever index exists. Raises a clear
-            # error pointing at setup_vectordb.py if neither has been built.
+            # Selects the prebuilt index matching the active provider (Ollama,
+            # OpenAI, or Bedrock), falling back to whichever index exists. Raises
+            # a clear error pointing at setup_vectordb.py if none has been built.
             vector_store, _ = get_pgvector_store(
                 self.domain_name, vectorstore_config=vectorstore_config
             )
@@ -133,6 +134,7 @@ class DomainRAGSystem:
             result = await asyncio.to_thread(
                 self.retrieval_chain.invoke, {"input": query}
             )
+            # print(f"---> RAG result: {result}")
             return result["answer"]
         except Exception as e:
             return f"❌ Error during RAG search for domain '{self.domain_name}': {str(e)}"

@@ -52,6 +52,9 @@ def _models_for_provider(domain_info: dict, provider: str) -> tuple[list[str], s
     if provider == "hosted":
         models = domain_info.get("hosted_models") or ["gpt-4o"]
         default = domain_info.get("hosted_default_model") or models[0]
+    elif provider == "bedrock":
+        models = domain_info.get("bedrock_models") or ["mistral.ministral-3-14b-instruct", "mistral.ministral-3-8b-instruct"]
+        default = domain_info.get("bedrock_default_model") or models[0]
     else:
         models = domain_info.get("local_models") or domain_info.get("available_models") or ["gemma4"]
         default = (
@@ -85,10 +88,12 @@ def _invalidate_domain_agent_state(domain_name: str) -> None:
 
 
 def _normalize_provider(provider: Optional[str]) -> str:
-    """Normalize provider values to 'local' or 'hosted'."""
+    """Normalize provider values to 'local', 'hosted', or 'bedrock'."""
     normalized = str(provider or "local").strip().lower()
     if normalized in {"hosted", "openai"}:
         return "hosted"
+    if normalized in {"bedrock", "aws"}:
+        return "bedrock"
     return "local"
 
 
@@ -101,39 +106,59 @@ def render_model_settings(domain_name: str, domain_config_key: str) -> tuple[str
     prev_provider_key = f"llm_provider_prev_{domain_name}"
     selected_model_key = f"selected_model_{domain_name}"
 
-    if provider_key not in st.session_state:
-        st.session_state[provider_key] = "local"
+    # Only providers whose credential is set in secrets.toml are offered, and
+    # the default selection follows priority local > bedrock > hosted.
+    from helpers.llm_utils import configured_providers, default_provider
+
+    provider_options = configured_providers()
+    if not provider_options:
+        st.error(
+            "No LLM provider is configured. Set `ollama_base_url`, `openai_api_key`, "
+            "or `bedrock_api_key` in `.streamlit/secrets.toml`."
+        )
+        st.stop()
+
+    # Initialize / repair the stored provider so it's always a configured one.
+    if (
+        provider_key not in st.session_state
+        or _normalize_provider(st.session_state[provider_key]) not in provider_options
+    ):
+        st.session_state[provider_key] = default_provider()
     if prev_provider_key not in st.session_state:
         st.session_state[prev_provider_key] = st.session_state[provider_key]
 
     prev_provider = st.session_state[prev_provider_key]
+    provider_labels = {
+        "local": "Local (Ollama)",
+        "hosted": "Hosted (OpenAI)",
+        "bedrock": "Bedrock (AWS)",
+    }
+    # The current selection is driven by st.session_state[provider_key] (seeded
+    # above), so we don't pass index — Streamlit uses the session value.
     selected_provider = st.radio(
         "Model provider",
-        options=["local", "hosted"],
-        format_func=lambda x: "Local (Ollama)" if x == "local" else "Hosted (OpenAI)",
-        index=0 if st.session_state[provider_key] == "local" else 1,
+        options=provider_options,
+        format_func=lambda x: provider_labels.get(x, x),
         key=provider_key,
         horizontal=True,
     )
     selected_provider = _normalize_provider(selected_provider)
 
-    if selected_provider == "hosted" and not os.environ.get("OPENAI_API_KEY"):
-        st.warning(
-            "Set `openai_api_key` in `.streamlit/secrets.toml` to use Hosted (OpenAI)."
-        )
-
     try:
         from helpers.pgvector_utils import collection_exists
 
         # The app can query whichever provider's index exists, so only warn
-        # when neither has been built. `both` builds Ollama + OpenAI indexes.
-        has_any_index = collection_exists(domain_name, "local") or collection_exists(
-            domain_name, "hosted"
+        # when none has been built. setup_vectordb builds one index per
+        # configured provider automatically.
+        has_any_index = (
+            collection_exists(domain_name, "local")
+            or collection_exists(domain_name, "hosted")
+            or collection_exists(domain_name, "bedrock")
         )
         if not has_any_index:
             st.warning(
                 f"No vector index for **{domain_name}**. Run: "
-                f"`python helpers/setup_vectordb.py {domain_name} both`"
+                f"`python helpers/setup_vectordb.py {domain_name}`"
             )
     except Exception:
         pass
@@ -159,11 +184,11 @@ def render_model_settings(domain_name: str, domain_config_key: str) -> tuple[str
         options=available_models,
         index=model_index,
         key=f"model_select_{domain_name}",
-        help=(
-            "Ollama model used for chat and experiments"
-            if selected_provider == "local"
-            else "OpenAI model used for chat and experiments"
-        ),
+        help={
+            "local": "Ollama model used for chat and experiments",
+            "hosted": "OpenAI model used for chat and experiments",
+            "bedrock": "AWS Bedrock model used for chat and experiments",
+        }.get(selected_provider, "Model used for chat and experiments"),
     )
     if selected_model != prev_model:
         st.session_state[selected_model_key] = selected_model
@@ -192,9 +217,16 @@ def initialize_rag_systems(domain_name: str, llm_provider: str = "local"):
         reset_llm_provider(token)
 
 
-def escape_dollar_signs(text: str) -> str:
-    """Escape dollar signs in text to prevent LaTeX interpretation."""
-    return text.replace('$', '\\$')
+def escape_dollar_signs(text) -> str:
+    """Escape dollar signs in text to prevent LaTeX interpretation.
+
+    Accepts either a plain string or LangChain message content (which is a list
+    of blocks for ChatBedrockConverse), normalizing to text first so Bedrock
+    responses render without erroring.
+    """
+    from helpers.llm_utils import message_content_to_text
+
+    return message_content_to_text(text).replace('$', '\\$')
 
 
 def add_hallucination_interaction_to_chat(domain_config: dict) -> bool:
@@ -414,7 +446,11 @@ def render_experiments_page(domain_name: str, domain_config, agent_factory):
         # Model used for this experiment (same as sidebar selection)
         experiment_model = st.session_state.get(f"selected_model_{domain_name}") or st.session_state.get(f"domain_config_{domain_name}", {}).get("default_model")
         experiment_provider = st.session_state.get(f"llm_provider_{domain_name}", "local")
-        provider_label = "OpenAI" if experiment_provider == "hosted" else "Ollama"
+        provider_label = {
+            "hosted": "OpenAI",
+            "bedrock": "Bedrock",
+            "local": "Ollama",
+        }.get(_normalize_provider(experiment_provider), "Ollama")
         st.caption(
             f"Provider: **{provider_label}** | Model: **{experiment_model or 'default'}** (change in sidebar)"
         )
