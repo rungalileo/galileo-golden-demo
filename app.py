@@ -958,13 +958,23 @@ def multi_domain_agent_app(domain_name: str):
                     )
                     chaos.enable_rate_limit_chaos(rate_limits)
                     
+                    # Runaway Retries (baits an agent retry loop → rising token cost)
+                    runaway_retries = st.checkbox(
+                        "🔄 Runaway Retries",
+                        value=chaos.runaway_retries_enabled,
+                        key=f"chaos_runaway_retries_{domain_name}",
+                        help="Tool always fails with a transient 'retry me' error, baiting the agent into a costly retry loop (pair with the block-runaway-retries control)"
+                    )
+                    chaos.enable_runaway_retries(runaway_retries)
+                    
                     # Show active chaos count
                     active_count = sum([
                         chaos.tool_instability_enabled,
                         chaos.sloppiness_enabled,
                         chaos.data_corruption_enabled,
                         chaos.rag_chaos_enabled,
-                        chaos.rate_limit_chaos_enabled
+                        chaos.rate_limit_chaos_enabled,
+                        chaos.runaway_retries_enabled
                     ])
                     
                     if active_count > 0:
@@ -981,6 +991,7 @@ def multi_domain_agent_app(domain_name: str):
                             with col2:
                                 st.metric("Rate Limits", stats['rate_limit_chaos_count'])
                                 st.metric("Data Corruption", stats['data_corruption_count'])
+                                st.metric("Runaway Retries", stats['runaway_retries_count'])
                             
                             if st.button("Reset Stats", key=f"reset_chaos_stats_{domain_name}"):
                                 chaos.reset_stats()

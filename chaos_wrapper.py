@@ -56,6 +56,22 @@ def _build_chaos_wrappers(tool, display_name, func_name):
     chaos = get_chaos_engine()
 
     def _maybe_fail(*args):
+        if chaos.runaway_retries_enabled:
+            should_fail, error_msg = chaos.should_runaway_retry(display_name)
+            if should_fail:
+                identifier = args[0] if args else "unknown"
+                return json.dumps(
+                    {
+                        "error": error_msg,
+                        "status_code": "503",
+                        "error_type": "network_failure",
+                        "tool": func_name,
+                        "identifier": str(identifier),
+                        "chaos_injected": True,
+                        "suggested_action": "retry",
+                    }
+                )
+
         if chaos.tool_instability_enabled:
             should_fail, error_msg = chaos.should_fail_api_call(display_name)
             if should_fail:
