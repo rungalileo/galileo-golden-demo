@@ -867,7 +867,7 @@ def multi_domain_agent_app(domain_name: str):
     # Chat Tab
     with tab1:
         with st.sidebar:
-            st.subheader("Galileo Tracing")
+            st.subheader("Splunk Agent Observability")
 
             # Get project and log stream names from environment variables (set by setup_environment)
             project_name = os.environ.get("GALILEO_PROJECT", "")
@@ -883,7 +883,7 @@ def multi_domain_agent_app(domain_name: str):
 
                         if log_stream_id:
                             project_url = f"{console_url}/project/{project_id}/log-streams/{log_stream_id}"
-                            st.markdown(f"[📊 View traces in Galileo]({project_url})")
+                            st.markdown(f"[📊 View traces in Splunk]({project_url})")
                         else:
                             st.write("Log stream not found")
                     else:
