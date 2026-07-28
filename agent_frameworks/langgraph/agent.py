@@ -24,7 +24,14 @@ from helpers.llm_utils import (
 from langgraph.graph import START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
-from agent_control import ControlSteerError, ControlViolationError, control
+from agent_control import (
+    ControlSteerError,
+    ControlViolationError,
+    control,
+    evaluate_controls,
+    get_current_span_id,
+    get_current_trace_id,
+)
 from base_agent import BaseAgent
 from domain_manager import DomainConfig
 from galileo.handlers.langchain import GalileoCallback
@@ -185,6 +192,36 @@ def _latest_human_text(messages: List[BaseMessage]) -> str:
         if isinstance(msg, HumanMessage):
             return _message_content_text(msg)
     return ""
+
+
+def _extract_retrieved_context(messages: List[BaseMessage]) -> List[str]:
+    """Collect retrieved document text from search/retrieval ToolMessages this turn.
+
+    ``search_medicine_qa`` returns ``json.dumps([<retrieved text>, ...])`` — a JSON
+    list of snippet strings — while other tools return dict payloads (SQL results,
+    errors, steer notices). We keep only the genuine retrieval snippets so a
+    context-adherence control can compare the answer against the documents the
+    agent actually retrieved. This mirrors the Luna metric's training data, whose
+    ``documents`` column held exactly this retrieved context.
+    """
+    docs: List[str] = []
+    for msg in messages:
+        if not isinstance(msg, ToolMessage):
+            continue
+        text = _tool_content_text(msg.content)
+        if not text:
+            continue
+        try:
+            payload = json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        # Retrieval tool returns a JSON list of snippet strings; dict payloads are
+        # SQL results / errors / steer notices, never retrieval context.
+        if isinstance(payload, list):
+            for item in payload:
+                if isinstance(item, str) and item.strip():
+                    docs.append(item)
+    return docs
 
 
 def _last_tool_failed_via_chaos(messages: List[BaseMessage]) -> bool:
@@ -517,18 +554,61 @@ class LangGraphAgent(BaseAgent):
             # print(f"--> LLM output: {result}", flush=True)
             return result
 
-        @control(step_name=answer_step_name)
-        async def _review_final_answer(answer_text):
-            # Pass-through review step for the agent's FINAL text answer. The LLM
-            # is NOT called here — we just hand the already-produced answer text
-            # to Agent Control so a POST control (e.g. the SDK dosage rule)
-            # evaluates the answer itself. Two payoffs:
-            #   1. The control sees the real answer text, never an intermediate
-            #      tool-call message (whose args mention the drug but have no
-            #      dosage) — that was the false positive that blocked tool calls.
-            #   2. Returning the text records it as this step's input/output, so
-            #      the would-be answer stays visible in the trace even when the
-            #      control denies it (the audience can see WHAT got blocked).
+        async def _review_final_answer(question_text, answer_text, context_docs):
+            # Review step for the agent's FINAL text answer. We evaluate controls
+            # explicitly (not via the @control decorator) because the decorator
+            # can only map a function's input/output into the Step.
+            #
+            # IMPORTANT (per Agent Control dev): inline galileo.luna evaluation does
+            # NOT inspect the trace or retriever spans, and it IGNORES Step.context.
+            # The Luna evaluator extracts only top-level `input` and `output` and
+            # sends them as Luna inputs.query / inputs.response. So a
+            # context-adherence scorer can only see the retrieved documents if they
+            # are embedded in the `input` string (the prompt Luna receives). We
+            # build "Context:\n...\n\nQuestion:\n..." here; context= is passed only
+            # as optional metadata and is ignored by the scorer.
+            #
+            # Only genuine final answers reach here (text, no tool calls, after a
+            # successful retrieval), so the control never trips on intermediate
+            # tool-call messages — the false positive that used to block tool calls.
+            context_text = "\n\n".join(context_docs) if context_docs else ""
+            luna_input = (
+                f"Context:\n{context_text}\n\nQuestion:\n{question_text}"
+                if context_text
+                else question_text
+            )
+            context = {"documents": context_docs} if context_docs else None
+
+            trace_id = None
+            span_id = None
+            try:
+                trace_id = get_current_trace_id()
+                span_id = get_current_span_id()
+            except Exception:
+                pass
+
+            result = await evaluate_controls(
+                answer_step_name,
+                input=luna_input,
+                output=answer_text,
+                context=context,
+                step_type="llm",
+                stage="post",
+                agent_name=os.environ.get("AGENT_CONTROL_AGENT_NAME", ""),
+                trace_id=trace_id,
+                span_id=span_id,
+            )
+
+            # evaluate_controls returns an EvaluationResult (it does not raise).
+            # Re-raise as ControlViolationError so the existing block handling in
+            # invoke_chatbot (friendly message, notify, trace) applies unchanged.
+            if not result.is_safe:
+                match = (result.matches or [None])[0]
+                raise ControlViolationError(
+                    control_id=getattr(match, "control_id", None),
+                    control_name=getattr(match, "control_name", "dosage-hallucination"),
+                    message=result.reason or "Answer blocked by Agent Control",
+                )
             return answer_text
 
         async def invoke_chatbot(state):
@@ -653,9 +733,10 @@ class LangGraphAgent(BaseAgent):
             # intermediate tool-call outputs, and the would-be answer is recorded
             # as this step's output so it stays visible in the trace when denied.
             answer_text = _message_content_text(message)
-            has_retrieved_context = any(
-                isinstance(m, ToolMessage) for m in state["messages"]
-            ) and not _last_tool_failed_via_chaos(list(state["messages"]))
+            retrieved_docs = _extract_retrieved_context(list(state["messages"]))
+            has_retrieved_context = bool(retrieved_docs) and not _last_tool_failed_via_chaos(
+                list(state["messages"])
+            )
             if (
                 not control_blocked
                 and answer_text
@@ -663,7 +744,11 @@ class LangGraphAgent(BaseAgent):
                 and has_retrieved_context
             ):
                 try:
-                    await _review_final_answer(answer_text)
+                    await _review_final_answer(
+                        _latest_human_text(list(state["messages"])),
+                        answer_text,
+                        retrieved_docs,
+                    )
                 except ControlViolationError as e:
                     notify_control_block(e, step_name=answer_step_name)
                     message = AIMessage(
