@@ -83,6 +83,15 @@ RUNAWAY_BLOCKED_MESSAGE = (
     "continues, contact support and reference the issue below."
 )
 
+# Shown when the dosage / hallucination answer-review control denies a response.
+# Kept deliberately simple and reassuring: the answer was held back because it
+# wasn't confident enough, not because the user did anything wrong.
+DOSAGE_BLOCKED_MESSAGE = (
+    "⚠️ Sorry — I'm not confident enough in that answer to share it, so it was "
+    "held back. This can happen when the details don't clearly match our verified "
+    "sources. Please try asking again or rephrase your question."
+)
+
 
 def format_blocked_message(
     error: Exception,
@@ -105,6 +114,8 @@ def format_blocked_message(
     control_name = str(getattr(error, "control_name", "") or "")
     if "runaway" in control_name.lower():
         return f"{RUNAWAY_BLOCKED_MESSAGE}\n\n_Reference: {control_name}_"
+    if "dosage" in control_name.lower() or "hallucination" in control_name.lower():
+        return DOSAGE_BLOCKED_MESSAGE
 
     return (
         "I'm sorry, this action was blocked by Agent Control. "

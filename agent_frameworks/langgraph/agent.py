@@ -340,8 +340,13 @@ class LangGraphAgent(BaseAgent):
             tool_schema = json.load(f)
 
         llm_step_name = f"{self.domain_config.name.title()} Assistant"
+        answer_step_name = f"{self.domain_config.name.title()} Final Answer"
         tool_names = [schema.get("name") for schema in tool_schema if schema.get("name")]
         control_steps = build_agent_control_steps(llm_step_name, tool_names)
+        # Register a distinct LLM step for the final, post-retrieval answer so a
+        # POST control (e.g. the SDK dosage-adherence rule) can scope to it and
+        # NOT fire on the intermediate tool-selection call.
+        control_steps.append({"type": "llm", "name": answer_step_name})
         
         # Create a module specification from the file path
         # This tells Python how to load the module from a file
@@ -493,6 +498,7 @@ class LangGraphAgent(BaseAgent):
         ).bind_tools(self.tools)
 
         llm_step_name = f"{self.domain_config.name.title()} Assistant"
+        answer_step_name = f"{self.domain_config.name.title()} Final Answer"
         last_llm_output: Dict[str, Any] = {"message": None}
         # Messages reach the LLM via this holder so the @control step can be
         # invoked with a compact marker string (what Agent Control evaluates in
@@ -510,6 +516,20 @@ class LangGraphAgent(BaseAgent):
             last_llm_output["message"] = result
             # print(f"--> LLM output: {result}", flush=True)
             return result
+
+        @control(step_name=answer_step_name)
+        async def _review_final_answer(answer_text):
+            # Pass-through review step for the agent's FINAL text answer. The LLM
+            # is NOT called here — we just hand the already-produced answer text
+            # to Agent Control so a POST control (e.g. the SDK dosage rule)
+            # evaluates the answer itself. Two payoffs:
+            #   1. The control sees the real answer text, never an intermediate
+            #      tool-call message (whose args mention the drug but have no
+            #      dosage) — that was the false positive that blocked tool calls.
+            #   2. Returning the text records it as this step's input/output, so
+            #      the would-be answer stays visible in the trace even when the
+            #      control denies it (the audience can see WHAT got blocked).
+            return answer_text
 
         async def invoke_chatbot(state):
             messages = list(state["messages"])
@@ -624,6 +644,36 @@ class LangGraphAgent(BaseAgent):
                 replay_calls = _last_tool_calls(list(state["messages"]))
                 if replay_calls:
                     message = _forced_retry_message(replay_calls)
+
+            # Answer-review control (e.g. the SDK dosage-hallucination rule).
+            # Runs ONLY on a genuine final text answer — the model produced text
+            # and no tool calls — after a successful retrieval (context present,
+            # last tool not a chaos failure). Evaluating the answer text under
+            # the "Final Answer" step means the control never trips on
+            # intermediate tool-call outputs, and the would-be answer is recorded
+            # as this step's output so it stays visible in the trace when denied.
+            answer_text = _message_content_text(message)
+            has_retrieved_context = any(
+                isinstance(m, ToolMessage) for m in state["messages"]
+            ) and not _last_tool_failed_via_chaos(list(state["messages"]))
+            if (
+                not control_blocked
+                and answer_text
+                and not getattr(message, "tool_calls", None)
+                and has_retrieved_context
+            ):
+                try:
+                    await _review_final_answer(answer_text)
+                except ControlViolationError as e:
+                    notify_control_block(e, step_name=answer_step_name)
+                    message = AIMessage(
+                        content=format_blocked_message(e, step_name=answer_step_name)
+                    )
+                    control_blocked = True
+                except ControlSteerError as e:
+                    notify_control_block(
+                        e, step_name=answer_step_name, guardrail_result="steered"
+                    )
 
             return {
                 "messages": [message],
