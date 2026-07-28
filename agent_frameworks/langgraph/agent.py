@@ -7,6 +7,7 @@ import importlib.util
 import inspect
 import json
 import random
+import uuid
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated, TypedDict, List, Dict, Any, Optional
@@ -23,7 +24,14 @@ from helpers.llm_utils import (
 from langgraph.graph import START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
-from agent_control import ControlSteerError, ControlViolationError, control
+from agent_control import (
+    ControlSteerError,
+    ControlViolationError,
+    control,
+    evaluate_controls,
+    get_current_span_id,
+    get_current_trace_id,
+)
 from base_agent import BaseAgent
 from domain_manager import DomainConfig
 from galileo.handlers.langchain import GalileoCallback
@@ -54,6 +62,19 @@ except ImportError:
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from chaos_engine import get_chaos_engine
 from .langgraph_rag import create_domain_rag_tool
+
+
+# Infinite-loop backstop only. In normal operation the runaway loop ends on its
+# own: the chaos engine "recovers" after N failures (tool finally succeeds) on
+# the bad path, and Agent Control blocks even earlier (tool_retries>=3) on the
+# good path. This guard sits well above the chaos recovery point and should
+# never fire — it exists purely so a misconfiguration can't loop until the
+# LangGraph recursion limit throws. Its margin above the recovery threshold:
+RUNAWAY_LOOP_GUARD_MARGIN = 4
+RUNAWAY_LOOP_GUARD_MESSAGE = (
+    "I couldn't complete this request because the tool kept failing. "
+    "Please try again in a moment."
+)
 
 
 # Define the state for our graph
@@ -140,6 +161,117 @@ def _count_tool_steer_events(messages: List[BaseMessage]) -> int:
         if payload and payload.get("steered_by_agent_control"):
             count += 1
     return count
+
+
+def _count_failed_tool_attempts(messages: List[BaseMessage]) -> int:
+    """Count tool results that failed due to injected chaos this turn.
+
+    Used to build the Agent Control ``tool_retries`` marker so a PRE deny control
+    on the LLM step can break a runaway retry loop (agent repeatedly re-calling a
+    failing tool, burning tokens each round).
+    """
+    count = 0
+    for msg in messages:
+        if not isinstance(msg, ToolMessage):
+            continue
+        payload = _parse_tool_message_payload(msg.content)
+        if not payload:
+            continue
+        if payload.get("chaos_injected") or payload.get("error_type") in (
+            "network_failure",
+            "rate_limit",
+            "rag_failure",
+        ):
+            count += 1
+    return count
+
+
+def _latest_human_text(messages: List[BaseMessage]) -> str:
+    """Return the most recent human message text (for the Agent Control marker input)."""
+    for msg in reversed(messages):
+        if isinstance(msg, HumanMessage):
+            return _message_content_text(msg)
+    return ""
+
+
+def _extract_retrieved_context(messages: List[BaseMessage]) -> List[str]:
+    """Collect retrieved document text from search/retrieval ToolMessages this turn.
+
+    ``search_medicine_qa`` returns ``json.dumps([<retrieved text>, ...])`` — a JSON
+    list of snippet strings — while other tools return dict payloads (SQL results,
+    errors, steer notices). We keep only the genuine retrieval snippets so a
+    context-adherence control can compare the answer against the documents the
+    agent actually retrieved. This mirrors the Luna metric's training data, whose
+    ``documents`` column held exactly this retrieved context.
+    """
+    docs: List[str] = []
+    for msg in messages:
+        if not isinstance(msg, ToolMessage):
+            continue
+        text = _tool_content_text(msg.content)
+        if not text:
+            continue
+        try:
+            payload = json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        # Retrieval tool returns a JSON list of snippet strings; dict payloads are
+        # SQL results / errors / steer notices, never retrieval context.
+        if isinstance(payload, list):
+            for item in payload:
+                if isinstance(item, str) and item.strip():
+                    docs.append(item)
+    return docs
+
+
+def _last_tool_failed_via_chaos(messages: List[BaseMessage]) -> bool:
+    """True when the most recent message is a chaos-injected tool failure.
+
+    Signals that the runaway-retry loop should keep going: the previous tool
+    call came back as a transient/failure, so a real agent would (in theory)
+    retry it.
+    """
+    if not messages:
+        return False
+    last = messages[-1]
+    if not isinstance(last, ToolMessage):
+        return False
+    payload = _parse_tool_message_payload(last.content)
+    if not payload:
+        return False
+    return bool(
+        payload.get("chaos_injected")
+        or payload.get("error_type") in ("network_failure", "rate_limit", "rag_failure")
+    )
+
+
+def _last_tool_calls(messages: List[BaseMessage]) -> List[dict]:
+    """Return the tool_calls from the most recent AIMessage that issued any."""
+    for msg in reversed(messages):
+        if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+            return list(msg.tool_calls)
+    return []
+
+
+def _forced_retry_message(tool_calls: List[dict]) -> AIMessage:
+    """Synthesize an AIMessage that re-issues the given tool calls with fresh ids.
+
+    Used to deterministically drive a runaway-retry loop when the local model
+    declines to retry a failing tool on its own. Each call gets a new id so the
+    ToolNode treats it as a distinct invocation (one span per failed call in the
+    Galileo trace).
+    """
+    forced = [
+        {
+            "name": tc.get("name"),
+            "args": dict(tc.get("args") or {}),
+            "id": f"call_{uuid.uuid4().hex[:8]}",
+            "type": "tool_call",
+        }
+        for tc in tool_calls
+        if tc.get("name")
+    ]
+    return AIMessage(content="", tool_calls=forced)
 
 
 def _extract_tool_steer_instructions(messages: List[BaseMessage]) -> Optional[str]:
@@ -245,8 +377,13 @@ class LangGraphAgent(BaseAgent):
             tool_schema = json.load(f)
 
         llm_step_name = f"{self.domain_config.name.title()} Assistant"
+        answer_step_name = f"{self.domain_config.name.title()} Final Answer"
         tool_names = [schema.get("name") for schema in tool_schema if schema.get("name")]
         control_steps = build_agent_control_steps(llm_step_name, tool_names)
+        # Register a distinct LLM step for the final, post-retrieval answer so a
+        # POST control (e.g. the SDK dosage-adherence rule) can scope to it and
+        # NOT fire on the intermediate tool-selection call.
+        control_steps.append({"type": "llm", "name": answer_step_name})
         
         # Create a module specification from the file path
         # This tells Python how to load the module from a file
@@ -398,20 +535,88 @@ class LangGraphAgent(BaseAgent):
         ).bind_tools(self.tools)
 
         llm_step_name = f"{self.domain_config.name.title()} Assistant"
+        answer_step_name = f"{self.domain_config.name.title()} Final Answer"
         last_llm_output: Dict[str, Any] = {"message": None}
+        # Messages reach the LLM via this holder so the @control step can be
+        # invoked with a compact marker string (what Agent Control evaluates in
+        # the PRE stage) while the real LangChain messages (what the LLM sees)
+        # travel out-of-band. Mirrors the control_input vs llm_input split used
+        # in the multi-agent reference demo.
+        llm_call_ctx: Dict[str, Any] = {"messages": []}
 
         @control(step_name=llm_step_name)
-        async def _invoke_llm(msgs):
-            result = await llm_with_tools.ainvoke(msgs)
+        async def _invoke_llm(control_input):
+            # `control_input` is the marker string Agent Control evaluates
+            # (e.g. "[ac:step=llm tool_retries=3] ..."). The LLM itself only ever
+            # sees llm_call_ctx["messages"], never the marker.
+            result = await llm_with_tools.ainvoke(llm_call_ctx["messages"])
             last_llm_output["message"] = result
             # print(f"--> LLM output: {result}", flush=True)
             return result
+
+        async def _review_final_answer(question_text, answer_text, context_docs):
+            # Review step for the agent's FINAL text answer. We evaluate controls
+            # explicitly (not via the @control decorator) because the decorator
+            # can only map a function's input/output into the Step.
+            #
+            # IMPORTANT (per Agent Control dev): inline galileo.luna evaluation does
+            # NOT inspect the trace or retriever spans, and it IGNORES Step.context.
+            # The Luna evaluator extracts only top-level `input` and `output` and
+            # sends them as Luna inputs.query / inputs.response. So a
+            # context-adherence scorer can only see the retrieved documents if they
+            # are embedded in the `input` string (the prompt Luna receives). We
+            # build "Context:\n...\n\nQuestion:\n..." here; context= is passed only
+            # as optional metadata and is ignored by the scorer.
+            #
+            # Only genuine final answers reach here (text, no tool calls, after a
+            # successful retrieval), so the control never trips on intermediate
+            # tool-call messages — the false positive that used to block tool calls.
+            context_text = "\n\n".join(context_docs) if context_docs else ""
+            luna_input = (
+                f"Context:\n{context_text}\n\nQuestion:\n{question_text}"
+                if context_text
+                else question_text
+            )
+            context = {"documents": context_docs} if context_docs else None
+
+            trace_id = None
+            span_id = None
+            try:
+                trace_id = get_current_trace_id()
+                span_id = get_current_span_id()
+            except Exception:
+                pass
+
+            result = await evaluate_controls(
+                answer_step_name,
+                input=luna_input,
+                output=answer_text,
+                context=context,
+                step_type="llm",
+                stage="post",
+                agent_name=os.environ.get("AGENT_CONTROL_AGENT_NAME", ""),
+                trace_id=trace_id,
+                span_id=span_id,
+            )
+
+            # evaluate_controls returns an EvaluationResult (it does not raise).
+            # Re-raise as ControlViolationError so the existing block handling in
+            # invoke_chatbot (friendly message, notify, trace) applies unchanged.
+            if not result.is_safe:
+                match = (result.matches or [None])[0]
+                raise ControlViolationError(
+                    control_id=getattr(match, "control_id", None),
+                    control_name=getattr(match, "control_name", "dosage-hallucination"),
+                    message=result.reason or "Answer blocked by Agent Control",
+                )
+            return answer_text
 
         async def invoke_chatbot(state):
             messages = list(state["messages"])
             message = None
             tool_steer_events = _count_tool_steer_events(messages)
             llm_steer_attempts = 0
+            chaos = get_chaos_engine()
 
             if tool_steer_events >= MAX_STEER_RETRIES:
                 return {
@@ -419,8 +624,23 @@ class LangGraphAgent(BaseAgent):
                     "steer_attempts": tool_steer_events,
                 }
 
+            # Infinite-loop backstop only (see RUNAWAY_LOOP_GUARD_MARGIN). The
+            # runaway loop normally ends by itself — the tool "recovers" and
+            # succeeds after chaos.runaway_retries_recover_after failures on the
+            # bad path, or Agent Control blocks at tool_retries>=3 on the good
+            # path. This guard sits above the recovery point and should not fire.
+            failed_tool_attempts = _count_failed_tool_attempts(list(state["messages"]))
+            loop_guard = (
+                getattr(chaos, "runaway_retries_recover_after", 6)
+                + RUNAWAY_LOOP_GUARD_MARGIN
+            )
+            if failed_tool_attempts >= loop_guard:
+                return {
+                    "messages": [AIMessage(content=RUNAWAY_LOOP_GUARD_MESSAGE)],
+                    "steer_attempts": tool_steer_events,
+                }
+
             # 🔥 CHAOS: Corrupt tool messages before LLM sees them (runtime check!)
-            chaos = get_chaos_engine()
             if chaos.sloppiness_enabled and random.random() < chaos.sloppiness_rate:
                 for i, msg in enumerate(messages):
                     if isinstance(msg, ToolMessage):
@@ -443,15 +663,26 @@ class LangGraphAgent(BaseAgent):
             last_llm_output["message"] = None
             remaining_attempts = max(MAX_STEER_RETRIES - tool_steer_events, 0)
 
+            # Runaway-retry marker for Agent Control. Reuses the failed-attempt
+            # count above; a PRE deny control on the LLM step (regex on
+            # tool_retries) breaks the loop before the next costly call.
+            latest_user_text = _latest_human_text(list(state["messages"]))
+            control_input = (
+                f"[ac:step=llm tool_retries={failed_tool_attempts}] {latest_user_text}"
+            )
+
+            control_blocked = False
             for _attempt in range(remaining_attempts):
                 try:
-                    message = await _invoke_llm(llm_messages)
+                    llm_call_ctx["messages"] = llm_messages
+                    message = await _invoke_llm(control_input)
                     break
                 except ControlViolationError as e:
                     notify_control_block(e, step_name=llm_step_name)
                     message = AIMessage(
                         content=format_blocked_message(e, step_name=llm_step_name)
                     )
+                    control_blocked = True
                     break
                 except ControlSteerError as e:
                     notify_control_block(
@@ -464,6 +695,7 @@ class LangGraphAgent(BaseAgent):
                         or last_llm_output["message"] is None
                     ):
                         message = AIMessage(content=STEER_EXHAUSTED_MESSAGE)
+                        control_blocked = True
                         break
                     llm_messages = _build_steering_retry_messages(
                         llm_messages, last_llm_output["message"], e
@@ -472,6 +704,61 @@ class LangGraphAgent(BaseAgent):
 
             if message is None:
                 message = AIMessage(content="No response generated")
+
+            # 🔥 CHAOS (Runaway Retries): drive the loop deterministically. The
+            # LLM was still invoked above (real token spend + Agent Control PRE
+            # evaluation on the tool_retries marker), but local models tend to
+            # give up after one failure. If Agent Control did not block and the
+            # last tool call was a chaos failure, re-issue the same tool call so
+            # the loop continues until it ends on its own: Agent Control blocks
+            # at tool_retries>=3 (good path), or the chaos engine recovers after
+            # runaway_retries_recover_after failures and the tool finally
+            # succeeds (bad path). Each replay is a distinct tool span in the
+            # trace, so every failed call is visible.
+            if (
+                not control_blocked
+                and chaos.runaway_retries_enabled
+                and not getattr(message, "tool_calls", None)
+                and _last_tool_failed_via_chaos(list(state["messages"]))
+            ):
+                replay_calls = _last_tool_calls(list(state["messages"]))
+                if replay_calls:
+                    message = _forced_retry_message(replay_calls)
+
+            # Answer-review control (e.g. the SDK dosage-hallucination rule).
+            # Runs ONLY on a genuine final text answer — the model produced text
+            # and no tool calls — after a successful retrieval (context present,
+            # last tool not a chaos failure). Evaluating the answer text under
+            # the "Final Answer" step means the control never trips on
+            # intermediate tool-call outputs, and the would-be answer is recorded
+            # as this step's output so it stays visible in the trace when denied.
+            answer_text = _message_content_text(message)
+            retrieved_docs = _extract_retrieved_context(list(state["messages"]))
+            has_retrieved_context = bool(retrieved_docs) and not _last_tool_failed_via_chaos(
+                list(state["messages"])
+            )
+            if (
+                not control_blocked
+                and answer_text
+                and not getattr(message, "tool_calls", None)
+                and has_retrieved_context
+            ):
+                try:
+                    await _review_final_answer(
+                        _latest_human_text(list(state["messages"])),
+                        answer_text,
+                        retrieved_docs,
+                    )
+                except ControlViolationError as e:
+                    notify_control_block(e, step_name=answer_step_name)
+                    message = AIMessage(
+                        content=format_blocked_message(e, step_name=answer_step_name)
+                    )
+                    control_blocked = True
+                except ControlSteerError as e:
+                    notify_control_block(
+                        e, step_name=answer_step_name, guardrail_result="steered"
+                    )
 
             return {
                 "messages": [message],
@@ -504,6 +791,10 @@ class LangGraphAgent(BaseAgent):
                     langchain_messages.append(HumanMessage(content=msg["content"]))
                 elif msg["role"] == "assistant":
                     langchain_messages.append(AIMessage(content=msg["content"]))
+
+            # Reset the runaway-retry cycle so each query re-runs the
+            # fail-N-times-then-recover pattern from a clean slate.
+            get_chaos_engine().begin_runaway_cycle()
 
             initial_state = {"messages": langchain_messages, "steer_attempts": 0}
             ensure_trace_started(

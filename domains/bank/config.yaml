@@ -3,8 +3,8 @@ domain:
   description: "Bank assistant for online help and customer account support"
 
 galileo:
-  project: "galileo-demo"
-  log_stream: "bank"
+  project: "Splunk-Demo"
+  log_stream: "Default"
 
 # UI configuration
 ui:

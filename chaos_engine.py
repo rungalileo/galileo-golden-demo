@@ -32,6 +32,7 @@ class ChaosEngine:
         self.rag_chaos_enabled = False
         self.rate_limit_chaos_enabled = False
         self.data_corruption_enabled = False
+        self.runaway_retries_enabled = False
         
         # Chaos parameters (failure rates - all 100% for predictable demos, could remove, but will leave in case we want to go back to configurable threshold)
         self.tool_failure_rate = 1.0  # 100% - always fails when enabled
@@ -39,6 +40,14 @@ class ChaosEngine:
         self.rag_failure_rate = 1.0  # 100% - always fails when enabled
         self.rate_limit_rate = 1.0  # 100% - always fails when enabled
         self.data_corruption_rate = 1.0  # 100% - always corrupts when enabled
+        self.runaway_retries_rate = 1.0  # 100% - always fails when enabled
+
+        # Runaway retries "recover" after this many consecutive failures so the
+        # bad path (no Agent Control) is expensive but eventually completes: the
+        # tool finally works and the agent returns the real answer. Agent Control,
+        # when configured, trips earlier (tool_retries>=3) and never reaches this.
+        self.runaway_retries_recover_after = 6
+        self._runaway_consecutive_failures = 0
         
         # Counters for statistics
         self.tool_instability_count = 0
@@ -46,6 +55,7 @@ class ChaosEngine:
         self.rag_chaos_count = 0
         self.rate_limit_chaos_count = 0
         self.data_corruption_count = 0
+        self.runaway_retries_count = 0
     
     def enable_tool_instability(self, enabled: bool = True, failure_rate: Optional[float] = None):
         """Enable random API failures"""
@@ -75,6 +85,24 @@ class ChaosEngine:
             self.rate_limit_rate = rate
         logging.info(f"Rate Limit Chaos: {'ON' if enabled else 'OFF'} (rate: {self.rate_limit_rate})")
     
+    def enable_runaway_retries(self, enabled: bool = True, rate: Optional[float] = None):
+        """
+        Enable a runaway retry loop.
+
+        The targeted tool always fails with a transient, retryable error, baiting
+        the agent into repeatedly re-calling it. Each retry re-sends the growing
+        transcript to the LLM, so token spend climbs fast — used to demo how a
+        runtime guardrail (Agent Control) detects and stops the loop.
+
+        Distinct from Tool Instability, which returns varied errors (including
+        permanent 4xx a model won't retry). This mode always returns the same
+        transient error to keep the loop going.
+        """
+        self.runaway_retries_enabled = enabled
+        if rate is not None:
+            self.runaway_retries_rate = rate
+        logging.info(f"Runaway Retries: {'ON' if enabled else 'OFF'} (rate: {self.runaway_retries_rate})")
+
     def enable_data_corruption(self, enabled: bool = True, rate: Optional[float] = None):
         """
         Enable random LLM data corruption errors (via system prompt injection).
@@ -151,6 +179,55 @@ class ChaosEngine:
         
         return False, None
     
+    def begin_runaway_cycle(self):
+        """Reset the per-query runaway failure counter.
+
+        Called at the start of each user query so every query re-runs the
+        fail-N-times-then-recover pattern (instead of carrying failures over
+        from a previous, possibly Agent-Control-blocked, turn).
+        """
+        self._runaway_consecutive_failures = 0
+
+    def should_runaway_retry(self, tool_name: str = "API") -> Tuple[bool, Optional[str]]:
+        """
+        Fail with a transient, retryable error to bait a retry loop — but only
+        up to ``runaway_retries_recover_after`` consecutive times, after which
+        the tool "recovers" and the real call is allowed through.
+
+        This lets the bad path (no Agent Control) be expensive yet eventually
+        succeed. Agent Control, when configured, blocks earlier and this
+        recovery point is never reached.
+
+        Args:
+            tool_name: Name of the tool/API being called
+
+        Returns:
+            (should_fail, error_message)
+        """
+        if not self.runaway_retries_enabled:
+            return False, None
+
+        # Recovery: enough failures have happened this cycle — let the tool work.
+        if self._runaway_consecutive_failures >= self.runaway_retries_recover_after:
+            self._runaway_consecutive_failures = 0
+            logging.info(
+                f"✅ CHAOS: Runaway retries recovered for {tool_name} after "
+                f"{self.runaway_retries_recover_after} failures — tool will now succeed"
+            )
+            return False, None
+
+        if random.random() < self.runaway_retries_rate:
+            self._runaway_consecutive_failures += 1
+            self.runaway_retries_count += 1
+            error = (
+                f"{tool_name} temporarily unavailable (503 Service Unavailable). "
+                "Transient upstream error — retry the same request."
+            )
+            logging.warning(f"🔥 CHAOS: Injecting runaway-retry failure for {tool_name}: {error}")
+            return True, error
+
+        return False, None
+
     def transpose_numbers(self, text: str) -> str:
         """
         Replace numbers with obviously wrong random numbers to simulate hallucinations.
@@ -324,11 +401,13 @@ numbers or indicate uncertainty. This validates monitoring system detection capa
             "rag_chaos_count": self.rag_chaos_count,
             "rate_limit_chaos_count": self.rate_limit_chaos_count,
             "data_corruption_count": self.data_corruption_count,
+            "runaway_retries_count": self.runaway_retries_count,
             "tool_instability_enabled": self.tool_instability_enabled,
             "sloppiness_enabled": self.sloppiness_enabled,
             "rag_chaos_enabled": self.rag_chaos_enabled,
             "rate_limit_chaos_enabled": self.rate_limit_chaos_enabled,
             "data_corruption_enabled": self.data_corruption_enabled,
+            "runaway_retries_enabled": self.runaway_retries_enabled,
         }
     
     def reset_stats(self):
@@ -338,6 +417,8 @@ numbers or indicate uncertainty. This validates monitoring system detection capa
         self.rag_chaos_count = 0
         self.rate_limit_chaos_count = 0
         self.data_corruption_count = 0
+        self.runaway_retries_count = 0
+        self._runaway_consecutive_failures = 0
 
 
 # Fallback global instance for non-Streamlit contexts (tests, scripts)

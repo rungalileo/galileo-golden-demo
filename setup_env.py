@@ -1,6 +1,17 @@
 """
 Environment Setup - Load secrets and set environment variables
 """
+# Verify TLS against the OS trust store so hosted providers (OpenAI/Galileo) work
+# behind corporate TLS interception (e.g. Cisco Umbrella), whose root CA the
+# bundled certifi doesn't include. No-op without interception. Imported early by
+# both the app and setup_vectordb.py, so this covers every entry point.
+try:
+    import truststore
+
+    truststore.inject_into_ssl()
+except Exception:
+    pass
+
 import os
 import warnings
 import toml

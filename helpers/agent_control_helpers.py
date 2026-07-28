@@ -73,18 +73,50 @@ STANDARD_AGENT_CONTROL_STEPS = [
     {"type": "tool", "name": "retrieval_step"},
 ]
 
+# Shown when the runaway-retry guardrail (block-runaway-retries) denies the
+# request. Framed for a real end user (service error + retry/support guidance)
+# while still reading well in the demo as the guardrail's intervention.
+RUNAWAY_BLOCKED_MESSAGE = (
+    "⚠️ Sorry — I couldn't complete your request right now. A required service "
+    "kept returning errors, so the request was automatically stopped to avoid "
+    "repeated retries. Please try again in a few minutes. If the problem "
+    "continues, contact support and reference the issue below."
+)
+
+# Shown when the dosage / hallucination answer-review control denies a response.
+# Kept deliberately simple and reassuring: the answer was held back because it
+# wasn't confident enough, not because the user did anything wrong.
+DOSAGE_BLOCKED_MESSAGE = (
+    "⚠️ Sorry — I'm not confident enough in that answer to share it, so it was "
+    "held back. This can happen when the details don't clearly match our verified "
+    "sources. Please try asking again or rephrase your question."
+)
+
+
 def format_blocked_message(
     error: Exception,
     step_name: str = "tool_step",
     *,
     steered: bool = False,
 ) -> str:
-    """Return a user-friendly message for Agent Control blocks."""
+    """Return a user-friendly message for Agent Control blocks.
+
+    The message is tailored by which control fired (via ``error.control_name``):
+    the runaway-retry guardrail gets a service-error/support message, while
+    other controls keep the generic block message.
+    """
     if steered:
         return (
             "This action was adjusted by Agent Control. "
             f"{error}"
         )
+
+    control_name = str(getattr(error, "control_name", "") or "")
+    if "runaway" in control_name.lower():
+        return f"{RUNAWAY_BLOCKED_MESSAGE}\n\n_Reference: {control_name}_"
+    if "dosage" in control_name.lower() or "hallucination" in control_name.lower():
+        return DOSAGE_BLOCKED_MESSAGE
+
     return (
         "I'm sorry, this action was blocked by Agent Control. "
         "Please rephrase your request or try a different approach."

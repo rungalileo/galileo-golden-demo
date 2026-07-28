@@ -14,6 +14,9 @@ langchain-openai
 langchain-aws
 boto3
 openai
+# Verify TLS against the OS trust store so hosted providers work behind
+# corporate TLS interception (e.g. Cisco Umbrella) whose root CA certifi lacks.
+truststore
 langgraph
 langchain-postgres
 psycopg[binary]
