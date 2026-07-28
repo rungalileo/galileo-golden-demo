@@ -1,6 +1,19 @@
 """
 Galileo Demo App
 """
+# Corporate TLS interception (e.g. Cisco Umbrella) re-signs HTTPS with a root CA
+# that Python's bundled certifi does not trust, which breaks hosted providers
+# like OpenAI/Galileo with CERTIFICATE_VERIFY_FAILED. truststore makes Python
+# verify against the OS trust store (macOS keychain / Windows / Linux), which
+# already trusts the corporate root. It is a harmless no-op when there is no
+# interception, and MUST run before any HTTPS client is created.
+try:
+    import truststore
+
+    truststore.inject_into_ssl()
+except Exception:
+    pass
+
 import uuid
 from typing import Optional
 import streamlit as st
