@@ -224,3 +224,18 @@ Prednisone,"
             Pregnancy Category: Category C - Use with caution
             Cost Tier: Low (generic available)
         "
+Clarithromycin,"
+            Generic Name: Clarithromycin
+            Drug Class: Macrolide Antibiotic
+            Primary Indication: Respiratory tract infections; sinusitis; community-acquired pneumonia; H. pylori
+            Mechanism of Action: Inhibits bacterial protein synthesis (binds the 50S ribosomal subunit)
+            Common Dosage: 250-500 mg twice daily for 7-14 days
+            Administration: Oral; with or without food; complete the full course
+            Common Side Effects: Nausea; diarrhea; abdominal pain; altered taste
+            Serious Side Effects: QT prolongation; hepatotoxicity; C. difficile colitis
+            Contraindications: History of QT prolongation; concurrent use with certain statins
+            Drug Interactions: Strong CYP3A4 inhibitor - raises atorvastatin and simvastatin levels and can cause muscle pain and weakness (myopathy/rhabdomyolysis); increases warfarin effect (bleeding); avoid with other QT-prolonging drugs
+            Monitoring Requirements: Assess for muscle pain or weakness when combined with a statin; liver function on prolonged use; cardiac/QT history
+            Pregnancy Category: Category C - Use with caution
+            Cost Tier: Low (generic available)
+        "

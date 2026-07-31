@@ -65,6 +65,14 @@ def format_steer_tool_result(error: Exception) -> str:
         }
     )
 
+# Dedicated LLM step for the healthcare "send prescription" action guardrail.
+# The send_prescription_to_pharmacy tool evaluates this step explicitly (via
+# evaluate_controls) so a context-adherence control can compare the proposed
+# dosage against the retrieved dosing guideline BEFORE the order is committed.
+# It is a distinct step (not the tool step) so the console control can scope to
+# the pre-commit safety check and never fires on intermediate tool selection.
+PRESCRIPTION_SAFETY_STEP = "Prescription Safety Check"
+
 # Hardcoded fallback when no domain tool list is available.
 STANDARD_AGENT_CONTROL_STEPS = [
     {"type": "llm", "name": "Bank Assistant"},
@@ -84,12 +92,15 @@ RUNAWAY_BLOCKED_MESSAGE = (
 )
 
 # Shown when the dosage / hallucination answer-review control denies a response.
-# Kept deliberately simple and reassuring: the answer was held back because it
-# wasn't confident enough, not because the user did anything wrong.
+# Makes the reason explicit for the demo: a medication dosage was generated that
+# does not match the approved clinical guideline (a likely hallucination), so the
+# response was stopped before it could be shared or acted on.
 DOSAGE_BLOCKED_MESSAGE = (
-    "⚠️ Sorry — I'm not confident enough in that answer to share it, so it was "
-    "held back. This can happen when the details don't clearly match our verified "
-    "sources. Please try asking again or rephrase your question."
+    "🛑 Stopped by a safety guardrail — potential dosage hallucination.\n\n"
+    "The medication dosage generated here could not be verified against our "
+    "approved clinical guidelines, so it was **not shared or sent** and has been "
+    "flagged for pharmacist review. This protects against acting on an incorrect "
+    "dosage. Please try again."
 )
 
 

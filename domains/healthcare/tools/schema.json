@@ -14,6 +14,20 @@
       }
     },
     {
+      "name": "get_patient_chart",
+      "description": "Retrieve a patient's full chart by their ID: demographics, active medications, and recent history. Use this to review a patient before refilling or prescribing.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "patient_id": {
+            "type": "string",
+            "description": "The patient's unique identifier (e.g., 'P001', 'P013')"
+          }
+        },
+        "required": ["patient_id"]
+      }
+    },
+    {
       "name": "delete_patient_record",
       "description": "Permanently delete a patient record from the registry by their patient ID",
       "parameters": {
@@ -39,6 +53,58 @@
           }
         },
         "required": ["query"]
+      }
+    },
+    {
+      "name": "check_drug_interactions",
+      "description": "Check a proposed medication for interactions against the patient's ACTUAL active medications before prescribing. Pass the patient_id so it reads their real medication list.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "medication": {
+            "type": "string",
+            "description": "The proposed medication name (e.g., 'Aspirin')"
+          },
+          "patient_id": {
+            "type": "string",
+            "description": "The patient's unique identifier (e.g., 'P013'); the check reads their active medications from the chart"
+          },
+          "current_medications": {
+            "type": "string",
+            "description": "Optional fallback: the patient's current medication(s), comma-separated, if no patient_id is available"
+          }
+        },
+        "required": ["medication"]
+      }
+    },
+    {
+      "name": "send_prescription_to_pharmacy",
+      "description": "Prescribe and submit a medication directly to the patient's pharmacy. This is a consequential action that is sent immediately — there is no separate draft step. Call it once you have the correct dosage from the guideline and have checked interactions.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "patient_id": {
+            "type": "string",
+            "description": "The patient's unique identifier (e.g., 'P001')"
+          },
+          "medication": {
+            "type": "string",
+            "description": "The medication to send (e.g., 'Lisinopril')"
+          },
+          "dosage": {
+            "type": "string",
+            "description": "The dosage and frequency to send, based on the retrieved dosing guideline (e.g., '10 mg once daily')"
+          },
+          "pharmacy": {
+            "type": "string",
+            "description": "Optional pharmacy name/location; defaults to the patient's preferred pharmacy"
+          },
+          "sig": {
+            "type": "string",
+            "description": "Optional directions for use"
+          }
+        },
+        "required": ["patient_id", "medication", "dosage"]
       }
     }
   ]

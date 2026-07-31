@@ -49,6 +49,7 @@ from helpers.agent_control_helpers import (
     STEER_EXHAUSTED_MESSAGE,
     extract_steering_instructions,
     build_steer_correction_prompt,
+    PRESCRIPTION_SAFETY_STEP,
 )
 
 # Streamlit import (optional - for UI integration)
@@ -245,6 +246,77 @@ def _last_tool_failed_via_chaos(messages: List[BaseMessage]) -> bool:
     )
 
 
+def _extract_prescription_action_events(messages: List[BaseMessage]) -> Dict[str, Any]:
+    """Pull structured prescription-workflow results from this turn's ToolMessages.
+
+    Returns a dict with any of ``interactions`` / ``draft`` / ``order`` payloads so
+    the UI can render explicit action cards (draft created, order sent/blocked)
+    instead of only the assistant's final chat text. Matches on payload shape so
+    it is robust to how the ToolMessage name is set.
+    """
+    events: Dict[str, Any] = {}
+    for msg in messages:
+        if not isinstance(msg, ToolMessage):
+            continue
+        text = _tool_content_text(msg.content)
+        if not text:
+            continue
+        try:
+            payload = json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        status = payload.get("status")
+        if status == "draft" and payload.get("draft_id"):
+            events["draft"] = payload
+        elif status in ("sent", "blocked") and (
+            payload.get("confirmation_number")
+            or payload.get("blocked_by_agent_control")
+            or payload.get("proposed_dosage")
+        ):
+            events["order"] = payload
+        elif "cautions" in payload or "interactions_found" in payload:
+            events["interactions"] = payload
+    return events
+
+
+# Friendly, user-facing progress labels for the live step stream. Keyed by tool
+# name; falls back to a generic label. Kept here so the UI stays dumb (it just
+# prints whatever labels the agent emits).
+_TOOL_PROGRESS_LABELS = {
+    "get_patient_info": "🔎 Looking up the patient record…",
+    "get_patient_chart": "🗂️ Reviewing the patient chart…",
+    "delete_patient_record": "🗑️ Removing the patient record…",
+    "search_medicine_qa": "📚 Retrieving the dosing guideline…",
+    "retrieve_healthcare_documents": "📚 Retrieving the dosing guideline…",
+    "check_drug_interactions": "⚗️ Checking for drug interactions…",
+    "send_prescription_to_pharmacy": "📤 Sending the prescription to the pharmacy…",
+}
+
+
+def _tool_progress_label(name: str) -> str:
+    return _TOOL_PROGRESS_LABELS.get(name, f"🔧 Running {name}…")
+
+
+def _emit_stream_labels(node: str, new_msgs: List[BaseMessage], step_callback) -> None:
+    """Translate a streamed node update into human-readable progress lines.
+
+    We label on the chatbot's *intent* (the tool calls it just issued) so the
+    audience sees what the agent is about to do before the tool finishes. A
+    final text answer (no tool calls) emits a composing line.
+    """
+    for m in new_msgs:
+        if not isinstance(m, AIMessage):
+            continue
+        tool_calls = getattr(m, "tool_calls", None) or []
+        if tool_calls:
+            for tc in tool_calls:
+                step_callback(_tool_progress_label(tc.get("name", "")))
+        elif _message_content_text(m):
+            step_callback("✍️ Composing the response…")
+
+
 def _last_tool_calls(messages: List[BaseMessage]) -> List[dict]:
     """Return the tool_calls from the most recent AIMessage that issued any."""
     for msg in reversed(messages):
@@ -351,6 +423,12 @@ class LangGraphAgent(BaseAgent):
         self.graph = None
         self.model_override = model_override
         self.galileo_logger = galileo_logger
+        # Structured results from the most recent query's prescription workflow
+        # (draft / order / interactions), surfaced by the UI as action cards.
+        self.last_action_events: Dict[str, Any] = {}
+        # Info about a control block on the most recent query (control name +
+        # stage), so the UI can render the stop as a distinct red banner.
+        self.last_control_block: Optional[Dict[str, Any]] = None
         self.llm_provider = llm_provider if llm_provider in ("local", "hosted", "bedrock") else "local"
         
         # Build callbacks list with Galileo (always enabled).
@@ -384,6 +462,13 @@ class LangGraphAgent(BaseAgent):
         # POST control (e.g. the SDK dosage-adherence rule) can scope to it and
         # NOT fire on the intermediate tool-selection call.
         control_steps.append({"type": "llm", "name": answer_step_name})
+        # Register the pre-commit prescription safety-check step when the domain
+        # exposes the send-prescription action. The send tool evaluates this step
+        # explicitly (with the retrieved dosing guideline embedded in the input)
+        # so a context-adherence control can block a hallucinated dosage BEFORE
+        # the order is sent to the pharmacy.
+        if "send_prescription_to_pharmacy" in tool_names:
+            control_steps.append({"type": "llm", "name": PRESCRIPTION_SAFETY_STEP})
         
         # Create a module specification from the file path
         # This tells Python how to load the module from a file
@@ -577,8 +662,13 @@ class LangGraphAgent(BaseAgent):
                 if context_text
                 else question_text
             )
-            context = {"documents": context_docs} if context_docs else None
 
+            # NOTE: we intentionally do NOT pass `context=`. Inline galileo.luna
+            # ignores Step.context (it reads only input/output), and passing a
+            # documents payload here was being serialized to "<max depth reached>"
+            # in the trace and is a suspect for the server-side "internal
+            # evaluator error". The retrieved context is already embedded in
+            # `input` above, which is the only place the scorer reads it.
             trace_id = None
             span_id = None
             try:
@@ -591,7 +681,6 @@ class LangGraphAgent(BaseAgent):
                 answer_step_name,
                 input=luna_input,
                 output=answer_text,
-                context=context,
                 step_type="llm",
                 stage="post",
                 agent_name=os.environ.get("AGENT_CONTROL_AGENT_NAME", ""),
@@ -655,6 +744,10 @@ class LangGraphAgent(BaseAgent):
             system_prompt = self.system_prompt or ""
             if chaos.should_corrupt_data():
                 system_prompt += chaos.get_corruption_prompt()
+            # Act 1: bias the LLM itself to prescribe a wrong dose (genuine
+            # hallucination in the trace), rather than corrupting the tool output.
+            if chaos.should_inject_wrong_dosage():
+                system_prompt += chaos.get_wrong_dosage_prompt()
 
             if system_prompt:
                 messages = [SystemMessage(content=system_prompt)] + messages
@@ -679,6 +772,10 @@ class LangGraphAgent(BaseAgent):
                     break
                 except ControlViolationError as e:
                     notify_control_block(e, step_name=llm_step_name)
+                    self.last_control_block = {
+                        "control_name": str(getattr(e, "control_name", "") or ""),
+                        "stage": llm_step_name,
+                    }
                     message = AIMessage(
                         content=format_blocked_message(e, step_name=llm_step_name)
                     )
@@ -755,6 +852,10 @@ class LangGraphAgent(BaseAgent):
                         content=format_blocked_message(e, step_name=answer_step_name)
                     )
                     control_blocked = True
+                    self.last_control_block = {
+                        "control_name": str(getattr(e, "control_name", "") or ""),
+                        "stage": answer_step_name,
+                    }
                 except ControlSteerError as e:
                     notify_control_block(
                         e, step_name=answer_step_name, guardrail_result="steered"
@@ -774,10 +875,22 @@ class LangGraphAgent(BaseAgent):
 
         return graph_builder.compile()
     
-    async def _process_query_async(self, messages: List[Dict[str, str]]) -> str:
-        """Process a user query asynchronously (required for @control async nodes)."""
+    async def _process_query_async(self, messages: List[Dict[str, str]], step_callback=None) -> str:
+        """Process a user query asynchronously (required for @control async nodes).
+
+        When ``step_callback`` is provided, the graph is streamed (stream_mode=
+        "updates") and each node update is translated into a human-readable
+        progress line via ``step_callback``. Otherwise the graph is invoked in one
+        shot. Both paths capture the final answer and last_action_events.
+        """
         provider_token = set_llm_provider(self.llm_provider)
         response = "No response generated"
+        # Reset per-query action events (draft / order / interactions) so the UI
+        # renders cards only for the current turn.
+        self.last_action_events: Dict[str, Any] = {}
+        # Reset per-query control-block info so the UI can render the stop
+        # prominently (and only) for the current turn.
+        self.last_control_block: Optional[Dict[str, Any]] = None
         try:
             # Load tools if not already loaded (must run under active provider context)
             if not self.tools:
@@ -803,11 +916,32 @@ class LangGraphAgent(BaseAgent):
                 trace_name="Run Agent",
             )
 
-            result = await self.graph.ainvoke(initial_state, self.config)
-            if result["messages"]:
+            if step_callback is None:
+                result = await self.graph.ainvoke(initial_state, self.config)
+                final_messages = list(result.get("messages", []))
+            else:
+                # Stream node-by-node so the UI can show live progress. We
+                # accumulate the emitted messages ourselves to reconstruct the
+                # final answer and the prescription action events.
+                final_messages = []
+                async for chunk in self.graph.astream(
+                    initial_state, self.config, stream_mode="updates"
+                ):
+                    for node, delta in (chunk or {}).items():
+                        new_msgs = list((delta or {}).get("messages", []) or [])
+                        if not new_msgs:
+                            continue
+                        final_messages.extend(new_msgs)
+                        try:
+                            _emit_stream_labels(node, new_msgs, step_callback)
+                        except Exception:
+                            pass
+
+            self.last_action_events = _extract_prescription_action_events(final_messages)
+            if final_messages:
                 # ChatBedrockConverse returns .content as a list of blocks;
                 # normalize to a string so downstream (UI/tracing) stays str-based.
-                response = message_content_to_text(result["messages"][-1].content)
+                response = message_content_to_text(final_messages[-1].content)
             return response
         finally:
             reset_llm_provider(provider_token)
@@ -824,6 +958,26 @@ class LangGraphAgent(BaseAgent):
             return format_blocked_message(e, step_name="Bank Assistant", steered=True)
         except Exception as e:
             print(f"[ERROR] Error processing query: {e}")
+            import traceback
+            traceback.print_exc()
+            return f"Error processing your request: {str(e)}"
+
+    def process_query_streaming(self, messages: List[Dict[str, str]], step_callback) -> str:
+        """Like process_query, but emits live progress lines via step_callback.
+
+        Intended to be called from a worker thread; step_callback should be
+        thread-safe (e.g. a queue.put). Returns the final answer string.
+        """
+        try:
+            return _run_async(
+                self._process_query_async(messages, step_callback=step_callback)
+            )
+        except ControlViolationError as e:
+            return format_blocked_message(e, step_name="Bank Assistant")
+        except ControlSteerError as e:
+            return format_blocked_message(e, step_name="Bank Assistant", steered=True)
+        except Exception as e:
+            print(f"[ERROR] Error processing query (streaming): {e}")
             import traceback
             traceback.print_exc()
             return f"Error processing your request: {str(e)}"

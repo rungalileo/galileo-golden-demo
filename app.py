@@ -15,6 +15,7 @@ except Exception:
     pass
 
 import uuid
+from datetime import datetime
 from typing import Optional
 import streamlit as st
 import os
@@ -58,6 +59,10 @@ from experiments.experiment_helpers import (
 
 # Configuration
 FRAMEWORK = "LangGraph"
+
+# Fictional hospital brand for the healthcare EHR demo (not a real hospital).
+# Centralized so it's trivial to rename for a given audience.
+HOSPITAL_NAME = "Evercrest Health"
 
 
 def _models_for_provider(domain_info: dict, provider: str) -> tuple[list[str], str]:
@@ -264,6 +269,56 @@ def add_hallucination_interaction_to_chat(domain_config: dict) -> bool:
     return True
 
 
+def render_action_cards(action: dict):
+    """Render explicit cards for agentic actions (interaction check, draft, order).
+
+    Makes it visually clear the agent executed a step/action — not just a chat
+    reply — by surfacing the two-stage prescription workflow: the drug-interaction
+    check, the STAGE 1 draft, and the STAGE 2 committed (or blocked) order.
+    """
+    if not action:
+        return
+
+    interactions = action.get("interactions")
+    if interactions:
+        found = interactions.get("interactions_found", 0)
+        icon = "⚠️" if found else "✅"
+        with st.container(border=True):
+            st.markdown(f"{icon} **Drug interaction check**")
+            st.caption(interactions.get("summary", ""))
+
+    draft = action.get("draft")
+    if draft:
+        with st.container(border=True):
+            st.markdown("📝 **Stage 1 — Prescription draft created** (not yet sent)")
+            st.markdown(
+                f"- **Medication:** {draft.get('medication','')} {draft.get('dosage','')}\n"
+                f"- **Directions:** {draft.get('sig','as directed')}\n"
+                f"- **Quantity:** {draft.get('quantity','')}\n"
+                f"- **Draft ID:** `{draft.get('draft_id','')}`"
+            )
+
+    order = action.get("order")
+    if order:
+        if order.get("status") == "sent":
+            with st.container(border=True):
+                st.success("✅ Stage 2 — Action executed: prescription sent to pharmacy")
+                st.markdown(
+                    f"- **Medication:** {order.get('medication','')} {order.get('dosage','')}\n"
+                    f"- **Pharmacy:** {order.get('pharmacy','')}\n"
+                    f"- **Confirmation #:** `{order.get('confirmation_number','')}`"
+                )
+        elif order.get("status") == "blocked":
+            with st.container(border=True):
+                st.error("🛑 Stage 2 — Action blocked by Agent Control (order NOT sent)")
+                st.markdown(
+                    f"- **Proposed:** {order.get('medication','')} "
+                    f"{order.get('proposed_dosage','')}\n"
+                    f"- **Control:** `{order.get('control_name','')}`\n"
+                    f"- **Reason:** {order.get('reason','')}"
+                )
+
+
 def display_chat_history():
     """Display all messages in the chat history with agent attribution."""
     if not st.session_state.messages:
@@ -278,7 +333,12 @@ def display_chat_history():
                     st.write(escape_dollar_signs(message.content))
             elif isinstance(message, AIMessage):
                 with st.chat_message("assistant"):
-                    st.write(escape_dollar_signs(message.content))
+                    # Cards first (what the agent did), then the reply/stop below.
+                    render_action_cards(message_data.get("action") or {})
+                    if message_data.get("blocked"):
+                        st.error(escape_dollar_signs(message.content))
+                    else:
+                        st.write(escape_dollar_signs(message.content))
         else:
             # Fallback for old message format
             if isinstance(message_data, HumanMessage):
@@ -288,10 +348,6 @@ def display_chat_history():
                 with st.chat_message("assistant"):
                     st.write(escape_dollar_signs(message_data.content))
     
-    # Show loading indicator if currently processing
-    if st.session_state.get("processing", False):
-        with st.chat_message("assistant"):
-            st.write("Thinking...")
 
 
 def show_example_queries(query_1: str, query_2: str):
@@ -343,6 +399,51 @@ def orchestrate_streamlit_and_get_user_input(
     return user_input
 
 
+def _run_query_with_live_status(agent, conversation_messages):
+    """Run the agent while streaming live progress into a status panel.
+
+    The (blocking) streaming call runs in a worker thread and pushes
+    human-readable progress labels into a thread-safe queue; the main thread
+    drains the queue into a ``st.status`` container so Streamlit renders each
+    step as it happens. Returns ``(response, action_events)``.
+    """
+    import queue as _queue
+    import threading
+
+    q: "_queue.Queue" = _queue.Queue()
+    holder = {"response": "No response generated", "action": {}}
+
+    def worker():
+        try:
+            holder["response"] = agent.process_query_streaming(
+                conversation_messages, lambda label: q.put(("step", label))
+            )
+            holder["action"] = dict(getattr(agent, "last_action_events", {}) or {})
+        finally:
+            q.put(("done", None))
+
+    t = threading.Thread(target=worker, daemon=True)
+    # Attach the Streamlit script context so any incidental st.* access deep in
+    # the agent/tools doesn't detach or emit "missing ScriptRunContext" warnings.
+    try:
+        from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
+        add_script_run_ctx(t, get_script_run_ctx())
+    except Exception:
+        pass
+
+    t.start()
+    with st.chat_message("assistant"):
+        with st.status("Working on your request…", expanded=True) as status:
+            while True:
+                kind, payload = q.get()
+                if kind == "done":
+                    break
+                st.write(payload)
+            status.update(label="Completed", state="complete", expanded=False)
+    t.join()
+    return holder["response"], holder["action"]
+
+
 def process_input_for_simple_app(user_input: str | None):
     """Process user input and generate response - using AgentFactory directly"""
     if user_input:
@@ -381,13 +482,27 @@ def process_input_for_simple_app(user_input: str | None):
                 elif isinstance(message, AIMessage):
                     conversation_messages.append({"role": "assistant", "content": message.content})
         
-        # Get the actual response from the agent (Agent Control is handled via @control decorators)
-        response = st.session_state.agent.process_query(conversation_messages)
+        # Run the agent while streaming live progress into a status panel, so the
+        # audience sees each step (lookup → guideline → interactions → draft →
+        # send) as it happens instead of a blank wait. Also captures the
+        # structured action results (draft / order / interactions) for the cards.
+        response, action_events = _run_query_with_live_status(
+            st.session_state.agent, conversation_messages
+        )
+
+        # Capture whether a guardrail stopped this turn so the UI can render the
+        # stop as a distinct red banner below the action cards.
+        control_block = getattr(st.session_state.agent, "last_control_block", None)
 
         # Create AI message and add to history
         ai_message = AIMessage(content=response)
         st.session_state.messages.append(
-            {"message": ai_message, "agent": "assistant"}
+            {
+                "message": ai_message,
+                "agent": "assistant",
+                "action": action_events,
+                "blocked": control_block,
+            }
         )
         
         # Clear processing flag and rerun to show the response
@@ -979,7 +1094,34 @@ def multi_domain_agent_app(domain_name: str):
                         help="Tool always fails with a transient 'retry me' error, baiting the agent into a costly retry loop (pair with the block-runaway-retries control)"
                     )
                     chaos.enable_runaway_retries(runaway_retries)
-                    
+
+                    # Practitioner-EHR demo toggles (healthcare only): deterministic
+                    # "behind-the-scenes" failures for the two demo acts.
+                    if domain_name == "healthcare":
+                        st.markdown("**Practitioner EHR demo**")
+
+                        force_wrong_dosage = st.checkbox(
+                            "💊 Force Wrong Dosage (Act 1)",
+                            value=chaos.force_wrong_dosage_enabled,
+                            key=f"chaos_force_wrong_dosage_{domain_name}",
+                            help="On a refill/prescribe, override the dosage with a subtly-wrong value so the dosage eval flags it"
+                        )
+                        wrong_dosage_value = st.text_input(
+                            "Wrong dosage value",
+                            value=chaos.force_wrong_dosage_value,
+                            key=f"chaos_wrong_dosage_value_{domain_name}",
+                            help="The subtly-wrong dosage to fill (default: wrong frequency, not an obvious overdose)"
+                        )
+                        chaos.enable_force_wrong_dosage(force_wrong_dosage, wrong_dosage_value)
+
+                        skip_interaction = st.checkbox(
+                            "⚠️ Skip Interaction Check (Act 2)",
+                            value=chaos.skip_interaction_check_enabled,
+                            key=f"chaos_skip_interaction_{domain_name}",
+                            help="Suppress the drug-interaction check so an interacting combo (e.g. Clarithromycin for an Atorvastatin patient) gets prescribed even though the data exists"
+                        )
+                        chaos.enable_skip_interaction_check(skip_interaction)
+
                     # Show active chaos count
                     active_count = sum([
                         chaos.tool_instability_enabled,
@@ -987,7 +1129,9 @@ def multi_domain_agent_app(domain_name: str):
                         chaos.data_corruption_enabled,
                         chaos.rag_chaos_enabled,
                         chaos.rate_limit_chaos_enabled,
-                        chaos.runaway_retries_enabled
+                        chaos.runaway_retries_enabled,
+                        chaos.force_wrong_dosage_enabled,
+                        chaos.skip_interaction_check_enabled
                     ])
                     
                     if active_count > 0:
@@ -1005,6 +1149,9 @@ def multi_domain_agent_app(domain_name: str):
                                 st.metric("Rate Limits", stats['rate_limit_chaos_count'])
                                 st.metric("Data Corruption", stats['data_corruption_count'])
                                 st.metric("Runaway Retries", stats['runaway_retries_count'])
+                                if domain_name == "healthcare":
+                                    st.metric("Wrong Dosage", stats['force_wrong_dosage_count'])
+                                    st.metric("Skipped Interaction", stats['skip_interaction_check_count'])
                             
                             if st.button("Reset Stats", key=f"reset_chaos_stats_{domain_name}"):
                                 chaos.reset_stats()
@@ -1014,7 +1161,20 @@ def multi_domain_agent_app(domain_name: str):
             
             except ImportError:
                 st.info("Chaos engineering not available (chaos_engine.py not found)")
-            
+
+            # Interface toggle: the healthcare domain defaults to the EHR
+            # patient-chart view, but a user can flip back to the classic
+            # chatbot UI (direct replies) for a simpler experience.
+            if domain_name == "healthcare":
+                st.divider()
+                st.subheader("🖥️ Interface")
+                st.checkbox(
+                    "💬 Use classic chat interface",
+                    value=st.session_state.get(f"use_classic_chat_{domain_name}", False),
+                    key=f"use_classic_chat_{domain_name}",
+                    help="Switch back to the simple chatbot UI (direct replies) instead of the EHR patient-chart view",
+                )
+
             # Add Hallucination Demo section (only if configured)
             domain_full_config = st.session_state.get(full_config_key, {})
             has_hallucinations = bool(domain_full_config.get("demo_hallucinations", []))
@@ -1039,12 +1199,21 @@ def multi_domain_agent_app(domain_name: str):
                         else:
                             st.error("Failed to log hallucination. Check logs for details.")
 
-        render_chat_page(
-            factory,
-            domain_name,
-            selected_provider=selected_provider,
-            selected_model=selected_model,
-        )
+        use_classic_chat = st.session_state.get(f"use_classic_chat_{domain_name}", False)
+        if domain_name == "healthcare" and not use_classic_chat:
+            render_healthcare_ehr_page(
+                factory,
+                domain_name,
+                selected_provider=selected_provider,
+                selected_model=selected_model,
+            )
+        else:
+            render_chat_page(
+                factory,
+                domain_name,
+                selected_provider=selected_provider,
+                selected_model=selected_model,
+            )
     
     # Experiments Tab
     with tab2:
@@ -1054,24 +1223,13 @@ def multi_domain_agent_app(domain_name: str):
         render_experiments_page(domain_name, full_domain_config, factory)
 
 
-def render_chat_page(
-    factory,
-    domain_name: str,
-    *,
-    selected_provider: str,
-    selected_model: str,
-):
-    """Render the chat page."""
-    selected_provider = _normalize_provider(selected_provider)
-    # Extract UI configuration from domain config (per domain)
-    domain_config_key = f"domain_config_{domain_name}"
-    ui_config = st.session_state[domain_config_key].get("ui", {})
-    app_title = ui_config.get("app_title", f"{domain_name.title()} Assistant")
-    example_queries = ui_config.get("example_queries", [
-        "Hello, how can you help me?",
-        "What can you do?"
-    ])
-    
+def _ensure_session_and_agent(factory, domain_name, selected_provider, selected_model):
+    """Set up per-session id, Galileo logger, RAG, and the agent.
+
+    Shared by the classic chat page and the healthcare EHR page so both write to
+    the same per-tab Galileo session and reuse one cached agent. Sets
+    ``st.session_state.agent`` and returns the (possibly re-normalized) model.
+    """
     # Initialize session ID (per domain)
     session_id_key = f"session_id_{domain_name}"
     if session_id_key not in st.session_state:
@@ -1080,7 +1238,7 @@ def render_chat_page(
         st.session_state.session_id = session_id  # Also set the global session_id
     else:
         st.session_state.session_id = st.session_state[session_id_key]
-    
+
     # Create a per-session GalileoLogger so each browser tab writes to its own
     # Galileo session instead of sharing the process-level galileo_context singleton.
     galileo_logger_key = f"galileo_logger_{domain_name}"
@@ -1104,13 +1262,6 @@ def render_chat_page(
             st.session_state[galileo_logger_key] = None
     # Always sync to the generic key so helpers (hallucination demo, etc.) can find it
     st.session_state.galileo_logger = st.session_state[galileo_logger_key]
-
-    user_input = orchestrate_streamlit_and_get_user_input(
-        app_title,
-        example_queries[0] if len(example_queries) > 0 else "Hello, how can you help me?",
-        example_queries[1] if len(example_queries) > 1 else "What can you do?",
-        domain_name
-    )
 
     rag_key = f"rag_initialized_{domain_name}_{selected_provider}"
     if rag_key not in st.session_state:
@@ -1137,8 +1288,391 @@ def render_chat_page(
 
     # Set current agent for processing
     st.session_state.agent = st.session_state[agent_cache_key]
+    return selected_model
+
+
+def render_chat_page(
+    factory,
+    domain_name: str,
+    *,
+    selected_provider: str,
+    selected_model: str,
+):
+    """Render the chat page."""
+    selected_provider = _normalize_provider(selected_provider)
+    # Extract UI configuration from domain config (per domain)
+    domain_config_key = f"domain_config_{domain_name}"
+    ui_config = st.session_state[domain_config_key].get("ui", {})
+    app_title = ui_config.get("app_title", f"{domain_name.title()} Assistant")
+    example_queries = ui_config.get("example_queries", [
+        "Hello, how can you help me?",
+        "What can you do?"
+    ])
     
+    _ensure_session_and_agent(factory, domain_name, selected_provider, selected_model)
+
+    user_input = orchestrate_streamlit_and_get_user_input(
+        app_title,
+        example_queries[0] if len(example_queries) > 0 else "Hello, how can you help me?",
+        example_queries[1] if len(example_queries) > 1 else "What can you do?",
+        domain_name
+    )
+
     process_input_for_simple_app(user_input)
+
+
+# ---------------------------------------------------------------------------
+# Healthcare practitioner EHR page (chart-centric UI + copilot)
+# ---------------------------------------------------------------------------
+def _ehr_list_patients():
+    """Return [{patient_id, patient_name}] for the roster (cached per session)."""
+    if "ehr_patients" in st.session_state:
+        return st.session_state["ehr_patients"]
+    try:
+        from helpers.sql_utils import execute_sql, relational_table_name
+        table = relational_table_name("healthcare", "patient")
+        res = execute_sql(
+            f'SELECT patient_id, patient_name FROM "{table}" ORDER BY patient_id'
+        )
+        rows = res.get("rows", []) if isinstance(res, dict) else []
+    except Exception as e:
+        print(f"⚠️ Failed to list patients: {e}")
+        rows = []
+    st.session_state["ehr_patients"] = rows
+    return rows
+
+
+def _ehr_get_chart(pid: str) -> dict:
+    """Direct-SQL patient chart for the UI: demographics, active meds, history."""
+    from helpers.sql_utils import execute_sql, relational_table_name
+
+    def _rows(sql):
+        try:
+            res = execute_sql(sql)
+            return res.get("rows", []) if isinstance(res, dict) else []
+        except Exception as e:
+            print(f"⚠️ EHR chart query failed: {e}")
+            return []
+
+    pat = relational_table_name("healthcare", "patient")
+    med = relational_table_name("healthcare", "medication")
+    hist = relational_table_name("healthcare", "history")
+    demo = _rows(f"SELECT * FROM \"{pat}\" WHERE patient_id = '{pid}'")
+    meds = _rows(
+        f"SELECT medication, dosage, status, start_date FROM \"{med}\" "
+        f"WHERE patient_id = '{pid}' AND status = 'active' ORDER BY start_date"
+    )
+    events = _rows(
+        f"SELECT event_date, event_type, detail FROM \"{hist}\" "
+        f"WHERE patient_id = '{pid}' ORDER BY event_date DESC LIMIT 10"
+    )
+    return {
+        "patient_id": pid,
+        "demographics": demo[0] if demo else {},
+        "active_medications": meds,
+        "history": events,
+    }
+
+
+def _ehr_render_chart(chart: dict):
+    """Render the selected patient's chart: demographics, meds table, history."""
+    demo = chart.get("demographics", {})
+    name = demo.get("patient_name", chart.get("patient_id", ""))
+
+    st.markdown(f"### {name}  \n`{chart.get('patient_id','')}`")
+    cols = st.columns(3)
+    cols[0].caption("Type"); cols[0].write(demo.get("patient_type", "—"))
+    cols[1].caption("Phone"); cols[1].write(demo.get("phone_number", "—"))
+    cols[2].caption("Address"); cols[2].write(demo.get("address", "—"))
+
+    st.markdown("#### 💊 Active medications")
+    meds = chart.get("active_medications", [])
+    if meds:
+        st.table(
+            [
+                {
+                    "Medication": m.get("medication", ""),
+                    "Dosage": m.get("dosage", ""),
+                    "Started": m.get("start_date", ""),
+                }
+                for m in meds
+            ]
+        )
+    else:
+        st.caption("No active medications on file.")
+
+    st.markdown("#### 🗓️ Recent history")
+    events = chart.get("history", [])
+    if events:
+        for ev in events:
+            with st.container(border=True):
+                st.markdown(
+                    f"**{ev.get('event_date','')} · {ev.get('event_type','')}**  \n"
+                    f"{ev.get('detail','')}"
+                )
+    else:
+        st.caption("No recorded history.")
+
+
+def _process_copilot_turn(user_input: str, pid: str, name: str, meds_summary: str):
+    """Run one copilot turn scoped to the selected patient (inline streaming)."""
+    # Start the Galileo session on first input (mirrors the classic chat flow).
+    if not st.session_state.get("galileo_session_started"):
+        try:
+            per_session_logger = st.session_state.get("galileo_logger")
+            if per_session_logger:
+                per_session_logger.start_session(
+                    name="Healthcare EHR Copilot",
+                    external_id=st.session_state.session_id,
+                )
+            st.session_state.galileo_session_started = True
+        except Exception as e:
+            st.error(f"Failed to start Galileo session: {e}")
+            return
+
+    # Record the practitioner's message for display.
+    st.session_state.messages.append(
+        {"message": HumanMessage(content=user_input), "agent": "user"}
+    )
+
+    # Build the conversation for the agent, injecting the selected patient's
+    # context so "refill his Lisinopril" resolves without an ID or dose.
+    today = datetime.now().strftime("%B %d, %Y")
+    context = (
+        f"Today's date is {today}. You are assisting a practitioner who is viewing "
+        f"the chart for patient {pid} ({name}). Active medications: "
+        f"{meds_summary or 'none on file'}. When the practitioner says 'him', 'her', "
+        f"or 'this patient' without giving an ID, use patient_id {pid}. When "
+        f"reviewing the chart, compare the most recent refill date plus its supply "
+        f"duration against today's date; if that supply has run out or is nearly out, "
+        f"tell the practitioner the patient is due for a refill and offer to refill it."
+    )
+    conversation_messages = [{"role": "user", "content": context}]
+    for msg_data in st.session_state.messages:
+        if isinstance(msg_data, dict) and "message" in msg_data:
+            m = msg_data["message"]
+            if isinstance(m, HumanMessage):
+                conversation_messages.append({"role": "user", "content": m.content})
+            elif isinstance(m, AIMessage):
+                conversation_messages.append({"role": "assistant", "content": m.content})
+
+    response, action_events = _run_query_with_live_status(
+        st.session_state.agent, conversation_messages
+    )
+    control_block = getattr(st.session_state.agent, "last_control_block", None)
+
+    # The action cards are the source of truth for any prescription action. When
+    # the agent drafts or sends an order, replace the LLM's restated prose (which
+    # can contradict the card — e.g. narrate the guideline dose while the card
+    # shows a forced wrong dose) with a short, consistent confirmation line.
+    if not control_block and action_events:
+        order = action_events.get("order") or {}
+        draft = action_events.get("draft") or {}
+        if order.get("status") == "sent":
+            med = order.get("medication", "the medication")
+            response = (
+                f"The prescription for {med} has been sent to {name}'s pharmacy — "
+                f"see the confirmation above."
+            )
+        elif order.get("status") == "blocked":
+            med = order.get("medication", "the medication")
+            response = (
+                f"The {med} prescription was held by a safety guardrail and was "
+                f"**not sent** — see the details above. Let me know if you'd like me "
+                f"to escalate this to a senior clinician for review."
+            )
+        elif draft:
+            med = draft.get("medication", "the medication")
+            response = (
+                f"A draft prescription for {med} has been created for {name}. "
+                f"Please review the draft above — if everything looks correct, let "
+                f"me know and I'll send it to the pharmacy."
+            )
+
+    st.session_state.messages.append(
+        {
+            "message": AIMessage(content=response),
+            "agent": "assistant",
+            "action": action_events,
+            "blocked": control_block,
+        }
+    )
+
+
+def _copilot_suggested_refill_med(active_med_names):
+    """Detect a refill suggestion in the latest assistant reply.
+
+    Returns ``None`` when the last assistant turn didn't propose a refill (or
+    already acted). Otherwise returns the specific active medication it named
+    (so the confirm pill matches the drug actually discussed) — or ``""`` when a
+    refill was suggested but no specific active med could be identified.
+    """
+    msgs = st.session_state.get("messages", [])
+    if not msgs:
+        return None
+    last = msgs[-1]
+    if not isinstance(last, dict):
+        return None
+    m = last.get("message")
+    if not isinstance(m, AIMessage):
+        return None
+    act = last.get("action") or {}
+    if act.get("draft") or act.get("order"):
+        return None
+    text = (m.content or "").lower()
+    if "refill" not in text:
+        return None
+    # Only match the drug named in the refill-suggestion sentences — the full
+    # message often lists every active medication, so a naive scan would pick
+    # whichever drug appears first rather than the one actually proposed.
+    segments = [
+        seg for chunk in text.replace("\n", ".").split(".")
+        for seg in [chunk.strip()]
+        if ("refill" in seg or "due for" in seg)
+    ]
+    scope = " ".join(segments) if segments else text
+    for med in active_med_names or []:
+        if med and med.lower() in scope:
+            return med
+    return ""
+
+
+@st.dialog(f"🩺 {HOSPITAL_NAME} Clinical Assistant", width="large")
+def _copilot_dialog(pid: str, name: str, meds_summary: str, active_med_names=None):
+    """Copilot modal: streaming chat + action cards, scoped to one patient."""
+    st.caption(f"Patient in context: **{name}** (`{pid}`)")
+
+    pending_key = f"copilot_pending_{pid}"
+
+    # Prior turns (cards first, then the reply — reuses the shared renderer).
+    display_chat_history()
+
+    # Process a queued turn HERE (right below the history) so the live status
+    # streams inside the conversation area while the input form stays pinned at
+    # the bottom. Quick actions and the form only enqueue + rerun.
+    pending = st.session_state.pop(pending_key, None)
+    if pending:
+        _process_copilot_turn(pending, pid, name, meds_summary)
+        st.rerun()
+
+    if not st.session_state.get("messages"):
+        # Starter shortcuts — shown only on a fresh conversation, then hidden.
+        q1, q2 = st.columns(2)
+        if q1.button("📋 Summarize this patient", key=f"copilot_q_summary_{pid}", use_container_width=True):
+            st.session_state[pending_key] = (
+                "Give me a brief summary of this patient — active medications and any "
+                "recent labs or history I should be aware of."
+            )
+            st.rerun()
+        if q2.button("🧪 Any recent lab results?", key=f"copilot_q_labs_{pid}", use_container_width=True):
+            st.session_state[pending_key] = "What are this patient's most recent lab results?"
+            st.rerun()
+
+        qa1, qa2 = st.columns(2)
+        if qa1.button("💊 Refill his Lisinopril", key=f"copilot_qa_refill_{pid}", use_container_width=True):
+            st.session_state[pending_key] = "Refill his Lisinopril."
+            st.rerun()
+        if qa2.button("➕ Prescribe aspirin for pain", key=f"copilot_qa_aspirin_{pid}", use_container_width=True):
+            st.session_state[pending_key] = "Prescribe aspirin for his joint pain."
+            st.rerun()
+    else:
+        suggested_med = _copilot_suggested_refill_med(active_med_names)
+        if suggested_med is not None:
+            # Contextual confirm pills after the agent suggests a refill.
+            c1, c2 = st.columns(2)
+            if suggested_med:
+                yes_label = f"✅ Yes, refill {suggested_med}"
+                yes_msg = (
+                    f"Yes, refill {suggested_med} at the correct guideline dose and "
+                    f"send it to the pharmacy."
+                )
+            else:
+                yes_label = "✅ Yes, go ahead with the refill"
+                yes_msg = (
+                    "Yes, go ahead and refill it at the correct guideline dose and "
+                    "send it to the pharmacy."
+                )
+            if c1.button(yes_label, key=f"copilot_confirm_yes_{pid}", use_container_width=True):
+                st.session_state[pending_key] = yes_msg
+                st.rerun()
+            if c2.button("🚫 No, take no action", key=f"copilot_confirm_no_{pid}", use_container_width=True):
+                st.session_state[pending_key] = "No, don't take any action for now."
+                st.rerun()
+
+    # Free-text ask (a form avoids the st.chat_input container restriction).
+    with st.form(key=f"copilot_form_{pid}", clear_on_submit=True):
+        txt = st.text_input("Ask about this patient or request an action", key=f"copilot_txt_{pid}")
+        submitted = st.form_submit_button("Send")
+    if submitted and txt and txt.strip():
+        st.session_state[pending_key] = txt.strip()
+        st.rerun()
+
+    if st.button("Close", key=f"copilot_close_{pid}"):
+        st.session_state["ehr_copilot_open"] = False
+        st.rerun()
+
+
+def render_healthcare_ehr_page(
+    factory,
+    domain_name: str,
+    *,
+    selected_provider: str,
+    selected_model: str,
+):
+    """Chart-centric practitioner EHR page with a copilot assistant."""
+    selected_provider = _normalize_provider(selected_provider)
+    _ensure_session_and_agent(factory, domain_name, selected_provider, selected_model)
+
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    if "galileo_session_started" not in st.session_state:
+        st.session_state.galileo_session_started = False
+    st.session_state.domain_name = domain_name
+
+    st.title(f"🏥 {HOSPITAL_NAME}")
+    st.caption("Practitioner EHR · Clinical Assistant")
+
+    patients = _ehr_list_patients()
+    if not patients:
+        st.error(
+            "No patients found. Make sure Postgres is running and the healthcare "
+            "tables are loaded (helpers/setup_vectordb.py)."
+        )
+        return
+
+    options = [f"{p['patient_id']} — {p['patient_name']}" for p in patients]
+    top_left, top_right = st.columns([0.75, 0.25])
+    with top_left:
+        selected_label = st.selectbox("Patient", options, key="ehr_patient_select")
+    selected_pid = selected_label.split(" — ", 1)[0]
+
+    # Switching patients starts a fresh copilot conversation (scoped per patient).
+    if st.session_state.get("ehr_selected_patient") != selected_pid:
+        st.session_state["ehr_selected_patient"] = selected_pid
+        st.session_state.messages = []
+        st.session_state["ehr_copilot_open"] = False
+
+    chart = _ehr_get_chart(selected_pid)
+    demo = chart.get("demographics", {})
+    name = demo.get("patient_name", selected_pid)
+    active_meds = chart.get("active_medications", [])
+    meds_summary = ", ".join(
+        f"{m.get('medication','')} {m.get('dosage','')}".strip()
+        for m in active_meds
+    )
+    active_med_names = [m.get("medication", "") for m in active_meds if m.get("medication")]
+
+    with top_right:
+        st.write("")  # vertical spacer to align with the selectbox
+        if st.button("🩺 Assistant", use_container_width=True, key="ehr_open_copilot"):
+            st.session_state["ehr_copilot_open"] = True
+
+    _ehr_render_chart(chart)
+
+    # Re-open the dialog on every rerun while it's flagged open so streaming turns
+    # (which call st.rerun) keep the copilot visible instead of dismissing it.
+    if st.session_state.get("ehr_copilot_open"):
+        _copilot_dialog(selected_pid, name, meds_summary, active_med_names)
 
 
 def create_domain_page(domain_name: str):
