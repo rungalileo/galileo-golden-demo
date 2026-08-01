@@ -234,7 +234,10 @@ def setup_vectordb_for_domain(domain_name: str):
             print(f"Metadata: {doc.metadata}")
             print("-" * 50)
 
-    if not os.environ.get("POSTGRES_PASSWORD"):
+    # A full connection URL (Neon/Supabase) already carries the password, so only
+    # prompt when using the individual POSTGRES_* parts without one.
+    _has_url = os.environ.get("POSTGRES_URL") or os.environ.get("DATABASE_URL")
+    if not os.environ.get("POSTGRES_PASSWORD") and not _has_url:
         os.environ["POSTGRES_PASSWORD"] = getpass.getpass("Enter PostgreSQL password: ")
 
     # Embed the documents into one collection per available provider. Each

@@ -29,13 +29,45 @@ def _cli_name(provider: str) -> str:
 
 
 def get_postgres_connection_string() -> str:
-    """Build SQLAlchemy connection string from environment variables."""
+    """Build a SQLAlchemy (psycopg3) connection string from the environment.
+
+    Precedence:
+      1. ``POSTGRES_URL`` / ``DATABASE_URL`` — a full connection URL (e.g. from a
+         hosted provider like Neon or Supabase). The scheme is normalized to
+         ``postgresql+psycopg`` so SQLAlchemy uses the installed psycopg3 driver.
+      2. Individual ``POSTGRES_*`` parts (the local Docker default).
+
+    SSL: hosted Postgres requires TLS. ``POSTGRES_SSLMODE`` is honored if set;
+    otherwise SSL is required automatically for any non-local host and left off
+    for localhost (preserving the local Docker behavior).
+    """
+    from urllib.parse import (
+        parse_qsl,
+        quote_plus,
+        urlencode,
+        urlsplit,
+        urlunsplit,
+    )
+
+    url = os.environ.get("POSTGRES_URL") or os.environ.get("DATABASE_URL")
+    if url:
+        parts = urlsplit(url)
+        query = dict(parse_qsl(parts.query))
+        query.setdefault("sslmode", os.environ.get("POSTGRES_SSLMODE") or "require")
+        return urlunsplit(
+            ("postgresql+psycopg", parts.netloc, parts.path, urlencode(query), parts.fragment)
+        )
+
     host = os.environ.get("POSTGRES_HOST", "localhost")
     port = os.environ.get("POSTGRES_PORT", "5432")
-    user = os.environ.get("POSTGRES_USER", "postgres")
-    password = os.environ.get("POSTGRES_PASSWORD", "")
+    user = quote_plus(os.environ.get("POSTGRES_USER", "postgres"))
+    password = quote_plus(os.environ.get("POSTGRES_PASSWORD", ""))
     database = os.environ.get("POSTGRES_DB", "vectordb")
-    return f"postgresql+psycopg://{user}:{password}@{host}:{port}/{database}"
+
+    base = f"postgresql+psycopg://{user}:{password}@{host}:{port}/{database}"
+    is_local = host in ("localhost", "127.0.0.1", "::1")
+    sslmode = os.environ.get("POSTGRES_SSLMODE") or ("" if is_local else "require")
+    return f"{base}?sslmode={sslmode}" if sslmode else base
 
 
 def get_collection_name(domain_name: str, provider: Optional[str] = None) -> str:

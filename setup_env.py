@@ -162,6 +162,11 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
             "POSTGRES_USER": secrets.get("postgres_user", "postgres"),
             "POSTGRES_PASSWORD": secrets.get("postgres_password", ""),
             "POSTGRES_DB": secrets.get("postgres_db", "vectordb"),
+            # Full connection URL for a hosted Postgres (e.g. Neon/Supabase). When
+            # set it takes precedence over the individual POSTGRES_* parts above.
+            "POSTGRES_URL": secrets.get("postgres_url", ""),
+            # Optional override; hosted hosts require SSL (auto-applied for remotes).
+            "POSTGRES_SSLMODE": secrets.get("postgres_sslmode", ""),
             "ENVIRONMENT": secrets.get("environment", "local")
         }
         
