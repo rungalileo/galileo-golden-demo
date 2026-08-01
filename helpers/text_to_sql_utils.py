@@ -5,9 +5,8 @@ from typing import Literal
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from helpers.llm_utils import get_chat_model, get_default_chat_model, get_llm_provider
-from sqlalchemy import create_engine
 
-from helpers.pgvector_utils import get_postgres_connection_string
+from helpers.pgvector_utils import get_engine
 from helpers.sql_utils import get_table_schema_description, relational_table_name
 
 SqlOperation = Literal["select", "delete"]
@@ -41,7 +40,7 @@ async def generate_sql(
     Use an LLM to produce a SELECT or DELETE statement for a relational table.
     """
     table_name = relational_table_name(domain_name, table_suffix)
-    engine = create_engine(get_postgres_connection_string())
+    engine = get_engine()
     schema = get_table_schema_description(engine, table_name)
 
     if operation == "delete":

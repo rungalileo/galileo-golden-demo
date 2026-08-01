@@ -2,11 +2,13 @@
 Shared PostgreSQL/pgvector utilities for vector storage and retrieval.
 """
 import os
+from functools import lru_cache
 from typing import Optional, Tuple
 
 from langchain_core.embeddings import Embeddings
 from langchain_postgres import PGVector
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
 
 from helpers.llm_utils import (
     embedding_backend_available,
@@ -70,6 +72,34 @@ def get_postgres_connection_string() -> str:
     return f"{base}?sslmode={sslmode}" if sslmode else base
 
 
+@lru_cache(maxsize=8)
+def _build_engine(conn_str: str) -> Engine:
+    """Create a pooled Engine for a connection string (memoized per string)."""
+    return create_engine(
+        conn_str,
+        # Reuse a small pool of live connections across queries. This matters for
+        # remote Postgres (e.g. Neon): a fresh connection costs several network
+        # round-trips (TCP + TLS handshake), so pooling removes that per-query cost.
+        pool_size=5,
+        max_overflow=5,
+        # Serverless Postgres drops idle connections when it auto-suspends;
+        # pre_ping transparently detects a dead connection and reconnects, and
+        # recycle proactively refreshes connections before typical idle timeouts.
+        pool_pre_ping=True,
+        pool_recycle=280,
+    )
+
+
+def get_engine() -> Engine:
+    """Return a process-wide, pooled SQLAlchemy Engine for the current database.
+
+    Prefer this over ``create_engine(get_postgres_connection_string())`` in hot
+    paths so repeated queries reuse connections instead of re-doing the TLS
+    handshake on every call.
+    """
+    return _build_engine(get_postgres_connection_string())
+
+
 def get_collection_name(domain_name: str, provider: Optional[str] = None) -> str:
     """SQL-safe collection name per provider: {domain}_{provider}_index.
 
@@ -83,7 +113,7 @@ def get_collection_name(domain_name: str, provider: Optional[str] = None) -> str
 def collection_exists(domain_name: str, provider: Optional[str] = None) -> bool:
     """Return True if the pgvector collection for this domain/provider exists."""
     collection_name = get_collection_name(domain_name, provider)
-    engine = create_engine(get_postgres_connection_string())
+    engine = get_engine()
     with engine.connect() as conn:
         row = conn.execute(
             text(
@@ -99,7 +129,7 @@ def get_collection_metadata(
 ) -> Optional[dict]:
     """Return the cmetadata recorded when the collection was first created, if any."""
     collection_name = get_collection_name(domain_name, provider)
-    engine = create_engine(get_postgres_connection_string())
+    engine = get_engine()
     with engine.connect() as conn:
         row = conn.execute(
             text(

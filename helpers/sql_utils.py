@@ -9,7 +9,7 @@ import pandas as pd
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 
-from helpers.pgvector_utils import get_postgres_connection_string
+from helpers.pgvector_utils import get_engine, get_postgres_connection_string
 
 
 def relational_table_name(domain_name: str, table_suffix: str) -> str:
@@ -166,14 +166,18 @@ def execute_sql(sql: str) -> Dict[str, Any]:
     """
     sql_clean = (sql or "").strip().rstrip(";")
     operation = _sql_operation(sql_clean)
-    engine = create_engine(get_postgres_connection_string())
+    engine = get_engine()
 
-    with engine.begin() as conn:
-        result = conn.execute(text(sql_clean))
-        if operation == "select":
+    if operation == "select":
+        # Read-only: run in AUTOCOMMIT so we skip the BEGIN/COMMIT round-trips a
+        # transaction would add (meaningful over a remote DB like Neon).
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            result = conn.execute(text(sql_clean))
             rows = [dict(row) for row in result.mappings()]
             count = len(rows)
-        else:
+    else:
+        with engine.begin() as conn:
+            result = conn.execute(text(sql_clean))
             rows = []
             count = result.rowcount
 
