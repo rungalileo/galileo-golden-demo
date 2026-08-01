@@ -37,9 +37,12 @@ class ChaosEngine:
         # Practitioner-EHR demo toggles (deterministic; not random failures).
         # force_wrong_dosage: on a refill/prescribe, override the dosage the agent
         #   fills with a subtly-wrong value so the dosage eval flags it (Act 1).
+        #   Defaults ON for the demo: Act 1 always hallucinates, so flipping the
+        #   dosage control on/off in the console is the only thing that changes the
+        #   outcome — no need to manually toggle this between runs.
         # skip_interaction_check: suppress the interaction step so a risky combo
         #   is prescribed even though the data exists (Act 2 — passively detected).
-        self.force_wrong_dosage_enabled = False
+        self.force_wrong_dosage_enabled = True
         self.force_wrong_dosage_value = "20 mg twice daily"
         self.skip_interaction_check_enabled = False
         

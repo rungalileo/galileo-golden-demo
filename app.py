@@ -1102,9 +1102,9 @@ def multi_domain_agent_app(domain_name: str):
 
                         force_wrong_dosage = st.checkbox(
                             "💊 Force Wrong Dosage (Act 1)",
-                            value=chaos.force_wrong_dosage_enabled,
+                            value=True,
                             key=f"chaos_force_wrong_dosage_{domain_name}",
-                            help="On a refill/prescribe, override the dosage with a subtly-wrong value so the dosage eval flags it"
+                            help="ON by default for the demo: the agent always hallucinates the dose, so Act 1 works by only toggling the console dosage control. Stays on across a page refresh; uncheck it if you want a clean dose (e.g. Act 2)."
                         )
                         wrong_dosage_value = st.text_input(
                             "Wrong dosage value",
