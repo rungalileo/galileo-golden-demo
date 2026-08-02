@@ -71,6 +71,16 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+.webui_secret_key
+
+# macOS installer private/generated material
+config/macos/*.env
+transfer/*
+!transfer/README.md
+!transfer/*.example
+.runtime/
+!scripts/macos/lib/
+!scripts/macos/lib/common.sh
 
 # Logs
 *.log

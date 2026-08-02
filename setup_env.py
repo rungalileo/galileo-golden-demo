@@ -8,6 +8,26 @@ import yaml
 from pathlib import Path
 from typing import Optional
 
+
+def inject_system_truststore() -> bool:
+    """Use the OS trust store once, when the optional dependency is installed."""
+    if os.environ.get("_SYSTEM_TRUSTSTORE_INJECTED") == "true":
+        return True
+    try:
+        import truststore
+    except ImportError:
+        return False
+
+    truststore.inject_into_ssl()
+    os.environ["_SYSTEM_TRUSTSTORE_INJECTED"] = "true"
+    return True
+
+
+# Run before Galileo/OpenAI HTTP clients are imported. This lets managed Macs
+# trust corporate root CAs from Keychain while remaining a no-op when the
+# optional dependency has not been installed yet.
+inject_system_truststore()
+
 # Silence Galileo SDK span-serialization noise. The Galileo ingestion models
 # subclass the core span types and hold child spans in a discriminated union,
 # which makes Pydantic 2.12 emit "PydanticSerializationUnexpectedValue" /
@@ -106,9 +126,13 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
             console_url, secrets.get("agent_control_url", "")
         )
         galileo_api_key = secrets.get("galileo_api_key", "")
+        configured_galileo_domain = secrets.get("galileo_domain", "")
         
         # Base environment variables (always set)
         env_vars = {
+            # Local chat backend. Ollama remains the default for backward
+            # compatibility; set this to "mlx" to use an MLX-LM server.
+            "LOCAL_LLM_BACKEND": secrets.get("local_llm_backend", "ollama"),
             # No default: an unset ollama_base_url means "Local not configured".
             # Connections still fall back to localhost via get_ollama_base_url().
             "OLLAMA_BASE_URL": secrets.get("ollama_base_url", ""),
@@ -117,6 +141,16 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
             ),
             "OLLAMA_EMBEDDING_MODEL": secrets.get(
                 "ollama_embedding_model", "nomic-embed-text"
+            ),
+            "MLX_BASE_URL": secrets.get("mlx_base_url", ""),
+            "MLX_API_KEY": secrets.get("mlx_api_key", "local"),
+            "MLX_DEFAULT_CHAT_MODEL": secrets.get(
+                "mlx_default_chat_model",
+                "mlx-community/gemma-4-26b-a4b-it-4bit",
+            ),
+            "MLX_EMBEDDING_MODEL": secrets.get(
+                "mlx_embedding_model",
+                "sentence-transformers/all-MiniLM-L6-v2",
             ),
             "OPENAI_API_KEY": secrets.get("openai_api_key", ""),
             "OPENAI_DEFAULT_CHAT_MODEL": secrets.get(
@@ -139,6 +173,10 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
             "GALILEO_API_KEY": galileo_api_key,
             "GALILEO_API_URL": galileo_api_url,
             "GALILEO_CONSOLE_URL": console_url,
+            "GALILEO_PROJECT_ID": "",
+            "GALILEO_PROJECT_URL": "",
+            "GALILEO_LOG_STREAM_ID": "",
+            "GALILEO_LOG_STREAM_URL": "",
             "AGENT_CONTROL_URL": agent_control_url,
             "AGENT_CONTROL_API_KEY": galileo_api_key,
             "AGENT_CONTROL_AGENT_NAME": secrets.get("agent_control_agent_name", ""),
@@ -153,16 +191,41 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
             "POSTGRES_DB": secrets.get("postgres_db", "vectordb"),
             "ENVIRONMENT": secrets.get("environment", "local")
         }
+        if configured_galileo_domain:
+            env_vars["GALILEO_DOMAIN"] = configured_galileo_domain
         
         # If domain is specified, add domain-specific settings
         if domain_name:
-            project_name = get_domain_project_name(domain_name, domain_config)
-            log_stream = "default"
-            if domain_config and "galileo" in domain_config and "log_stream" in domain_config["galileo"]:
+            use_canonical_deployment = (
+                not configured_galileo_domain
+                or configured_galileo_domain == domain_name
+            )
+            project_name = (
+                secrets.get("galileo_project", "")
+                if use_canonical_deployment
+                else ""
+            ) or get_domain_project_name(domain_name, domain_config)
+            configured_log_stream = (
+                secrets.get("galileo_log_stream", "")
+                if use_canonical_deployment
+                else ""
+            )
+            log_stream = configured_log_stream or "default"
+            if (
+                not configured_log_stream
+                and domain_config
+                and "galileo" in domain_config
+                and "log_stream" in domain_config["galileo"]
+            ):
                 log_stream = domain_config["galileo"]["log_stream"]
             
             env_vars["GALILEO_PROJECT"] = project_name
             env_vars["GALILEO_LOG_STREAM"] = log_stream
+            if use_canonical_deployment:
+                env_vars["GALILEO_PROJECT_ID"] = secrets.get("galileo_project_id", "")
+                env_vars["GALILEO_PROJECT_URL"] = secrets.get("galileo_project_url", "")
+                env_vars["GALILEO_LOG_STREAM_ID"] = secrets.get("galileo_log_stream_id", "")
+                env_vars["GALILEO_LOG_STREAM_URL"] = secrets.get("galileo_log_stream_url", "")
         
         # Provider credentials must reflect secrets.toml exactly. If a value is
         # empty, clear any ambient/leftover env var (exported in the shell, or
@@ -171,8 +234,13 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
         # environment. Other empty keys are left as-is (only warned about).
         _AUTHORITATIVE_KEYS = {
             "OLLAMA_BASE_URL",
+            "MLX_BASE_URL",
             "OPENAI_API_KEY",
             "AWS_BEARER_TOKEN_BEDROCK",
+            "GALILEO_PROJECT_ID",
+            "GALILEO_PROJECT_URL",
+            "GALILEO_LOG_STREAM_ID",
+            "GALILEO_LOG_STREAM_URL",
         }
         for key, value in env_vars.items():
             if value:  # Only set if value is not empty
@@ -192,7 +260,6 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
             os.environ["EMBEDDING_PROVIDER"] = embedding_provider
 
         if domain_name:
-            project_name = get_domain_project_name(domain_name, domain_config)
             print(f"🔧 Environment setup complete for domain: {domain_name} (project: {project_name})")
         else:
             print("🔧 Environment setup complete (domain-agnostic mode)")

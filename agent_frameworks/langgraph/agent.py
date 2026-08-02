@@ -221,16 +221,18 @@ class LangGraphAgent(BaseAgent):
         self.galileo_logger = galileo_logger
         self.llm_provider = llm_provider if llm_provider in ("local", "hosted", "bedrock") else "local"
         
-        # Build callbacks list with Galileo (always enabled).
-        # Pass the per-session logger so each browser tab writes to its own Galileo session.
-        # Attach LangGraph spans to a manually started trace (see _process_query_async).
-        callbacks = [
-            GalileoCallback(
-                galileo_logger=galileo_logger,
-                start_new_trace=False,
-                flush_on_chain_end=False,
+        # Pass the per-session logger so each browser tab writes to its own
+        # Galileo session. If credentials are not configured, the UI passes
+        # None and the agent remains usable without tracing.
+        callbacks = []
+        if galileo_logger:
+            callbacks.append(
+                GalileoCallback(
+                    galileo_logger=galileo_logger,
+                    start_new_trace=False,
+                    flush_on_chain_end=False,
+                )
             )
-        ]
         
         self.config = {"configurable": {"thread_id": self.session_id}, "callbacks": callbacks}
     

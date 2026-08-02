@@ -1,20 +1,31 @@
 """
-LLM and embedding helpers for local (Ollama), hosted (OpenAI), and AWS Bedrock inference.
+LLM and embedding helpers for local (Ollama or MLX), hosted (OpenAI), and
+AWS Bedrock inference.
 """
 import json
 import os
+import importlib.util
 import urllib.error
 import urllib.request
+import uuid
 from contextvars import ContextVar, Token
-from typing import List, Literal, Optional
+from functools import lru_cache
+from typing import Any, List, Literal, Optional
 
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatResult
 from langchain_ollama import ChatOllama, OllamaEmbeddings
+from langchain_openai import ChatOpenAI
 
 LLMProvider = Literal["local", "hosted", "bedrock"]
+LocalLLMBackend = Literal["ollama", "mlx"]
 
 DEFAULT_LOCAL_CHAT_MODEL = "gemma4"
+DEFAULT_MLX_CHAT_MODEL = "mlx-community/gemma-4-26b-a4b-it-4bit"
+DEFAULT_MLX_BASE_URL = "http://127.0.0.1:8080/v1"
+DEFAULT_MLX_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 DEFAULT_HOSTED_CHAT_MODEL = "gpt-4o"
 DEFAULT_BEDROCK_CHAT_MODEL = "mistral.ministral-3-14b-instruct"
 DEFAULT_LOCAL_EMBEDDING_MODEL = "nomic-embed-text"
@@ -25,6 +36,146 @@ DEFAULT_BEDROCK_REGION = "us-east-1"
 DEFAULT_EMBEDDING_DIMENSIONS = 768
 
 _llm_provider_ctx: ContextVar[LLMProvider] = ContextVar("llm_provider", default="local")
+
+
+@lru_cache(maxsize=2)
+def _load_sentence_transformer(model_name: str):
+    """Load and cache the local embedding model lazily."""
+    from sentence_transformers import SentenceTransformer
+
+    return SentenceTransformer(model_name)
+
+
+class LocalSentenceTransformerEmbeddings(Embeddings):
+    """LangChain embeddings backed by a local sentence-transformers model."""
+
+    def __init__(self, model_name: str):
+        self.model_name = model_name
+        self._model = _load_sentence_transformer(model_name)
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        vectors = self._model.encode(
+            texts,
+            normalize_embeddings=True,
+            convert_to_numpy=True,
+        )
+        return vectors.tolist()
+
+    def embed_query(self, text: str) -> List[float]:
+        vector = self._model.encode(
+            text,
+            normalize_embeddings=True,
+            convert_to_numpy=True,
+        )
+        return vector.tolist()
+
+
+def _parse_mlx_tool_calls(content: Any) -> List[dict]:
+    """Normalize common JSON tool-call output emitted as plain message text.
+
+    Some MLX models describe a requested tool as
+    ``{"name": "...", "parameters": {...}}`` even when tools were supplied
+    through the OpenAI-compatible request. LangGraph expects those calls in the
+    structured ``AIMessage.tool_calls`` field.
+    """
+    if not isinstance(content, str):
+        return []
+
+    text = content.strip()
+    if text.startswith("```") and text.endswith("```"):
+        first_newline = text.find("\n")
+        if first_newline != -1:
+            text = text[first_newline + 1 : -3].strip()
+
+    try:
+        payload = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+    if isinstance(payload, dict) and isinstance(payload.get("tool_calls"), list):
+        candidates = payload["tool_calls"]
+    elif isinstance(payload, list):
+        candidates = payload
+    else:
+        candidates = [payload]
+
+    tool_calls: List[dict] = []
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            return []
+        function = candidate.get("function", candidate)
+        if not isinstance(function, dict):
+            return []
+
+        name = function.get("name")
+        arguments = function.get("parameters", function.get("arguments"))
+        if isinstance(arguments, str):
+            try:
+                arguments = json.loads(arguments)
+            except json.JSONDecodeError:
+                return []
+        if not isinstance(name, str) or not name or not isinstance(arguments, dict):
+            return []
+
+        tool_calls.append(
+            {
+                "name": name,
+                "args": arguments,
+                "id": candidate.get("id") or f"call_{uuid.uuid4().hex}",
+                "type": "tool_call",
+            }
+        )
+    return tool_calls
+
+
+class MLXChatOpenAI(ChatOpenAI):
+    """ChatOpenAI adapter with a narrow fallback for MLX JSON tool calls."""
+
+    @staticmethod
+    def _normalize_tool_calls(result: ChatResult) -> ChatResult:
+        for generation in result.generations:
+            message = generation.message
+            if not isinstance(message, AIMessage) or message.tool_calls:
+                continue
+
+            parsed_calls = _parse_mlx_tool_calls(message.content)
+            if not parsed_calls:
+                continue
+
+            message.tool_calls = parsed_calls
+            message.additional_kwargs["tool_calls"] = [
+                {
+                    "id": call["id"],
+                    "type": "function",
+                    "function": {
+                        "name": call["name"],
+                        "arguments": json.dumps(call["args"]),
+                    },
+                }
+                for call in parsed_calls
+            ]
+            message.content = ""
+        return result
+
+    def _generate(
+        self,
+        messages: List[Any],
+        stop: Optional[List[str]] = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        result = super()._generate(messages, stop, run_manager, **kwargs)
+        return self._normalize_tool_calls(result) if kwargs.get("tools") else result
+
+    async def _agenerate(
+        self,
+        messages: List[Any],
+        stop: Optional[List[str]] = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        result = await super()._agenerate(messages, stop, run_manager, **kwargs)
+        return self._normalize_tool_calls(result) if kwargs.get("tools") else result
 
 
 def set_llm_provider(provider: LLMProvider) -> Token:
@@ -38,13 +189,39 @@ def reset_llm_provider(token: Token) -> None:
 
 
 def get_llm_provider() -> LLMProvider:
-    """Return the active LLM provider ('local'=Ollama, 'hosted'=OpenAI, 'bedrock'=AWS)."""
+    """Return the active LLM provider ('local', 'hosted', or 'bedrock')."""
     return _llm_provider_ctx.get()
+
+
+def get_local_llm_backend() -> LocalLLMBackend:
+    """Return the configured local chat backend.
+
+    Ollama remains the default for backward compatibility. Setting
+    ``local_llm_backend = "mlx"`` in secrets.toml opts into the
+    OpenAI-compatible MLX-LM server.
+    """
+    backend = os.environ.get("LOCAL_LLM_BACKEND", "ollama").strip().lower()
+    return "mlx" if backend == "mlx" else "ollama"
+
+
+def get_local_provider_label() -> str:
+    """Return the user-facing label for the active local chat backend."""
+    return "Local (MLX)" if get_local_llm_backend() == "mlx" else "Local (Ollama)"
 
 
 def get_ollama_base_url() -> str:
     """Return the Ollama server URL (default: http://localhost:11434)."""
     return os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+
+
+def get_mlx_base_url() -> str:
+    """Return the OpenAI-compatible MLX-LM base URL."""
+    return os.environ.get("MLX_BASE_URL", DEFAULT_MLX_BASE_URL).rstrip("/")
+
+
+def get_mlx_api_key() -> str:
+    """Return the placeholder API key accepted by the local MLX-LM server."""
+    return os.environ.get("MLX_API_KEY", "local")
 
 
 def get_bedrock_region() -> str:
@@ -90,6 +267,8 @@ def get_default_chat_model(*, provider: Optional[LLMProvider] = None) -> str:
         return os.environ.get("OPENAI_DEFAULT_CHAT_MODEL", DEFAULT_HOSTED_CHAT_MODEL)
     if resolved == "bedrock":
         return os.environ.get("BEDROCK_DEFAULT_CHAT_MODEL", DEFAULT_BEDROCK_CHAT_MODEL)
+    if get_local_llm_backend() == "mlx":
+        return os.environ.get("MLX_DEFAULT_CHAT_MODEL", DEFAULT_MLX_CHAT_MODEL)
     return os.environ.get("OLLAMA_DEFAULT_CHAT_MODEL", DEFAULT_LOCAL_CHAT_MODEL)
 
 
@@ -107,6 +286,25 @@ def is_ollama_available(*, timeout: float = 3) -> bool:
     url = f"{get_ollama_base_url().rstrip('/')}/api/tags"
     try:
         with urllib.request.urlopen(url, timeout=timeout) as response:
+            response.read()
+        return True
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return False
+
+
+def _mlx_request(path: str, *, timeout: float = 3):
+    """Open an authenticated request against the local MLX-LM API."""
+    request = urllib.request.Request(
+        f"{get_mlx_base_url()}/{path.lstrip('/')}",
+        headers={"Authorization": f"Bearer {get_mlx_api_key()}"},
+    )
+    return urllib.request.urlopen(request, timeout=timeout)
+
+
+def is_mlx_available(*, timeout: float = 3) -> bool:
+    """Return True if the configured MLX-LM server exposes its model list."""
+    try:
+        with _mlx_request("models", timeout=timeout) as response:
             response.read()
         return True
     except (urllib.error.URLError, TimeoutError, OSError):
@@ -171,6 +369,11 @@ def ollama_configured() -> bool:
     return bool(os.environ.get("OLLAMA_BASE_URL", "").strip())
 
 
+def mlx_configured() -> bool:
+    """True if an MLX-LM base URL is configured in secrets.toml."""
+    return bool(os.environ.get("MLX_BASE_URL", "").strip())
+
+
 # Provider ordering for the UI. Display order is how options appear in the
 # radio; priority order decides which configured provider is preselected.
 _PROVIDER_DISPLAY_ORDER: tuple = ("local", "hosted", "bedrock")
@@ -187,6 +390,8 @@ def provider_configured(provider: LLMProvider) -> bool:
         return openai_api_key_configured()
     if provider == "bedrock":
         return bedrock_configured()
+    if get_local_llm_backend() == "mlx":
+        return mlx_configured()
     return ollama_configured()
 
 
@@ -209,14 +414,16 @@ def default_provider() -> Optional[LLMProvider]:
 def embedding_backend_available(provider: LLMProvider) -> bool:
     """Return True if the given embedding backend can actually be used right now.
 
-    Checks live availability at call time: for local, whether the Ollama server
-    responds; for hosted, whether a real OpenAI key is configured; for bedrock,
-    whether a Bedrock API key is configured.
+    Checks live availability at call time. MLX-LM does not expose embeddings,
+    so the MLX local backend uses an in-process sentence-transformers model.
+    Ollama configurations keep using Ollama embeddings unchanged.
     """
     if provider == "hosted":
         return openai_api_key_configured()
     if provider == "bedrock":
         return bedrock_configured()
+    if get_local_llm_backend() == "mlx":
+        return importlib.util.find_spec("sentence_transformers") is not None
     return is_ollama_available()
 
 
@@ -260,8 +467,9 @@ def resolve_embedding_provider(
             return fallback
 
     raise ConnectionError(
-        f"No embedding backend available. Start Ollama at {get_ollama_base_url()}, "
-        "set openai_api_key, or set bedrock_api_key in .streamlit/secrets.toml."
+        "No embedding backend available. For MLX, install sentence-transformers; "
+        f"for Ollama, start it at {get_ollama_base_url()}; otherwise set "
+        "openai_api_key or bedrock_api_key in .streamlit/secrets.toml."
     )
 
 
@@ -281,6 +489,11 @@ def get_domain_embedding_model(
         return (
             vectorstore_config.get("bedrock_embedding_model")
             or os.environ.get("BEDROCK_EMBEDDING_MODEL", DEFAULT_BEDROCK_EMBEDDING_MODEL)
+        )
+    if get_local_llm_backend() == "mlx":
+        return (
+            vectorstore_config.get("mlx_embedding_model")
+            or os.environ.get("MLX_EMBEDDING_MODEL", DEFAULT_MLX_EMBEDDING_MODEL)
         )
     return (
         vectorstore_config.get("embedding_model")
@@ -318,6 +531,31 @@ def list_ollama_models() -> List[str]:
     ]
 
 
+def list_mlx_models() -> List[str]:
+    """Return model IDs exposed by the configured MLX-LM server."""
+    try:
+        with _mlx_request("models", timeout=10) as response:
+            payload = json.loads(response.read().decode())
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise ConnectionError(
+            f"Cannot reach MLX-LM at {get_mlx_base_url()}. "
+            "Make sure the MLX-LM server is running."
+        ) from exc
+
+    return [
+        model.get("id", "")
+        for model in payload.get("data", [])
+        if model.get("id")
+    ]
+
+
+def list_local_models() -> List[str]:
+    """Return models from the configured local chat backend."""
+    if get_local_llm_backend() == "mlx":
+        return list_mlx_models()
+    return list_ollama_models()
+
+
 def ensure_ollama_model_available(model: str, *, model_kind: str = "model") -> None:
     """Raise a clear error if the requested Ollama model is not installed locally."""
     installed_models = set(list_ollama_models())
@@ -345,6 +583,11 @@ def get_domain_chat_model(domain_config: dict, *, override: Optional[str] = None
             model_cfg.get("bedrock_default_model")
             or get_default_chat_model(provider="bedrock")
         )
+    if get_local_llm_backend() == "mlx":
+        return (
+            model_cfg.get("mlx_default_model")
+            or get_default_chat_model(provider="local")
+        )
     return model_cfg.get("default_model") or get_default_chat_model(provider="local")
 
 
@@ -359,8 +602,6 @@ def get_chat_model(
     """Create a chat model for the active or specified provider."""
     resolved_provider = provider or get_llm_provider()
     if resolved_provider == "hosted":
-        from langchain_openai import ChatOpenAI
-
         ensure_openai_api_key()
         kwargs = {
             "model": model,
@@ -382,6 +623,29 @@ def get_chat_model(
         if name:
             kwargs["name"] = name
         return ChatBedrockConverse(**kwargs)
+
+    if get_local_llm_backend() == "mlx":
+        if not is_mlx_available():
+            raise ConnectionError(
+                f"Cannot reach MLX-LM at {get_mlx_base_url()}. "
+                "Make sure the MLX-LM server is running."
+            )
+        kwargs = {
+            "model": model,
+            "temperature": temperature,
+            "base_url": get_mlx_base_url(),
+            "api_key": get_mlx_api_key(),
+        }
+        # Gemma 4 reasons in a separate hidden channel by default. Disable that
+        # channel for the demo so short response budgets are spent on visible
+        # answers. Keep every other MLX model's request shape unchanged.
+        if "gemma-4" in model.casefold():
+            kwargs["extra_body"] = {
+                "chat_template_kwargs": {"enable_thinking": False}
+            }
+        if name:
+            kwargs["name"] = name
+        return MLXChatOpenAI(**kwargs)
 
     ensure_ollama_model_available(model, model_kind="chat model")
     kwargs = {
@@ -425,6 +689,9 @@ def get_embeddings(
             model_id=embedding_model,
             region_name=get_bedrock_region(),
         )
+
+    if get_local_llm_backend() == "mlx":
+        return LocalSentenceTransformerEmbeddings(embedding_model)
 
     ensure_ollama_model_available(embedding_model, model_kind="embedding model")
     return OllamaEmbeddings(model=embedding_model, base_url=get_ollama_base_url())

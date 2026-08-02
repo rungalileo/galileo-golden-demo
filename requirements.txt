@@ -1,4 +1,5 @@
 streamlit
+truststore
 galileo
 agent-control-sdk[galileo]>=8.0.0
 agent-control-evaluators>=8.0.0
@@ -20,6 +21,7 @@ psycopg[binary]
 langchain-text-splitters
 langchain-community
 langchain-classic
+sentence-transformers
 pyyaml
 toml
 unstructured

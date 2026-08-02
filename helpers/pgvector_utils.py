@@ -12,19 +12,22 @@ from helpers.llm_utils import (
     embedding_backend_available,
     get_embedding_dimensions,
     get_index_embeddings,
+    get_local_llm_backend,
     resolve_embedding_provider,
 )
 
 # Default embedding provider / collection suffix. Each domain has one pgvector
-# collection per provider: {domain}_local_index (Ollama), {domain}_hosted_index
-# (OpenAI), and {domain}_bedrock_index (Bedrock). Kept named VECTOR_INDEX_ENV
-# for backward compat.
+# collection per provider: {domain}_local_index (MLX sentence-transformers or
+# Ollama), {domain}_hosted_index (OpenAI), and {domain}_bedrock_index
+# (Bedrock). Kept named VECTOR_INDEX_ENV for backward compat.
 VECTOR_INDEX_ENV = "local"
 _PROVIDERS = ("local", "hosted", "bedrock")
 
 
 def _cli_name(provider: str) -> str:
     """Map internal provider id to the setup_vectordb.py CLI name."""
+    if provider == "local" and get_local_llm_backend() == "mlx":
+        return "sentence-transformers"
     return {"hosted": "openai", "bedrock": "bedrock"}.get(provider, "ollama")
 
 
@@ -41,8 +44,8 @@ def get_postgres_connection_string() -> str:
 def get_collection_name(domain_name: str, provider: Optional[str] = None) -> str:
     """SQL-safe collection name per provider: {domain}_{provider}_index.
 
-    provider is 'local' (Ollama), 'hosted' (OpenAI), or 'bedrock' (AWS);
-    defaults to 'local'.
+    provider is 'local' (MLX sentence-transformers or Ollama), 'hosted'
+    (OpenAI), or 'bedrock' (AWS); defaults to 'local'.
     """
     prov = provider or VECTOR_INDEX_ENV
     return f"{domain_name}_{prov}_index"
@@ -104,14 +107,14 @@ def select_embedding_provider_for_domain(domain_name: str) -> str:
     if not built:
         raise ValueError(
             f"No vector index found for '{domain_name}'. Build one (or both) with:\n"
-            f"  python helpers/setup_vectordb.py {domain_name} both"
+            f"  python helpers/setup_vectordb.py {domain_name}"
         )
     # An index exists but its backend can't be reached right now.
     built_cli = " / ".join(_cli_name(p) for p in built)
     raise ValueError(
         f"Vector index for '{domain_name}' was built with {built_cli}, but that "
-        "embedding backend isn't reachable right now (start Ollama or set "
-        "openai_api_key in .streamlit/secrets.toml)."
+        "embedding backend isn't reachable right now (install sentence-transformers "
+        "for MLX, start Ollama, or configure a hosted embedding provider)."
     )
 
 

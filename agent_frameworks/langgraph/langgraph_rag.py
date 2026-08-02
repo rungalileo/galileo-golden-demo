@@ -14,6 +14,7 @@ from langchain_classic.chains.combine_documents import create_stuff_documents_ch
 from helpers.llm_utils import (
     get_chat_model,
     get_default_chat_model,
+    get_local_llm_backend,
     get_llm_provider,
 )
 from helpers.pgvector_utils import get_pgvector_store
@@ -68,10 +69,16 @@ class DomainRAGSystem:
 
             chat_provider = get_llm_provider()
 
-            _provider_default_model = {
-                "hosted": model_config.get("hosted_default_model"),
-                "bedrock": model_config.get("bedrock_default_model"),
-            }.get(chat_provider, model_config.get("default_model"))
+            if chat_provider == "local" and get_local_llm_backend() == "mlx":
+                _provider_default_model = (
+                    model_config.get("mlx_default_model")
+                    or get_default_chat_model(provider="local")
+                )
+            else:
+                _provider_default_model = {
+                    "hosted": model_config.get("hosted_default_model"),
+                    "bedrock": model_config.get("bedrock_default_model"),
+                }.get(chat_provider, model_config.get("default_model"))
 
             llm_model = (
                 self.model_name
@@ -89,9 +96,10 @@ class DomainRAGSystem:
                     "POSTGRES_PASSWORD not found. Please add it to .streamlit/secrets.toml"
                 )
 
-            # Selects the prebuilt index matching the active provider (Ollama,
-            # OpenAI, or Bedrock), falling back to whichever index exists. Raises
-            # a clear error pointing at setup_vectordb.py if none has been built.
+            # Selects the prebuilt embedding index matching the active provider,
+            # falling back to whichever index exists. MLX-LM provides chat
+            # completions only, so MLX chat uses the local sentence-transformers
+            # index unless a hosted embedding provider is selected.
             vector_store, _ = get_pgvector_store(
                 self.domain_name, vectorstore_config=vectorstore_config
             )

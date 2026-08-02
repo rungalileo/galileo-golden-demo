@@ -1,15 +1,20 @@
 """
 Galileo Demo App
 """
+import os
 import uuid
 from typing import Optional
-import streamlit as st
-import os
 import io
+
+# Use the macOS Keychain trust store before importing HTTP client stacks.
+from setup_env import inject_system_truststore, setup_environment
+
+inject_system_truststore()
+
+import streamlit as st
 
 # Load environment from secrets before importing domain/agent modules.
 from dotenv import load_dotenv
-from setup_env import setup_environment
 
 # Load environment variables
 load_dotenv()
@@ -56,12 +61,27 @@ def _models_for_provider(domain_info: dict, provider: str) -> tuple[list[str], s
         models = domain_info.get("bedrock_models") or ["mistral.ministral-3-14b-instruct", "mistral.ministral-3-8b-instruct"]
         default = domain_info.get("bedrock_default_model") or models[0]
     else:
-        models = domain_info.get("local_models") or domain_info.get("available_models") or ["gemma4"]
-        default = (
-            domain_info.get("local_default_model")
-            or domain_info.get("default_model")
-            or models[0]
+        from helpers.llm_utils import (
+            get_default_chat_model,
+            get_local_llm_backend,
+            list_local_models,
         )
+
+        if get_local_llm_backend() == "mlx":
+            default = get_default_chat_model(provider="local")
+            try:
+                models = list_local_models()
+            except ConnectionError:
+                models = []
+            if default not in models:
+                models.insert(0, default)
+        else:
+            models = domain_info.get("local_models") or domain_info.get("available_models") or ["gemma4"]
+            default = (
+                domain_info.get("local_default_model")
+                or domain_info.get("default_model")
+                or models[0]
+            )
     return models, default
 
 
@@ -113,8 +133,8 @@ def render_model_settings(domain_name: str, domain_config_key: str) -> tuple[str
     provider_options = configured_providers()
     if not provider_options:
         st.error(
-            "No LLM provider is configured. Set `ollama_base_url`, `openai_api_key`, "
-            "or `bedrock_api_key` in `.streamlit/secrets.toml`."
+            "No LLM provider is configured. Set `ollama_base_url`, `mlx_base_url`, "
+            "`openai_api_key`, or `bedrock_api_key` in `.streamlit/secrets.toml`."
         )
         st.stop()
 
@@ -128,8 +148,10 @@ def render_model_settings(domain_name: str, domain_config_key: str) -> tuple[str
         st.session_state[prev_provider_key] = st.session_state[provider_key]
 
     prev_provider = st.session_state[prev_provider_key]
+    from helpers.llm_utils import get_local_provider_label
+
     provider_labels = {
-        "local": "Local (Ollama)",
+        "local": get_local_provider_label(),
         "hosted": "Hosted (OpenAI)",
         "bedrock": "Bedrock (AWS)",
     }
@@ -185,7 +207,7 @@ def render_model_settings(domain_name: str, domain_config_key: str) -> tuple[str
         index=model_index,
         key=f"model_select_{domain_name}",
         help={
-            "local": "Ollama model used for chat and experiments",
+            "local": f"{get_local_provider_label()} model used for chat and experiments",
             "hosted": "OpenAI model used for chat and experiments",
             "bedrock": "AWS Bedrock model used for chat and experiments",
         }.get(selected_provider, "Model used for chat and experiments"),
@@ -446,11 +468,13 @@ def render_experiments_page(domain_name: str, domain_config, agent_factory):
         # Model used for this experiment (same as sidebar selection)
         experiment_model = st.session_state.get(f"selected_model_{domain_name}") or st.session_state.get(f"domain_config_{domain_name}", {}).get("default_model")
         experiment_provider = st.session_state.get(f"llm_provider_{domain_name}", "local")
+        from helpers.llm_utils import get_local_provider_label
+
         provider_label = {
             "hosted": "OpenAI",
             "bedrock": "Bedrock",
-            "local": "Ollama",
-        }.get(_normalize_provider(experiment_provider), "Ollama")
+            "local": get_local_provider_label().removeprefix("Local (").removesuffix(")"),
+        }.get(_normalize_provider(experiment_provider), get_local_provider_label())
         st.caption(
             f"Provider: **{provider_label}** | Model: **{experiment_model or 'default'}** (change in sidebar)"
         )
@@ -779,7 +803,8 @@ def run_experiment_ui(
                         if project_name:
                             project_id = get_galileo_project_id(project_name)
                             if project_id:
-                                experiment_url = f"{console_url}/project/{project_id}/experiments/{experiment_obj.id}"
+                                project_url = os.environ.get("GALILEO_PROJECT_URL") or f"{console_url}/project/{project_id}"
+                                experiment_url = f"{project_url}/experiments/{experiment_obj.id}"
                                 st.markdown(f"### [📊 View Experiment Results in Galileo]({experiment_url})")
                             else:
                                 st.info("View the experiment results in the Galileo Console")
@@ -869,7 +894,9 @@ def multi_domain_agent_app(domain_name: str):
                         log_stream_id = get_galileo_log_stream_id(project_id, log_stream_name)
 
                         if log_stream_id:
-                            project_url = f"{console_url}/project/{project_id}/log-streams/{log_stream_id}"
+                            project_url = os.environ.get("GALILEO_LOG_STREAM_URL") or (
+                                f"{console_url}/project/{project_id}/log-streams/{log_stream_id}"
+                            )
                             st.markdown(f"[📊 View traces in Galileo]({project_url})")
                         else:
                             st.write("Log stream not found")
@@ -1063,8 +1090,15 @@ def render_chat_page(
     if galileo_logger_key not in st.session_state:
         full_config = st.session_state.get(f"full_domain_config_{domain_name}", {})
         galileo_config = full_config.get("galileo", {})
-        project_name = galileo_config.get("project") or f"galileo-demo-{domain_name}"
-        log_stream = galileo_config.get("log_stream", "default")
+        project_name = (
+            os.environ.get("GALILEO_PROJECT")
+            or galileo_config.get("project")
+            or f"galileo-demo-{domain_name}"
+        )
+        log_stream = (
+            os.environ.get("GALILEO_LOG_STREAM")
+            or galileo_config.get("log_stream", "default")
+        )
         try:
             galileo_logger = create_galileo_logger(project_name, log_stream)
             galileo_logger.enable_agent_control()

@@ -12,7 +12,8 @@ Example:
 Which indexes get built is derived entirely from the credentials present in
 .streamlit/secrets.toml — there are no provider arguments. For each provider
 whose credential is set, one index is built:
-    - ollama_base_url set AND Ollama reachable -> {domain}_local_index    (Ollama)
+    - MLX selected + sentence-transformers installed -> {domain}_local_index
+    - Ollama selected + Ollama reachable             -> {domain}_local_index
     - openai_api_key set                       -> {domain}_hosted_index   (OpenAI)
     - bedrock_api_key set                      -> {domain}_bedrock_index  (Bedrock)
 
@@ -22,8 +23,9 @@ silently returns wrong results. Building ONE index per configured provider lets
 the app switch between providers via the UI toggle without any extra setup — it
 just queries whichever prebuilt index matches the active provider.
 
-Each provider is built independently, so a runtime failure in one (e.g. Ollama
-not running, or an invalid key) is reported but doesn't abort the others.
+Each provider is built independently, so a runtime failure in one (e.g. a
+missing local embedding model or an invalid hosted key) is reported but
+doesn't abort the others.
 """
 import argparse
 import sys
@@ -41,9 +43,11 @@ from langchain_community.document_loaders import DirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from helpers.llm_utils import (
     bedrock_configured,
+    embedding_backend_available,
     get_domain_embedding_model,
     get_embedding_dimensions,
     get_embeddings,
+    get_local_llm_backend,
     get_ollama_base_url,
     is_ollama_available,
     openai_api_key_configured,
@@ -71,12 +75,19 @@ _QA_DOMAINS = {
 
 def _cli_name(provider: str) -> str:
     """Map internal provider id to the CLI-facing backend name."""
+    if provider == "local" and get_local_llm_backend() == "mlx":
+        return "sentence-transformers"
     return {"hosted": "openai", "bedrock": "bedrock"}.get(provider, "ollama")
 
 
 def _not_configured_reason(provider: str) -> str:
     """Human-readable reason a provider's index won't be built."""
     if provider == "local":
+        if get_local_llm_backend() == "mlx":
+            return (
+                "sentence-transformers is not installed for the MLX local "
+                "embedding backend"
+            )
         if not os.environ.get("OLLAMA_BASE_URL", "").strip():
             return "ollama_base_url not set in .streamlit/secrets.toml"
         # base_url is set but the server didn't respond.
@@ -92,12 +103,12 @@ def _configured_providers() -> List[str]:
 
     setup_environment() must have been called first so the secrets are loaded
     into the environment. A provider is built when its credential is present:
-      - local:   ollama_base_url set AND the Ollama server is reachable
+      - local:   sentence-transformers is installed for MLX, or Ollama is reachable
       - hosted:  openai_api_key set (and not a placeholder)
       - bedrock: bedrock_api_key set
     """
     configured = {
-        "local": bool(os.environ.get("OLLAMA_BASE_URL", "").strip()) and is_ollama_available(),
+        "local": embedding_backend_available("local"),
         "hosted": openai_api_key_configured(),
         "bedrock": bedrock_configured(),
     }
@@ -191,9 +202,9 @@ def setup_vectordb_for_domain(domain_name: str):
 
     if not available:
         print(
-            "❌ No provider credentials found in .streamlit/secrets.toml; nothing "
-            "was built. Set ollama_base_url, openai_api_key, and/or bedrock_api_key, "
-            "then re-run."
+            "❌ No embedding backend is available; nothing was built. Install "
+            "sentence-transformers for MLX, configure Ollama, or add a hosted "
+            "embedding provider, then re-run."
         )
         return False
 
@@ -248,7 +259,10 @@ def setup_vectordb_for_domain(domain_name: str):
         collection_name = get_collection_name(domain_name, provider)
         print(f"\n▶ Building {collection_name} with {_cli_name(provider)} embeddings (model: {model})")
         if provider == "local":
-            print(f"   If the model is missing, run: ollama pull {model}")
+            if get_local_llm_backend() == "mlx":
+                print("   The sentence-transformers model downloads on first use.")
+            else:
+                print(f"   If the model is missing, run: ollama pull {model}")
         elif provider == "hosted":
             print(f"   Using OpenAI embeddings ({get_embedding_dimensions()} dimensions).")
         else:

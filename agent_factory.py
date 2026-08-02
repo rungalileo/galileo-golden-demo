@@ -42,7 +42,8 @@ class AgentFactory:
             model_name: Optional model override; uses domain default if not set
             galileo_logger: Per-session GalileoLogger instance for isolated trace logging.
                 Each browser tab should pass its own logger so traces don't bleed across sessions.
-            llm_provider: "local" for Ollama, "hosted" for OpenAI, or "bedrock" for AWS Bedrock
+            llm_provider: "local" for Ollama/MLX, "hosted" for OpenAI, or
+                "bedrock" for AWS Bedrock
             
         Returns:
             Configured agent instance

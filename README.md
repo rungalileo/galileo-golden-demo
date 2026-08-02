@@ -1,5 +1,15 @@
 # Galileo Golden Demo
 
+> **New Mac / executive installation:** use the automated full-stack installer
+> and handoff guides in
+> [`documentation/MACOS_EXECUTIVE_INSTALL.md`](documentation/MACOS_EXECUTIVE_INSTALL.md)
+> and
+> [`documentation/CODEX_AGENT_MACOS_RUNBOOK.md`](documentation/CODEX_AGENT_MACOS_RUNBOOK.md).
+> Team-managed secrets use the single-item contract in
+> [`documentation/ONEPASSWORD_TEAM_CONFIG.md`](documentation/ONEPASSWORD_TEAM_CONFIG.md).
+> The installer uses MLX-LM (not Ollama), Open WebUI, PostgreSQL/pgvector,
+> OpenAI, and Galileo Cloud, with optional GitHub and 1Password login.
+
 ***2026-07-13 Release: Now with support for AWS Bedrock models***
 
 A multi-turn agentic system that showcases Galileo across multiple domains and agent frameworks, designed to be used for product demos. The code itself is reusable and configurable for a variety of use cases.
@@ -19,6 +29,7 @@ Not a production reference architecture or replacement for customer-specific POC
 - Python 3.8+
 - Access to a Large Language Model
    - [Ollama](https://ollama.com/) running locally (default: `http://localhost:11434`); or
+   - [MLX-LM](https://github.com/ml-explore/mlx-lm) on Apple Silicon (OpenAI-compatible API); or
    - AWS Bedrock LLM (via `AWS_BEARER_TOKEN_BEDROCK` token)
    - OpenAI API Key
 - Galileo API key
@@ -99,6 +110,33 @@ Not a production reference architecture or replacement for customer-specific POC
    ollama_default_chat_model = "gemma4"
    ```
 
+   #### Alternative: use MLX-LM for local chat
+
+   Existing Ollama configuration remains the default. To use an MLX-LM server
+   instead, opt in through `.streamlit/secrets.toml`:
+
+   ```toml
+   local_llm_backend = "mlx"
+   mlx_base_url = "http://127.0.0.1:8080/v1"
+   mlx_api_key = "local"
+   mlx_default_chat_model = "mlx-community/gemma-4-26b-a4b-it-4bit"
+   mlx_embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
+   ```
+
+   Start the server with the same model:
+
+   ```bash
+   mlx_lm.server \
+     --model mlx-community/gemma-4-26b-a4b-it-4bit \
+     --host 127.0.0.1 \
+     --port 8080
+   ```
+
+   MLX-LM provides chat completions but not embeddings. When MLX is selected,
+   the app uses the in-process `sentence-transformers/all-MiniLM-L6-v2` model
+   for local RAG. Existing Ollama, OpenAI, and Bedrock embedding paths remain
+   available and unchanged.
+
 3. **Start PostgreSQL with pgvector (Docker)**
    ```bash
    docker pull pgvector/pgvector:pg16
@@ -131,7 +169,15 @@ Not a production reference architecture or replacement for customer-specific POC
    
    Edit `.streamlit/secrets.toml` with your actual API keys:
    ```toml
+   # MLX-LM (local chat on Apple Silicon)
+   local_llm_backend = "mlx"
+   mlx_base_url = "http://127.0.0.1:8080/v1"
+   mlx_api_key = "local"
+   mlx_default_chat_model = "mlx-community/gemma-4-26b-a4b-it-4bit"
+   mlx_embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
+
    # Ollama (local LLM — no API key required)
+   # Set local_llm_backend = "ollama" to use this path instead.
    ollama_base_url = "http://localhost:11434"
    ollama_default_chat_model = "gemma4"
    ollama_embedding_model = "nomic-embed-text"
@@ -164,7 +210,7 @@ Not a production reference architecture or replacement for customer-specific POC
    **Note:** Galileo project names are configured per-domain in `domains/{domain}/config.yaml`
 
 7. **Set up vector databases**
-   Ollama, OpenAI, and Bedrock embeddings can't share one index — different embedding models produce different vector spaces even at the same dimension count, so searching across them silently returns wrong results. Because of that, the script creates one index per configured provider for each domain, automatically. The index is chosen at runtime based on what LLM service is being used (Ollama, OpenAI, or Bedrock).
+   Local, OpenAI, and Bedrock embeddings can't share one index — different embedding models produce different vector spaces even at the same dimension count, so searching across them silently returns wrong results. Because of that, the script creates one index per configured provider for each domain, automatically. The index is chosen at runtime based on what LLM service is being used.
 
    ```bash
    python helpers/setup_vectordb.py bank
@@ -175,13 +221,14 @@ Not a production reference architecture or replacement for customer-specific POC
 
    The script takes **no provider arguments** — it reads `.streamlit/secrets.toml` and builds an index for each provider whose credential is set:
 
-   - if `ollama_base_url` is set **and the Ollama server reachable** → `{domain}_local_index` (Ollama)
+   - if MLX is selected and `sentence-transformers` is installed → `{domain}_local_index` (local sentence-transformers)
+   - if Ollama is selected and reachable → `{domain}_local_index` (Ollama)
    - if `openai_api_key` is set → `{domain}_hosted_index` (OpenAI)
    - if `bedrock_api_key` is set → `{domain}_bedrock_index` (Bedrock)
 
-   Providers whose credential isn't set are skipped with a note (Ollama is also skipped if `ollama serve` isn't running). Each configured provider is built independently, so a failure in one is reported but doesn't abort the others.
+   Providers whose credential isn't set are skipped with a note. Each configured provider is built independently, so a failure in one is reported but doesn't abort the others.
 
-   Switching the **Model provider** toggle in the UI then automatically uses the matching index (Local → Ollama index, Hosted → OpenAI index, Bedrock → Bedrock index). If the matching index wasn't built, RAG falls back to another prebuilt index so search always works. (Advanced: set `embedding_provider` in `secrets.toml` to `local`, `hosted`, or `bedrock` to pin RAG to one backend regardless of the chat toggle.)
+   Switching the **Model provider** toggle in the UI then automatically uses the matching index (Local → MLX sentence-transformers or Ollama, Hosted → OpenAI, Bedrock → Bedrock). If the matching index wasn't built, RAG falls back to another prebuilt index so search always works. (Advanced: set `embedding_provider` in `secrets.toml` to `local`, `hosted`, or `bedrock` to pin RAG to one backend regardless of the chat toggle.)
 
 PS: Make sure to run the setup script even if you are upgrading from a previous version of the demo, as the index layout changed (one index per provider).
 

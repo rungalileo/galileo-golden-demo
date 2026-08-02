@@ -122,6 +122,11 @@ def get_galileo_project_id(project_name: str, starting_token: int = 0, limit: in
         ValueError: If required environment variables are not set
         requests.RequestException: If API request fails
     """
+    configured_id = os.environ.get("GALILEO_PROJECT_ID", "").strip()
+    configured_name = os.environ.get("GALILEO_PROJECT", "").strip()
+    if configured_id and (not configured_name or configured_name == project_name):
+        return configured_id
+
     api_key = get_galileo_api_key()
     galileo_url = get_galileo_app_url()
     
@@ -186,6 +191,16 @@ def get_galileo_log_stream_id(project_id: str, log_stream_name: str) -> str:
         ValueError: If required environment variables are not set
         requests.RequestException: If API request fails
     """
+    configured_id = os.environ.get("GALILEO_LOG_STREAM_ID", "").strip()
+    configured_project_id = os.environ.get("GALILEO_PROJECT_ID", "").strip()
+    configured_name = os.environ.get("GALILEO_LOG_STREAM", "").strip()
+    if (
+        configured_id
+        and (not configured_project_id or configured_project_id == project_id)
+        and (not configured_name or configured_name == log_stream_name)
+    ):
+        return configured_id
+
     api_key = get_galileo_api_key()
     galileo_url = get_galileo_app_url()
     
