@@ -863,18 +863,29 @@ def multi_domain_agent_app(domain_name: str):
             if project_name and log_stream_name:
                 try:
                     console_url = get_galileo_app_url()
-                    project_id = get_galileo_project_id(project_name)
+                    # Streamlit reruns this script several times per question, so remember the link
+                    # once both IDs exist. Misses stay uncached: the project and log stream only
+                    # appear after the first trace is logged.
+                    traces_urls = st.session_state.setdefault("galileo_traces_urls", {})
+                    cache_key = (console_url, project_name, log_stream_name)
+                    project_url = traces_urls.get(cache_key)
 
-                    if project_id:
-                        log_stream_id = get_galileo_log_stream_id(project_id, log_stream_name)
+                    if not project_url:
+                        project_id = get_galileo_project_id(project_name)
 
-                        if log_stream_id:
-                            project_url = f"{console_url}/project/{project_id}/log-streams/{log_stream_id}"
-                            st.markdown(f"[📊 View traces in Galileo]({project_url})")
+                        if project_id:
+                            log_stream_id = get_galileo_log_stream_id(project_id, log_stream_name)
+
+                            if log_stream_id:
+                                project_url = f"{console_url}/project/{project_id}/log-streams/{log_stream_id}"
+                                traces_urls[cache_key] = project_url
+                            else:
+                                st.write("Log stream not found")
                         else:
-                            st.write("Log stream not found")
-                    else:
-                        st.write("Project not found")
+                            st.write("Project not found")
+
+                    if project_url:
+                        st.markdown(f"[📊 View traces in Galileo]({project_url})")
 
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
