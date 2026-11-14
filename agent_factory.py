@@ -31,6 +31,7 @@ class AgentFactory:
         model_name: Optional[str] = None,
         galileo_logger=None,
         llm_provider: str = "local",
+        tool_selector: str = "llm",
     ) -> BaseAgent:
         """
         Create an agent for the specified domain and framework.
@@ -43,6 +44,9 @@ class AgentFactory:
             galileo_logger: Per-session GalileoLogger instance for isolated trace logging.
                 Each browser tab should pass its own logger so traces don't bleed across sessions.
             llm_provider: "local" for Ollama, "hosted" for OpenAI, or "bedrock" for AWS Bedrock
+            tool_selector: "llm" for native function calling, or "jev" to route tools
+                with TypeSafe's System One model. Falls back to "llm" when Jev is not
+                configured or the domain has no tools/jev_spec.json.
             
         Returns:
             Configured agent instance
@@ -71,6 +75,7 @@ class AgentFactory:
                 model_override=model_name,
                 galileo_logger=galileo_logger,
                 llm_provider=llm_provider,
+                tool_selector=tool_selector,
             )
         # elif framework == "CrewAI":
         #     return CrewAIAgent(domain_config, session_id)

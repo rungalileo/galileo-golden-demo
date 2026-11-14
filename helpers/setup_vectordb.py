@@ -66,6 +66,7 @@ _QA_DOMAINS = {
     "healthcare": ("Healthcare FAQ", "Medication", "Information"),
     "restaurant": ("Restaurant FAQ", "Question", "Answer"),
     "insurance": ("Insurance FAQ", "Question", "Answer"),
+    "vehicle": ("Vehicle FAQ", "Question", "Answer"),
 }
 
 

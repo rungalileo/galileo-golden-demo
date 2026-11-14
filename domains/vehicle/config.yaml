@@ -1,0 +1,55 @@
+domain:
+  name: "vehicle"
+  description: "Vehicle assistant for online help and information support"
+
+galileo:
+  project: "galileo-demo"
+  log_stream: "vehicle"
+
+# UI configuration
+ui:
+  app_title: "🚘 Online Vehicle Assistant"
+  icon: "🚘"
+  example_queries:
+    - "What services are covered under Roadside Assistance?"
+    - "Who is researching lane assist?"
+
+# Model configuration
+model:
+  default_model: "gemma4"
+  temperature: 0.1
+  additional_models:
+    - "mistral"
+  hosted_default_model: "gpt-4o"
+  bedrock_default_model: "mistral.ministral-3-14b-instruct"
+  bedrock_additional_models:
+    - "mistral.ministral-3-8b-instruct"
+  hosted_additional_models:
+    - "gpt-4o-mini"
+    - "gpt-4.1"
+    - "gpt-5.2"
+
+# RAG configuration
+rag:
+  enabled: true
+  chunk_size: 1000
+  chunk_overlap: 200
+  top_k: 3
+
+# Available tools for this domain
+tools:
+  - "get_research_info"
+  - "delete_research_record"
+  - "search_vehicle_qa"
+
+# Vector store configuration
+vectorstore:
+  embedding_model: "nomic-embed-text"
+  bedrock_embedding_model: "amazon.titan-embed-text-v2:0"
+
+# Demo hallucinations for Galileo observability demos
+demo_hallucinations:
+  - question: "What services are covered under Roadside Assistance?"
+    hallucinated_answer: "**Roadside Assistance** is included for the first **ten years or 100,000 miles** from your vehicle's purchase date. It covers the following services: \n- Towing\n- Flat tire change\n- Battery jump-start\n- Fuel delivery\n- Lockout assistance\n- Winching"
+    context:
+      - "Roadside Assistance is included during the first five years or 60,000 miles from your vehicle's purchase date, and includes: Towing, Flat tire change, Battery jump-start, Fuel Delivery, Lockout Assistance, Winching"

@@ -83,14 +83,40 @@ def message_content_to_text(content) -> str:
     return str(content)
 
 
+_PROVIDER_CHAT_MODEL_ENV_VARS: dict = {
+    "local": "OLLAMA_DEFAULT_CHAT_MODEL",
+    "hosted": "OPENAI_DEFAULT_CHAT_MODEL",
+    "bedrock": "BEDROCK_DEFAULT_CHAT_MODEL",
+}
+
+_PROVIDER_CHAT_MODEL_FALLBACKS: dict = {
+    "local": DEFAULT_LOCAL_CHAT_MODEL,
+    "hosted": DEFAULT_HOSTED_CHAT_MODEL,
+    "bedrock": DEFAULT_BEDROCK_CHAT_MODEL,
+}
+
+
+def get_configured_chat_model(
+    provider: Optional[LLMProvider] = None,
+) -> Optional[str]:
+    """Return the chat model pinned in secrets.toml for a provider, else None.
+
+    The ``{provider}_default_chat_model`` keys in secrets.toml outrank each
+    domain's config.yaml defaults, so they are the app-wide default model and
+    the preselected entry in the sidebar "Select Model" dropdown. None means
+    the key is unset and the domain's config.yaml decides.
+    """
+    resolved = provider or get_llm_provider()
+    env_var = _PROVIDER_CHAT_MODEL_ENV_VARS.get(resolved, "OLLAMA_DEFAULT_CHAT_MODEL")
+    return os.environ.get(env_var, "").strip() or None
+
+
 def get_default_chat_model(*, provider: Optional[LLMProvider] = None) -> str:
     """Return the default chat model for the given or active provider."""
     resolved = provider or get_llm_provider()
-    if resolved == "hosted":
-        return os.environ.get("OPENAI_DEFAULT_CHAT_MODEL", DEFAULT_HOSTED_CHAT_MODEL)
-    if resolved == "bedrock":
-        return os.environ.get("BEDROCK_DEFAULT_CHAT_MODEL", DEFAULT_BEDROCK_CHAT_MODEL)
-    return os.environ.get("OLLAMA_DEFAULT_CHAT_MODEL", DEFAULT_LOCAL_CHAT_MODEL)
+    return get_configured_chat_model(resolved) or _PROVIDER_CHAT_MODEL_FALLBACKS.get(
+        resolved, DEFAULT_LOCAL_CHAT_MODEL
+    )
 
 
 def get_embedding_dimensions() -> int:
@@ -329,23 +355,44 @@ def ensure_ollama_model_available(model: str, *, model_kind: str = "model") -> N
         )
 
 
-def get_domain_chat_model(domain_config: dict, *, override: Optional[str] = None) -> str:
-    """Resolve the chat model for a domain using the active provider."""
+def get_domain_chat_model(
+    domain_config: dict,
+    *,
+    override: Optional[str] = None,
+    provider: Optional[LLMProvider] = None,
+) -> str:
+    """Resolve the chat model for a domain using the given or active provider.
+
+    Precedence: explicit `override` (the sidebar selection) > the model pinned
+    in secrets.toml for this provider > the domain's config.yaml defaults >
+    module fallback constants.
+    """
     if override:
         return override
-    provider = get_llm_provider()
+    resolved = provider or get_llm_provider()
+    pinned = get_configured_chat_model(resolved)
+    if pinned:
+        return pinned
     model_cfg = domain_config.get("model", {})
-    if provider == "hosted":
+    if resolved == "hosted":
         return (
             model_cfg.get("hosted_default_model")
+            or model_cfg.get("default_model")
+            or model_cfg.get("model_name")
             or get_default_chat_model(provider="hosted")
         )
-    if provider == "bedrock":
+    if resolved == "bedrock":
         return (
             model_cfg.get("bedrock_default_model")
+            or model_cfg.get("default_model")
+            or model_cfg.get("model_name")
             or get_default_chat_model(provider="bedrock")
         )
-    return model_cfg.get("default_model") or get_default_chat_model(provider="local")
+    return (
+        model_cfg.get("default_model")
+        or model_cfg.get("model_name")
+        or get_default_chat_model(provider="local")
+    )
 
 
 def get_chat_model(
