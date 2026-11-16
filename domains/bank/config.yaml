@@ -50,7 +50,7 @@ vectorstore:
 # Demo hallucinations for Galileo observability demos
 demo_hallucinations:
   - question: "Can I update my name on my credit card?"
-    hallucinated_answer: "Yes, go to Profile -> Card -> Settings and you can update your name in that menu."
+    hallucinated_answer: "Yes, updating your name can be done online, you don't need to contact your Program Administrator."
     # NOTE: Real answer is unlimited data 
     context:
       - "Unfortunately, updating your name cannot be done online, please contact your Program Administrator."

@@ -1,5 +1,9 @@
 streamlit
 galileo
+typesafe-sdk>=0.7.2
+# Explicit: jev_utils builds its own SSL context from certifi to avoid the
+# truststore/Anaconda recursion in httpx2's default verify=True path.
+certifi
 agent-control-sdk[galileo]>=8.0.0
 agent-control-evaluators>=8.0.0
 agent-control-evaluator-galileo>=8.0.0

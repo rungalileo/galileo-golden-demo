@@ -8,6 +8,24 @@ from typing import List, Dict, Optional
 from dataclasses import dataclass
 
 
+def _ordered_models(
+    pinned: Optional[str],
+    config_default: str,
+    additional: Optional[List[str]],
+) -> List[str]:
+    """Build a provider's dropdown options, first entry being the default.
+
+    `pinned` is the secrets.toml model for the provider and leads the list when
+    set; the config.yaml default and additional models follow, deduplicated.
+    """
+    candidates = [pinned, config_default] + list(additional or [])
+    ordered: List[str] = []
+    for model in candidates:
+        if model and model not in ordered:
+            ordered.append(model)
+    return ordered
+
+
 @dataclass
 class DomainConfig:
     """Container for domain configuration data"""
@@ -106,23 +124,35 @@ class DomainManager:
         default_model = model_cfg.get("default_model") or model_cfg.get("model_name")
         if not default_model:
             raise ValueError(f"Domain '{domain_name}' missing 'default_model' or 'model_name' in model config")
-        additional = model_cfg.get("additional_models") or []
-        local_models = [default_model] + [m for m in additional if m != default_model]
 
-        hosted_default = model_cfg.get("hosted_default_model") or "gpt-4o"
-        hosted_additional = model_cfg.get("hosted_additional_models") or [
-            "gpt-4o-mini",
-            "gpt-4.1",
-        ]
-        hosted_models = [hosted_default] + [
-            m for m in hosted_additional if m != hosted_default
-        ]
+        # A model pinned in secrets.toml ({provider}_default_chat_model) outranks
+        # the domain's config.yaml default, becoming the preselected entry in the
+        # sidebar "Select Model" dropdown. The config.yaml models stay in the
+        # list behind it so the dropdown can still switch back to them.
+        from helpers.llm_utils import get_configured_chat_model
 
-        bedrock_default = model_cfg.get("bedrock_default_model") or "mistral.ministral-3-14b-instruct"
-        bedrock_additional = model_cfg.get("bedrock_additional_models") or ["mistral.ministral-3-8b-instruct"]
-        bedrock_models = [bedrock_default] + [
-            m for m in bedrock_additional if m != bedrock_default
-        ]
+        local_models = _ordered_models(
+            get_configured_chat_model("local"),
+            default_model,
+            model_cfg.get("additional_models"),
+        )
+        default_model = local_models[0]
+
+        hosted_models = _ordered_models(
+            get_configured_chat_model("hosted"),
+            model_cfg.get("hosted_default_model") or "gpt-4o",
+            model_cfg.get("hosted_additional_models")
+            or ["gpt-4o-mini", "gpt-4.1"],
+        )
+        hosted_default = hosted_models[0]
+
+        bedrock_models = _ordered_models(
+            get_configured_chat_model("bedrock"),
+            model_cfg.get("bedrock_default_model") or "mistral.ministral-3-14b-instruct",
+            model_cfg.get("bedrock_additional_models")
+            or ["mistral.ministral-3-8b-instruct"],
+        )
+        bedrock_default = bedrock_models[0]
 
         return {
             "name": domain_config.name,

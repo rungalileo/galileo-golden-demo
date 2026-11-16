@@ -1,0 +1,87 @@
+{
+  "description": "Jev (TypeSafe System One) routing spec for the bank domain. Every entry here becomes a typed question in a single Jev request. Option keys are the exact tool names and argument values the code passes through, so nothing has to be mapped back afterwards.",
+
+  "max_conversation_turns": 8,
+
+  "route": {
+    "instructions": "What is the customer asking the online bank assistant to do in `latest_customer_message`?",
+    "options": {
+      "search_bank_qa": "Asking how something about the bank works in general - credit cards, payments, statements, limits, fees, app features. The answer lives in the bank's published guidance, not in any one customer's record.",
+      "get_customer_info": "Asking to see the details held against a specific account: who it belongs to, the address or phone number on file, the account type, or the balance.",
+      "delete_customer_record": "Asking for a customer's record to be permanently deleted or removed from the bank's registry.",
+      "none": "Greeting, thanking, small talk, or a follow-up that the assistant can answer from what has already been said in the conversation."
+    }
+  },
+
+  "signals": {
+    "explicit_delete_request": {
+      "instructions": "In `latest_customer_message`, does the customer directly and unambiguously ask for a record to be deleted or removed? Wondering aloud about deletion, or asking what deletion would involve, does not count.",
+      "criteria": {
+        "true": "A clear instruction to delete or remove a record.",
+        "false": "A question about deletion, a hypothetical, or anything short of a direct instruction."
+      }
+    },
+    "account_cancellation": {
+      "instructions": "Is the customer asking about closing, cancelling, or ending their account or their relationship with the bank? This is about the account itself, not about deleting a record from a registry."
+    },
+    "frustration": {
+      "instructions": "Does the customer sound frustrated, angry, or upset in `latest_customer_message`?"
+    }
+  },
+
+  "policies": [
+    {
+      "signal": "account_cancellation",
+      "above": 0.7,
+      "reason": "Account cancellation must be handled by a human agent.",
+      "hint": "The customer is asking about cancelling or closing their account. Do not explain how to cancel. Direct them to call 855-555-0001 to speak with an agent."
+    }
+  ],
+
+  "gates": {
+    "default_min_confidence": 0.55,
+    "tools": {
+      "delete_customer_record": {
+        "min_confidence": 0.85,
+        "require_signals": {
+          "explicit_delete_request": 0.8
+        }
+      }
+    }
+  },
+
+  "tools": {
+    "get_customer_info": {
+      "arguments": {
+        "customer_id": {
+          "source": "entity",
+          "pattern": "(?i)\\bC\\d{3}\\b",
+          "normalize": "upper",
+          "required": true,
+          "question": "Which customer id is the customer asking about right now? Earlier ids in the conversation may have been resolved already."
+        }
+      },
+      "missing_argument_hint": "The customer wants an account lookup but has not given a customer id. Ask them for it - the format is a letter C followed by three digits, such as C001."
+    },
+    "delete_customer_record": {
+      "arguments": {
+        "customer_id": {
+          "source": "entity",
+          "pattern": "(?i)\\bC\\d{3}\\b",
+          "normalize": "upper",
+          "required": true,
+          "question": "Which customer id is the customer asking about right now? Earlier ids in the conversation may have been resolved already."
+        }
+      },
+      "missing_argument_hint": "The customer wants a record deleted but has not given a customer id. Ask them for it - the format is a letter C followed by three digits, such as C001."
+    },
+    "search_bank_qa": {
+      "arguments": {
+        "query": {
+          "source": "user_message",
+          "required": true
+        }
+      }
+    }
+  }
+}

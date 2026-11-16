@@ -1,0 +1,48 @@
+[
+    {
+      "name": "get_research_info",
+      "description": "Retrieve research information by their research topic, including research topic, person responsible, role and current status",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "research_topic": {
+            "type": "string",
+            "description": "The research topic (e.g., 'brakes', 'transmission', 'hybrid systems', 'lane assist', 'turbocharger', 'alternator')"
+          }
+        },
+        "user_prompt": {
+          "type": "string",
+          "description": "The user's prompt (e.g., 'Who is researching lane assist?')"
+        }
+      },
+        "required": ["research_topic"]
+    },
+    {
+      "name": "delete_research_record",
+      "description": "Permanently delete a research record from the registry by their ID",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "research_id": {
+            "type": "string",
+            "description": "The research's unique identifier to delete (e.g., 1, 2, 3)"
+          }
+        },
+        "required": ["research_id"]
+      }
+    },
+    {
+      "name": "search_vehicle_qa",
+      "description": "Search the Vehicle knowledge base to answer questions about vehicle services, including Roadside Assistance, financing options, charging options, etc",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The question or topic to search for (e.g., 'roadside assistant', 'warranty', 'recall', 'service')"
+          }
+        },
+        "required": ["query"]
+      }
+    }
+]

@@ -112,16 +112,15 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
             # No default: an unset ollama_base_url means "Local not configured".
             # Connections still fall back to localhost via get_ollama_base_url().
             "OLLAMA_BASE_URL": secrets.get("ollama_base_url", ""),
-            "OLLAMA_DEFAULT_CHAT_MODEL": secrets.get(
-                "ollama_default_chat_model", "gemma4"
-            ),
+            # No defaults for the *_DEFAULT_CHAT_MODEL keys: an unset value must
+            # stay unset so the model resolvers can tell "pinned in secrets.toml"
+            # apart from "fall back to the domain's config.yaml".
+            "OLLAMA_DEFAULT_CHAT_MODEL": secrets.get("ollama_default_chat_model", ""),
             "OLLAMA_EMBEDDING_MODEL": secrets.get(
                 "ollama_embedding_model", "nomic-embed-text"
             ),
             "OPENAI_API_KEY": secrets.get("openai_api_key", ""),
-            "OPENAI_DEFAULT_CHAT_MODEL": secrets.get(
-                "openai_default_chat_model", "gpt-4o"
-            ),
+            "OPENAI_DEFAULT_CHAT_MODEL": secrets.get("openai_default_chat_model", ""),
             "OPENAI_EMBEDDING_MODEL": secrets.get(
                 "openai_embedding_model", "text-embedding-3-large"
             ),
@@ -130,12 +129,15 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
             ),
             "AWS_BEARER_TOKEN_BEDROCK": secrets.get("bedrock_api_key", ""),
             "AWS_REGION": secrets.get("aws_region", "us-east-1"),
-            "BEDROCK_DEFAULT_CHAT_MODEL": secrets.get(
-                "bedrock_default_chat_model", "mistral.ministral-3-14b-instruct"
-            ),
+            "BEDROCK_DEFAULT_CHAT_MODEL": secrets.get("bedrock_default_chat_model", ""),
             "BEDROCK_EMBEDDING_MODEL": secrets.get(
                 "bedrock_embedding_model", "amazon.titan-embed-text-v2:0"
             ),
+            # TypeSafe / Jev (System One tool selection). Optional: without a
+            # key the app keeps using LLM function calling.
+            "TYPESAFE_API_KEY": secrets.get("typesafe_api_key", ""),
+            "TYPESAFE_DEFAULT_MODEL": secrets.get("typesafe_model", "jev-latest"),
+            "TYPESAFE_BASE_URL": secrets.get("typesafe_base_url", ""),
             "GALILEO_API_KEY": galileo_api_key,
             "GALILEO_API_URL": galileo_api_url,
             "GALILEO_CONSOLE_URL": console_url,
@@ -164,15 +166,21 @@ def setup_environment(domain_name: Optional[str] = None, domain_config: Optional
             env_vars["GALILEO_PROJECT"] = project_name
             env_vars["GALILEO_LOG_STREAM"] = log_stream
         
-        # Provider credentials must reflect secrets.toml exactly. If a value is
-        # empty, clear any ambient/leftover env var (exported in the shell, or
-        # set by a previous run) so a provider can't appear "configured" — and
-        # thus selectable in the UI — just because the variable exists in the
-        # environment. Other empty keys are left as-is (only warned about).
+        # Provider credentials and pinned chat models must reflect secrets.toml
+        # exactly. If a value is empty, clear any ambient/leftover env var
+        # (exported in the shell, or set by a previous run) so a provider can't
+        # appear "configured" — and thus selectable in the UI — just because the
+        # variable exists in the environment, and so a stale pinned model can't
+        # outrank a domain's config.yaml default. Other empty keys are left
+        # as-is (only warned about).
         _AUTHORITATIVE_KEYS = {
             "OLLAMA_BASE_URL",
             "OPENAI_API_KEY",
             "AWS_BEARER_TOKEN_BEDROCK",
+            "TYPESAFE_API_KEY",
+            "OLLAMA_DEFAULT_CHAT_MODEL",
+            "OPENAI_DEFAULT_CHAT_MODEL",
+            "BEDROCK_DEFAULT_CHAT_MODEL",
         }
         for key, value in env_vars.items():
             if value:  # Only set if value is not empty

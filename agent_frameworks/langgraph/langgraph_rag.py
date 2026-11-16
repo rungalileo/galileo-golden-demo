@@ -13,7 +13,7 @@ from langchain_classic.chains import create_retrieval_chain
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from helpers.llm_utils import (
     get_chat_model,
-    get_default_chat_model,
+    get_domain_chat_model,
     get_llm_provider,
 )
 from helpers.pgvector_utils import get_pgvector_store
@@ -64,25 +64,17 @@ class DomainRAGSystem:
 
             rag_config = domain_config.config.get("rag", {})
             vectorstore_config = domain_config.config.get("vectorstore", {})
-            model_config = domain_config.config.get("model", {})
-
-            chat_provider = get_llm_provider()
-
-            _provider_default_model = {
-                "hosted": model_config.get("hosted_default_model"),
-                "bedrock": model_config.get("bedrock_default_model"),
-            }.get(chat_provider, model_config.get("default_model"))
-
-            llm_model = (
-                self.model_name
-                or _provider_default_model
-                or model_config.get("default_model")
-                or model_config.get(
-                    "model_name", get_default_chat_model(provider=chat_provider)
-                )
-            )
 
             setup_environment(self.domain_name, domain_config.config)
+
+            # After setup_environment, so a model pinned in secrets.toml is
+            # visible in the environment when the default is resolved.
+            chat_provider = get_llm_provider()
+            llm_model = get_domain_chat_model(
+                domain_config.config,
+                override=self.model_name,
+                provider=chat_provider,
+            )
 
             if not os.environ.get("POSTGRES_PASSWORD"):
                 raise ValueError(
@@ -113,6 +105,14 @@ class DomainRAGSystem:
                 f"✅ RAG system initialized for domain '{self.domain_name}' (model: {llm_model})"
             )
 
+        except (ConnectionError, ValueError) as e:
+            # Ollama not running, or the model not pulled, is an ordinary local
+            # setup condition rather than a bug, and the raised message already
+            # says what to do. RAG re-initializes per provider, so this attempt
+            # is usually retried straight away under a reachable one - a
+            # traceback here reads as a crash when nothing has gone wrong.
+            print(f"⚠️  RAG not initialized for domain '{self.domain_name}': {e}")
+            self._initialized = False
         except Exception as e:
             print(f"❌ Error initializing RAG system for domain '{self.domain_name}': {e}")
             import traceback

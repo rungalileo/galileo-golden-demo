@@ -7,6 +7,7 @@ import importlib.util
 import inspect
 import json
 import random
+import uuid
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated, TypedDict, List, Dict, Any, Optional
@@ -16,6 +17,7 @@ from langchain_core.tools import StructuredTool
 from langchain_core.messages import AIMessage, ToolMessage
 from helpers.llm_utils import (
     get_chat_model,
+    get_domain_chat_model,
     message_content_to_text,
     reset_llm_provider,
     set_llm_provider,
@@ -41,6 +43,17 @@ from helpers.agent_control_helpers import (
     STEER_EXHAUSTED_MESSAGE,
     extract_steering_instructions,
     build_steer_correction_prompt,
+    TRACE_STEP_NAME,
+    build_turn_trace_record,
+    evaluate_trace_controls,
+    trace_control_stages,
+)
+from helpers.jev_utils import (
+    finish_jev_span,
+    jev_configured,
+    load_jev_spec,
+    select_tool,
+    start_jev_span,
 )
 
 # Streamlit import (optional - for UI integration)
@@ -60,6 +73,12 @@ from .langgraph_rag import create_domain_rag_tool
 class State(TypedDict):
     messages: Annotated[list, add_messages]
     steer_attempts: int
+    # Set by the Jev router when it declines to call a tool but has something
+    # the answering model should know (a missing argument, a policy).
+    jev_hint: str
+    # True when a confidence gate rejected Jev's answer and the chat model has
+    # to select the tool itself for this turn.
+    jev_fell_back: bool
 
 
 def _run_async(coro):
@@ -175,6 +194,14 @@ def _append_tool_steer_correction_if_needed(messages: List[BaseMessage]) -> List
     return messages + [HumanMessage(content=correction_prompt)]
 
 
+def _latest_user_text(messages: List[BaseMessage]) -> str:
+    """The user's request for this turn, as plain text for a trace scorer."""
+    for msg in reversed(list(messages)):
+        if isinstance(msg, HumanMessage):
+            return _message_content_text(msg)
+    return ""
+
+
 def _build_steering_retry_messages(
     messages: List[BaseMessage],
     original_output: AIMessage,
@@ -202,6 +229,29 @@ def _build_steering_retry_messages(
     return retry_messages
 
 
+JEV_NARRATION_SUFFIX = (
+    "\n\nTool selection for this turn has already been made outside of you. "
+    "Any tool results you need are included in the conversation above. "
+    "Do not ask to call a tool; write the reply to the customer."
+)
+
+
+def _messages_to_role_dicts(messages: List[BaseMessage]) -> List[Dict[str, str]]:
+    """Flatten a LangChain message list into the role/content pairs Jev reads."""
+    conversation: List[Dict[str, str]] = []
+    for message in messages:
+        if isinstance(message, HumanMessage):
+            role = "user"
+        elif isinstance(message, AIMessage):
+            role = "assistant"
+        else:
+            continue
+        text = _message_content_text(message)
+        if text:
+            conversation.append({"role": role, "content": text})
+    return conversation
+
+
 class LangGraphAgent(BaseAgent):
     """
     LangGraph implementation of BaseAgent
@@ -214,12 +264,15 @@ class LangGraphAgent(BaseAgent):
         model_override: Optional[str] = None,
         galileo_logger=None,
         llm_provider: str = "local",
+        tool_selector: str = "llm",
     ):
         super().__init__(domain_config, session_id)
         self.graph = None
         self.model_override = model_override
         self.galileo_logger = galileo_logger
         self.llm_provider = llm_provider if llm_provider in ("local", "hosted", "bedrock") else "local"
+        self.tool_selector = tool_selector if tool_selector in ("llm", "jev") else "llm"
+        self.jev_spec = None
         
         # Build callbacks list with Galileo (always enabled).
         # Pass the per-session logger so each browser tab writes to its own Galileo session.
@@ -308,26 +361,11 @@ class LangGraphAgent(BaseAgent):
                 # Get top_k from domain config
                 top_k = rag_config.get("top_k", 5)
                 # Use same model as main agent so RAG assistant appears with selected model in traces
-                model_config = self.domain_config.config.get("model", {})
-                if self.model_override:
-                    effective_model = self.model_override
-                elif self.llm_provider == "hosted":
-                    effective_model = (
-                        model_config.get("hosted_default_model")
-                        or model_config.get("default_model")
-                        or model_config.get("model_name")
-                    )
-                elif self.llm_provider == "bedrock":
-                    effective_model = (
-                        model_config.get("bedrock_default_model")
-                        or model_config.get("default_model")
-                        or model_config.get("model_name")
-                    )
-                else:
-                    effective_model = (
-                        model_config.get("default_model")
-                        or model_config.get("model_name")
-                    )
+                effective_model = get_domain_chat_model(
+                    self.domain_config.config,
+                    override=self.model_override,
+                    provider=self.llm_provider,
+                )
                 # Create LangChain retrieval chain tool (should work with GalileoCallback)
                 rag_tool = create_domain_rag_tool(
                     self.domain_config.name, top_k, model_name=effective_model
@@ -348,6 +386,8 @@ class LangGraphAgent(BaseAgent):
         
         print(f"✓ Loaded {len(self.tools)} tools for domain '{self.domain_config.name}'")
 
+        self._load_jev_spec()
+
         if self.galileo_logger:
             galileo_cfg = self.domain_config.config.get("galileo", {})
             project_name = galileo_cfg.get("project") or f"galileo-demo-{self.domain_config.name}"
@@ -361,6 +401,37 @@ class LangGraphAgent(BaseAgent):
                 force=True,
             )
     
+    def _load_jev_spec(self) -> None:
+        """Load the domain's Jev routing spec, falling back to the LLM without it."""
+        if self.tool_selector != "jev":
+            return
+
+        configured, why_not = jev_configured()
+        if not configured:
+            print(f"⚠️  Jev tool selection unavailable: {why_not}. Using the LLM.")
+            self.tool_selector = "llm"
+            return
+
+        self.jev_spec = load_jev_spec(self.domain_config)
+        if not self.jev_spec:
+            print(
+                f"⚠️  Domain '{self.domain_config.name}' has no tools/jev_spec.json. "
+                "Using the LLM for tool selection."
+            )
+            self.tool_selector = "llm"
+            return
+
+        routable = [
+            name
+            for name in self.jev_spec.get("tools", {})
+            if name in {tool.name for tool in self.tools}
+        ]
+        print(f"🎯 Jev tool selection enabled, routing to: {', '.join(routable)}")
+
+    @property
+    def jev_mode(self) -> bool:
+        return self.tool_selector == "jev" and self.jev_spec is not None
+
     def _build_graph(self) -> CompiledStateGraph:
         """Build the LangGraph with domain tools and system prompt"""
         if not self.tools:
@@ -368,28 +439,16 @@ class LangGraphAgent(BaseAgent):
         
         # Get model configuration from domain config
         model_config = self.domain_config.config["model"]
-        if self.model_override:
-            effective_model = self.model_override
-        elif self.llm_provider == "hosted":
-            effective_model = (
-                model_config.get("hosted_default_model")
-                or model_config.get("default_model")
-                or model_config.get("model_name")
-            )
-        elif self.llm_provider == "bedrock":
-            effective_model = (
-                model_config.get("bedrock_default_model")
-                or model_config.get("default_model")
-                or model_config.get("model_name")
-            )
-        else:
-            effective_model = (
-                model_config.get("default_model")
-                or model_config.get("model_name")
-            )
+        effective_model = get_domain_chat_model(
+            self.domain_config.config,
+            override=self.model_override,
+            provider=self.llm_provider,
+        )
         temperature = model_config.get("temperature", 0.1)
         
-        # Create the LLM with domain tools
+        # Tools stay bound in both modes. Jev normally decides before the model
+        # is reached, but when a confidence gate rejects Jev's answer the model
+        # has to be able to pick a tool itself.
         llm_with_tools = get_chat_model(
             effective_model,
             temperature=temperature,
@@ -433,6 +492,13 @@ class LangGraphAgent(BaseAgent):
             messages = _append_tool_steer_correction_if_needed(messages)
 
             system_prompt = self.system_prompt or ""
+            # Only steer the model away from tools when Jev actually decided
+            # this turn. After a gate rejection it needs its normal behaviour.
+            if self.jev_mode and not state.get("jev_fell_back"):
+                system_prompt += JEV_NARRATION_SUFFIX
+                routing_note = state.get("jev_hint") or ""
+                if routing_note:
+                    system_prompt += f"\n\nRouting note for this turn: {routing_note}"
             if chaos.should_corrupt_data():
                 system_prompt += chaos.get_corruption_prompt()
 
@@ -478,15 +544,128 @@ class LangGraphAgent(BaseAgent):
                 "steer_attempts": tool_steer_events + llm_steer_attempts,
             }
 
+        async def jev_router(state, config):
+            """Pick the tool with Jev instead of the chat model.
+
+            Emits the tool call directly when Jev is confident enough,
+            otherwise hands the turn to the chat model with a note explaining
+            why. Takes `config` so the Jev span can be parented to this node
+            rather than to the trace root.
+            """
+            conversation = _messages_to_role_dicts(state["messages"])
+            span = start_jev_span(config, conversation)
+            decision = await select_tool(
+                self.jev_spec,
+                conversation,
+                [tool.name for tool in self.tools],
+            )
+            finish_jev_span(span, decision, conversation, self.galileo_logger)
+            print(
+                f"🎯 Jev → {decision.tool or 'no tool'} "
+                f"(confidence {decision.confidence:.2f}, {decision.latency_ms:.0f}ms): "
+                f"{decision.reason}"
+            )
+
+            if decision.fell_back:
+                # Jev answered but a gate rejected it, so the model picks.
+                return {"jev_hint": "", "jev_fell_back": True}
+
+            if decision.tool:
+                return {
+                    "messages": [
+                        AIMessage(
+                            content="",
+                            tool_calls=[
+                                {
+                                    "name": decision.tool,
+                                    "args": decision.arguments,
+                                    "id": f"jev_{uuid.uuid4().hex[:12]}",
+                                }
+                            ],
+                        )
+                    ],
+                    "jev_hint": "",
+                    "jev_fell_back": False,
+                }
+
+            return {"jev_hint": decision.hint, "jev_fell_back": False}
+
+        def route_after_jev(state):
+            messages = state["messages"]
+            last = messages[-1] if messages else None
+            if isinstance(last, AIMessage) and getattr(last, "tool_calls", None):
+                return "tools"
+            return "chatbot"
+
         graph_builder = StateGraph(State)
         graph_builder.add_node("chatbot", invoke_chatbot)
         graph_builder.add_node("tools", ToolNode(tools=self.tools))
-        graph_builder.add_edge(START, "chatbot")
+
+        if self.jev_mode:
+            graph_builder.add_node("jev_router", jev_router)
+            graph_builder.add_edge(START, "jev_router")
+            graph_builder.add_conditional_edges(
+                "jev_router", route_after_jev, {"tools": "tools", "chatbot": "chatbot"}
+            )
+        else:
+            graph_builder.add_edge(START, "chatbot")
+
         graph_builder.add_conditional_edges("chatbot", tools_condition)
         graph_builder.add_edge("tools", "chatbot")
 
         return graph_builder.compile()
     
+    async def _rerun_for_trace_steer(
+        self,
+        messages: List[BaseMessage],
+        previous_output: str,
+        instructions: str,
+        *,
+        user_input: str,
+        trace_id: Optional[str],
+        span_id: Optional[str],
+    ) -> str:
+        """Re-run the turn with the steer correction, then re-check the rewrite.
+
+        The model is not obliged to comply, and shipping an unverified retry is
+        how a matched control still leaks the content it was meant to catch.
+        """
+        retry_messages = list(messages) + [
+            HumanMessage(
+                content=build_steer_correction_prompt(
+                    steering_instructions=instructions,
+                    previous_output=previous_output,
+                )
+            )
+        ]
+        result = await self.graph.ainvoke(
+            {
+                "messages": retry_messages,
+                "steer_attempts": 0,
+                "jev_hint": "",
+                "jev_fell_back": False,
+            },
+            self.config,
+        )
+        revised_messages = result.get("messages") or []
+        if not revised_messages:
+            return format_blocked_message("", step_name=TRACE_STEP_NAME)
+        revised = message_content_to_text(revised_messages[-1].content)
+
+        recheck = await evaluate_trace_controls(
+            build_turn_trace_record(user_input, revised, revised_messages),
+            trace_id=trace_id,
+            span_id=span_id,
+            stage="post",
+        )
+        if recheck["decision"] == "allow" and revised.strip():
+            return revised
+        print(
+            f"  🚫 Steer retry still violates the policy ({recheck['decision']}); "
+            "withholding the answer."
+        )
+        return format_blocked_message("", step_name=TRACE_STEP_NAME)
+
     async def _process_query_async(self, messages: List[Dict[str, str]]) -> str:
         """Process a user query asynchronously (required for @control async nodes)."""
         provider_token = set_llm_provider(self.llm_provider)
@@ -505,18 +684,73 @@ class LangGraphAgent(BaseAgent):
                 elif msg["role"] == "assistant":
                     langchain_messages.append(AIMessage(content=msg["content"]))
 
-            initial_state = {"messages": langchain_messages, "steer_attempts": 0}
-            ensure_trace_started(
+            initial_state = {
+                "messages": langchain_messages,
+                "steer_attempts": 0,
+                "jev_hint": "",
+                "jev_fell_back": False,
+            }
+            trace_id, span_id = ensure_trace_started(
                 self.galileo_logger,
                 langchain_messages,
                 trace_name="Run Agent",
             )
 
+            user_input = _latest_user_text(langchain_messages)
+            stages = trace_control_stages() if trace_id and span_id else set()
+
+            # PRE runs before the agent does any work, so an input-side scorer
+            # (prompt injection, harmful input) sees only the user's request.
+            if "pre" in stages:
+                decision = await evaluate_trace_controls(
+                    build_turn_trace_record(user_input, None, []),
+                    trace_id=trace_id,
+                    span_id=span_id,
+                    stage="pre",
+                )
+                if decision["decision"] == "deny":
+                    response = format_blocked_message(
+                        decision["message"], step_name=TRACE_STEP_NAME
+                    )
+                    return response
+                if decision["decision"] == "steer":
+                    initial_state["messages"] = list(langchain_messages) + [
+                        HumanMessage(
+                            content=build_steer_correction_prompt(
+                                steering_instructions=decision["steering_instructions"]
+                            )
+                        )
+                    ]
+
             result = await self.graph.ainvoke(initial_state, self.config)
-            if result["messages"]:
+            messages_out = result.get("messages") or []
+            if messages_out:
                 # ChatBedrockConverse returns .content as a list of blocks;
                 # normalize to a string so downstream (UI/tracing) stays str-based.
-                response = message_content_to_text(result["messages"][-1].content)
+                response = message_content_to_text(messages_out[-1].content)
+
+            # POST runs on the completed turn, with the answer and the tool
+            # results behind it attached as children.
+            if "post" in stages and response.strip():
+                decision = await evaluate_trace_controls(
+                    build_turn_trace_record(user_input, response, messages_out),
+                    trace_id=trace_id,
+                    span_id=span_id,
+                    stage="post",
+                )
+                if decision["decision"] == "deny":
+                    response = format_blocked_message(
+                        decision["message"], step_name=TRACE_STEP_NAME
+                    )
+                elif decision["decision"] == "steer":
+                    response = await self._rerun_for_trace_steer(
+                        langchain_messages,
+                        response,
+                        decision["steering_instructions"],
+                        user_input=user_input,
+                        trace_id=trace_id,
+                        span_id=span_id,
+                    )
             return response
         finally:
             reset_llm_provider(provider_token)

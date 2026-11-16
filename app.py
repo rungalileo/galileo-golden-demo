@@ -97,6 +97,82 @@ def _normalize_provider(provider: Optional[str]) -> str:
     return "local"
 
 
+TOOL_SELECTOR_LABELS = {
+    "llm": "LLM function calling",
+    "jev": "Jev (System One)",
+}
+
+
+def get_tool_selector(domain_name: str) -> str:
+    """The tool selector chosen in the sidebar for this domain."""
+    return st.session_state.get(f"tool_selector_{domain_name}", "llm")
+
+
+def render_tool_selector_settings(domain_name: str) -> str:
+    """Render the tool-selection controls and return the active selector.
+
+    Jev is only offered when a TypeSafe key is configured and the domain ships
+    a tools/jev_spec.json, so the demo degrades to the LLM path on machines
+    without a key.
+    """
+    from domain_manager import DomainManager
+    from helpers.jev_utils import jev_configured, load_jev_spec
+
+    st.divider()
+    st.subheader("Tool Selection")
+
+    state_key = f"tool_selector_{domain_name}"
+    configured, why_not = jev_configured()
+
+    has_spec = False
+    if configured:
+        try:
+            domain_config = DomainManager().load_domain_config(domain_name)
+            has_spec = load_jev_spec(domain_config) is not None
+        except Exception as e:
+            print(f"⚠️ Could not check Jev spec for '{domain_name}': {e}")
+
+    if not configured or not has_spec:
+        st.session_state[state_key] = "llm"
+        st.radio(
+            "Who picks the tool?",
+            options=["llm"],
+            format_func=lambda value: TOOL_SELECTOR_LABELS[value],
+            key=f"tool_selector_disabled_{domain_name}",
+            disabled=True,
+        )
+        if not configured:
+            st.caption(f"Jev unavailable: {why_not}")
+        else:
+            st.caption(
+                f"The '{domain_name}' domain has no tools/jev_spec.json, "
+                "so Jev routing is not available here."
+            )
+        return "llm"
+
+    options = ["llm", "jev"]
+    current = st.session_state.get(state_key, "llm")
+    selected = st.radio(
+        "Who picks the tool?",
+        options=options,
+        index=options.index(current) if current in options else 0,
+        format_func=lambda value: TOOL_SELECTOR_LABELS[value],
+        key=f"tool_selector_radio_{domain_name}",
+    )
+    st.session_state[state_key] = selected
+
+    if selected == "jev":
+        st.caption(
+            "TypeSafe's Jev picks the tool and its arguments from typed "
+            "questions, before the chat model runs. Low-confidence decisions "
+            "fall back to the model."
+        )
+    else:
+        st.caption("The chat model picks tools with native function calling.")
+
+    return selected
+
+
 def render_model_settings(domain_name: str, domain_config_key: str) -> tuple[str, str]:
     """Render provider/model controls in the sidebar and return the active selection."""
     st.subheader("Model")
@@ -886,6 +962,8 @@ def multi_domain_agent_app(domain_name: str):
                 domain_name, domain_config_key
             )
 
+            render_tool_selector_settings(domain_name)
+
             # Agent Control guardrails (always enabled; configured server-side)
             st.divider()
             st.subheader("🛡️ Agent Control")
@@ -1100,7 +1178,10 @@ def render_chat_page(
         selected_model = default_model
         st.session_state[f"selected_model_{domain_name}"] = selected_model
 
-    agent_cache_key = f"agent_{domain_name}_{selected_provider}_{selected_model}"
+    tool_selector = get_tool_selector(domain_name)
+    agent_cache_key = (
+        f"agent_{domain_name}_{selected_provider}_{selected_model}_{tool_selector}"
+    )
     if agent_cache_key not in st.session_state:
         st.session_state[agent_cache_key] = factory.create_agent(
             domain=domain_name,
@@ -1109,6 +1190,7 @@ def render_chat_page(
             model_name=selected_model,
             galileo_logger=st.session_state[galileo_logger_key],
             llm_provider=selected_provider,
+            tool_selector=tool_selector,
         )
 
     # Set current agent for processing

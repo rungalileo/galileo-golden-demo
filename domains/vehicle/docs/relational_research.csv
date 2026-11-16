@@ -1,0 +1,41 @@
+id,topic,person,phone_number,role,current_status
+1,brakes,John Doe,(312) 555-0001,materials analyst 3,in progress
+2,ABS,Sarah Smith,(312) 555-0002,chief scientist,completed
+3,transmission,Maria Gonzalez,(312) 555-0003,research engineer,in progress
+4,engine block,Tanya Chen,(312) 555-0004,test engineer,under review
+5,EV battery,Derek Williams,(312) 555-0005,lead researcher,in progress
+6,hybrid systems,Bella Martinez,(312) 555-0006,automotive engineer,completed
+7,turbocharger,Carlos Rivera,(312) 555-0007,safety analyst,pending
+8,catalytic converter,Sam Patel,(312) 555-0008,materials analyst 2,in progress
+9,ADAS,Layla Ahmed,(312) 555-0009,chief scientist,completed
+10,lane assist,Marcus Johnson,(312) 555-0010,research engineer,in progress
+11,collision avoidance,Joe Thompson,(312) 555-0011,test engineer,under review
+12,infotainment,Maria Gonzalez,(312) 555-0003,automotive engineer,completed
+13,HVAC,Tanya Chen,(312) 555-0004,lead researcher,in progress
+14,power steering,Derek Williams,(312) 555-0005,safety analyst,pending
+15,suspension,Carlos Rivera,(312) 555-0007,materials analyst 3,in progress
+16,differential,Sam Patel,(312) 555-0008,research engineer,completed
+17,drivetrain,Layla Ahmed,(312) 555-0009,test engineer,in progress
+18,fuel injection,Marcus Johnson,(312) 555-0010,chief scientist,under review
+19,exhaust systems,Joe Thompson,(312) 555-0011,automotive engineer,in progress
+20,cooling system,Bella Martinez,(312) 555-0006,lead researcher,completed
+21,alternator,Carlos Rivera,(312) 555-0007,safety analyst,pending
+22,starter motor,Tanya Chen,(312) 555-0004,materials analyst 2,in progress
+23,airbags,Sam Patel,(312) 555-0008,research engineer,completed
+24,seat belts,Layla Ahmed,(312) 555-0009,test engineer,in progress
+25,crumple zones,Marcus Johnson,(312) 555-0010,chief scientist,under review
+26,aerodynamics,Joe Thompson,(312) 555-0011,automotive engineer,in progress
+27,lightweight materials,Maria Gonzalez,(312) 555-0003,lead researcher,completed
+28,carbon fiber,Derek Williams,(312) 555-0005,safety analyst,pending
+29,tire wear,Bella Martinez,(312) 555-0006,materials analyst 3,in progress
+30,traction control,Carlos Rivera,(312) 555-0007,research engineer,completed
+31,stability control,Tanya Chen,(312) 555-0004,test engineer,in progress
+32,regenerative braking,Sam Patel,(312) 555-0008,chief scientist,under review
+33,charging infrastructure,Layla Ahmed,(312) 555-0009,automotive engineer,in progress
+34,motor efficiency,Marcus Johnson,(312) 555-0010,lead researcher,completed
+35,thermal management,Joe Thompson,(312) 555-0011,safety analyst,pending
+36,sensor fusion,Maria Gonzalez,(312) 555-0003,materials analyst 2,in progress
+37,LiDAR,Derek Williams,(312) 555-0005,research engineer,completed
+38,radar systems,Bella Martinez,(312) 555-0006,test engineer,in progress
+39,autonomous navigation,Carlos Rivera,(312) 555-0007,chief scientist,under review
+40,steering geometry,Priya Sharma,(312) 555-0012,automotive engineer,in progress

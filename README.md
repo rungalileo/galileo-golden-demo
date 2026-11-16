@@ -1,5 +1,6 @@
 # Galileo Golden Demo
 
+***2026-11-13 Release: Added support for Jev Decision Model and Jev/LLM guardrails***
 ***2026-07-13 Release: Now with support for AWS Bedrock models***
 
 A multi-turn agentic system that showcases Galileo across multiple domains and agent frameworks, designed to be used for product demos. The code itself is reusable and configurable for a variety of use cases.
@@ -218,6 +219,13 @@ PS: to hide the provider options from the UI:
 &nbsp;
 
 The **Select Model** dropdown lists provider-specific models from each domain's `config.yaml`. The selection applies to both **Chat** and **Experiments**, and you can change it mid-session without losing conversation history.
+
+The model it starts on is resolved in this order:
+
+1. `{provider}_default_chat_model` in `.streamlit/secrets.toml` (`ollama_default_chat_model`, `openai_default_chat_model`, `bedrock_default_chat_model`). When set, it is preselected for that provider across every domain, and it also becomes the default for in-tool LLM calls and RAG.
+2. The domain's `config.yaml` default (`default_model`, `hosted_default_model`, `bedrock_default_model`) when the secrets key is absent or commented out.
+
+Either way the dropdown still wins once you change it, and the domain's `*_additional_models` plus its `config.yaml` default stay in the list so you can switch back to them. Because the option list is cached per session, edit secrets and restart the app (or reload the page) to pick up a new pinned model.
 
 Switching this toggle also switches which prebuilt RAG index is queried (Local → the Ollama index, Hosted → the OpenAI index, Bedrock → the Bedrock index), so make sure you've built the ones you'll use — see Setup step 7. Each index is queried only with the embedding model that built it, so search is always internally consistent within a provider.
 
