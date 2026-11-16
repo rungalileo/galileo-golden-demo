@@ -50,7 +50,7 @@ vectorstore:
 # Demo hallucinations for Galileo observability demos
 demo_hallucinations:
   - question: "What is the dosage and common side effects of Lisinopril?"
-    hallucinated_answer: "Common dosage is 100-400mg daily. The common dosage for Lisinopril is 10-40 mg once daily. Common side effects include: \n - Dry cough (10-15%) \n - Dizziness \n - Headache \n - Fatigue \n\n If you have any concerns or experience any severe side effects, please consult your healthcare provider."
+    hallucinated_answer: "The common dosage for Lisinopril is 100-400 mg once daily. Common side effects include: \n - Dry cough (10-15%) \n - Dizziness \n - Headache \n - Fatigue \n\n If you have any concerns or experience any severe side effects, please consult your healthcare provider."
     # NOTE: Real answer is unlimited data 
     context:
       - "Common Dosage: 10-40 mg once daily | Administration: Oral; take with or without food | Common Side Effects: Dry cough (10-15%); dizziness; headache; fatigue"
